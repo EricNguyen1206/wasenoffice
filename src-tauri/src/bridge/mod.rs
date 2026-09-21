@@ -9,6 +9,7 @@
 use serde_json::Value;
 
 #[derive(Debug)]
+#[allow(dead_code)] // Runtime variant wires up in PH-1 when real handlers land
 pub enum BridgeError {
     /// Method known but not implemented yet.
     Unsupported(String),
