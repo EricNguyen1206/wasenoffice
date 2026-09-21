@@ -1,0 +1,6 @@
+[submodule "upstream/sdkjs"]
+	path = upstream/sdkjs
+	url = https://github.com/ONLYOFFICE/sdkjs.git
+[submodule "upstream/web-apps"]
+	path = upstream/web-apps
+	url = https://github.com/ONLYOFFICE/web-apps.git
