@@ -22,11 +22,10 @@ dự án lúc này.
 
 ## Trạng thái repo lúc handoff (22.09.2026)
 
-- Branch `master`. Working tree KHÔNG sạch: 35 file deletion `scaffold-tmp/` đã staged +
-  các thay đổi chưa commit từ phiên 21.09 (LICENSE, `vision.md`, `mit-purity.md`, skills
-  `.agents/`, `semif_engine/`, `system1/`, `check-licenses.mjs`, verify.sh mới…).
-  → **Đầu phiên: review + commit các thay đổi nền này trước**, tách commit docs/harness
-  khỏi commit code PH-0 về sau.
+- Branch `master`, working tree **SẠCH** — toàn bộ nền móng (license MIT, rules MIT-purity,
+  skills workflow, gates verify.sh, System-1 stack, handoff này) đã commit trong 5 commit
+  `b60df56..79c4fb0`. → **Đầu phiên vào việc PH-0 luôn**, không cần commit dọn dẹp;
+  commit mới theo `ph0(scope): mô tả`, tách docs/harness khỏi code về sau.
 - Services AI: ollama :11434 UP; llama-server/semif-engine/system1-router DOWN sau reboot —
   `harness/system1/start.sh` bật cả stack khi cần (không bắt buộc cho PH-0).
 - `onlyoffice-study/` KHÔNG còn ở vị trí cũ sau khi repo chuyển về
