@@ -21,7 +21,10 @@ fn greet(name: &str) -> String {
 /// Bridge entry: JS shim calls this for every `window.AscDesktopEditor.*` method.
 /// Methods not yet implemented return `Err` with an `UNIMPL` marker.
 #[tauri::command]
-fn asc_desktop_editor(method: String, payload: serde_json::Value) -> Result<serde_json::Value, String> {
+fn asc_desktop_editor(
+    method: String,
+    payload: serde_json::Value,
+) -> Result<serde_json::Value, String> {
     match BridgeCmd::dispatch(&method, payload) {
         Ok(v) => Ok(v),
         Err(bridge::BridgeError::Unsupported(m)) => {
