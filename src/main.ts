@@ -1,22 +1,20 @@
-import { invoke } from "@tauri-apps/api/core";
+import { installDesktopEditorBridge } from './shim/desktopEditor';
 
-let greetInputEl: HTMLInputElement | null;
-let greetMsgEl: HTMLElement | null;
+// Install the AscDesktopEditor bridge before anything engine-related loads.
+installDesktopEditorBridge();
 
-async function greet() {
-  if (greetMsgEl && greetInputEl) {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    greetMsgEl.textContent = await invoke("greet", {
-      name: greetInputEl.value,
-    });
-  }
+document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
+  <div>
+    <h1>NanoOffice</h1>
+    <p>Rust + Tauri shell around the ONLYOFFICE editing engine.</p>
+    <p>PH-0 spike: load documenteditor + render a DOCX (next step).</p>
+  </div>
+`;
+
+// Smoke check: bridge installed?
+const bridge = window.AscDesktopEditor;
+if (!bridge) {
+  console.error('[nanooffice] bridge not installed');
+} else {
+  console.log('[nanooffice] bridge methods:', Object.keys(bridge).length);
 }
-
-window.addEventListener("DOMContentLoaded", () => {
-  greetInputEl = document.querySelector("#greet-input");
-  greetMsgEl = document.querySelector("#greet-msg");
-  document.querySelector("#greet-form")?.addEventListener("submit", (e) => {
-    e.preventDefault();
-    greet();
-  });
-});

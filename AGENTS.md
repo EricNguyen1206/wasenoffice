@@ -1,0 +1,68 @@
+# NanoOffice — AGENTS.md
+
+> Harness cho dự án clone ONLYOFFICE Desktop Editors sang Rust + Tauri.
+> Agent làm việc trong repo này BẮT BUỘC đọc và tuân thủ file này.
+
+## identity & mục tiêu
+
+- **Tên dự án:** NanoOffice
+- **Mục tiêu:** app desktop office suite (DOCX/XLSX/PPTX/PDF) — shell Rust + Tauri,
+  giữ engine editing JS gốc của ONLYOFFICE (sdkjs + web-apps), x2t chạy sidecar.
+- **Không bao giờ port/rewrite engine editing sang Rust** trong scope hiện tại (xem `docs/conventions.md` § engine).
+
+## Layout (nguồn chân lý về cấu trúc)
+
+```
+nanooffice/
+├── AGENTS.md            ← file này — contract cho agent
+├── docs/                ← kiến thức bằng chứng: reference.map, diagnostics, conventions
+├── harness/
+│   ├── rules/           ← quy tắc bắt buộc (migration, evidence, release)
+│   └── skills/          ← quy trình từng việc cụ thể (open-docx, bridge-shim, ...)
+├── upstream/            ← MẢNG CHỈ ĐỌC — chỉ để tra cứu bằng git/submodule, không sửa, không commit vào
+│   ├── sdkjs/           (gitlink → ONLYOFFICE/sdkjs)
+│   └── web-apps/        (gitlink → ONLYOFFICE/web-apps)
+├── src-tauri/           ← MÃ NGUỒN CHÍNH của dự án (Rust: shell, bridge, sidecar)
+├── src/                 ← frontend Tauri (start page, wrapper UI — KHÔNG sửa engine JS ở đây)
+└── engines/             ← artifact build của sdkjs/web-apps (sinh ra, không edit tay)
+```
+
+## Quy tắc gốc (tóm tắt — chi tiết trong harness/rules/)
+
+1. **Upstream chỉ đọc.** Mọi file trong `upstream/` không được sửa, không được copy-and-patch.
+   Cần thay đổi hành vi engine → làm ở lớp wrapper/adapter phía mình (shim, monkey-patch qua config API).
+   Lý do: giữ khả năng pull upstream theo quý. Xem `harness/rules/upstream-read-only.md`.
+2. **Không sửa upstream → không vi phạm AGPL cho phần code của mình.** Phần code NanoOffice tự viết
+   có license riêng; engine AGPL giữ nguyên provenance qua submodule. Khi PHÁT HÀNH binary có nhúng
+   AGPL component → vẫn phải tuân thủ AGPL cho component đó (mở source component + ghi credit).
+   Xem `harness/rules/licensing.md`.
+3. **Mọi nhận định về upstream phải có đường dẫn file làm bằng chứng.** Ghi vào `docs/reference.map.md`.
+   Cấm đoán mò. Xem `harness/rules/evidence-discipline.md`.
+4. **Bridge là hợp đồng.** Mỗi method `window.AscDesktopEditor` phải có stub khai báo ở
+   `src-tauri/src/bridge/` kèm marker `// UNIMPL` nếu chưa implement thật. Xem
+   `harness/skills/bridge-shim/SKILL.md`.
+5. **Verification trước khi tuyên bố xong.** Lệnh kiểm chứng + exit code phải được nêu trong
+   báo cáo. "ZCode/chrome devtools nói chạy được" ≠ đã verify.
+
+## Progress snapshot (cập nhật khi hoàn thành phase)
+
+| Phase | Trạng thái | Ghi chú |
+|---|---|---|
+| PH-0 Spike (load editor + render DOCX trong WKWebView) | ⬜ chưa bắt đầu | harness bootstrap xong (f5b6f69); bước kế: clone `desktop-sdk`, load documenteditor vào WebView |
+| PH-1 Vòng đời file (open/save/convert qua x2t sidecar) | ⬜ | |
+| PH-2 Trải nghiệm desktop (print/clipboard/fonts/tabs) | ⬜ | |
+| PH-3 Tùy chọn (crypto/signature/cloud) | ⬜ | có thể cắt vĩnh viễn |
+| PH-4 Đóng gói + updater | ⬜ | |
+
+## Việc còn treo
+
+- `scaffold-tmp/` — thư mục trùng từ `pnpm create tauri-app` (code gốc đã copy vào repo).
+  Việc xóa bị Safety Guard chặn trong turn bootstrap (không có approval service).
+  Cần user xác nhận rồi xóa: `rm -rf scaffold-tmp` + `git add -A`.
+
+## Khi bắt đầu một phiên làm việc
+
+1. Đọc `docs/conventions.md` (quy ước code + kiến trúc mục tiêu).
+2. Việc mới → kiểm tra `harness/skills/` có skill tương ứng không trước khi tự làm.
+3. Sửa code xong → chạy `harness/scripts/verify.sh` (nếu tồn tại) trước khi báo complete.
+4. Phát hiện điều mới về upstream → ghi bằng chứng vào `docs/reference.map.md`, đừng để chỉ trong chat.

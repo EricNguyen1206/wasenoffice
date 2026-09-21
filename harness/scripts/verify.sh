@@ -17,9 +17,9 @@ else
   echo "  ✓ clean"
 fi
 
-echo "▸ no upstream CONTENT staged for commit (gitlink entries are expected)?"
-staged=$(git diff --cached --name-only --no-submodules 2>/dev/null | grep -c '^upstream/' || true)
-if [ "$staged" != "0" ]; then echo "  ✗ $staged upstream files staged"; fail=1; else echo "  ✓ none (gitlink only)"; fi
+echo "▸ no upstream files staged for commit?"
+staged=$(git diff --cached --name-only | grep -c '^upstream/' || true)
+if [ "$staged" != "0" ]; then echo "  ✗ $staged upstream files staged"; fail=1; else echo "  ✓ none"; fi
 
 if [ $fail -eq 0 ]; then echo "ALL CHECKS PASSED"; else echo "CHECKS FAILED"; fi
 exit $fail
