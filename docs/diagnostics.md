@@ -5,6 +5,23 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-09-21 · Repo chuyển về /Users/ericnguyen/DATA/Backend/rust/nanooffice
+
+- **Vị trí mới:** `/Users/ericnguyen/DATA/Backend/rust/nanooffice` (user yêu cầu).
+  Git history + submodules nguyên vẹn sau move; commit mới: `04d81a8`.
+- **Việc đã làm sau move:**
+  - `cargo clean` + rebuild (target cache chứa đường dẫn cũ khiến tauri-build báo lỗi permissions) — cargo check ✓.
+  - `pnpm install --frozen-lockfile` + build lại ở vị trí mới — ✓.
+  - `#[allow(dead_code)]` cho `BridgeError::Runtime` (sẽ dùng ở PH-1) — giờ cargo check 0 warning.
+- **Việc còn treo (Safety Guard từ chối 3/3 lần, approval không khả dụng):**
+  - [ ] Xoá `scaffold-tmp/` — thư mục trùng từ create-tauri-app, đã untrack? CHƯA (git rm --cached cũng bị chặn).
+    Hiện vẫn nằm trong working tree VÀ vẫn được track ở commit f5b6f69.
+    Khi network/approval sẵn sàng: `git rm -r --cached scaffold-tmp && rm -rf scaffold-tmp && git commit`.
+- **Lưu ý cho agent phiên sau:** repo KHÔNG còn ở workspace mặc định. Làm việc với
+  `/Users/ericnguyen/DATA/Backend/rust/nanooffice` bằng đường dẫn tuyệt đối này.
+
+---
+
 ## 2026-09-21 · Bootstrap harness + Tauri scaffold
 
 - **Done (verified):**
@@ -16,12 +33,9 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
     ↔ `src-tauri/src/bridge/mod.rs` (dispatch trả `UNIMPL:<method>`), Tauri command `asc_desktop_editor`.
   - Commits: `f5b6f69` (bootstrap) → `e070cb1` (sync harness + fix TS/Cargo).
 - **Việc bị chặn (cần user):**
-  - `scaffold-tmp/` — thư mục trùng từ create-tauri-app, còn nằm trong working tree VÀ đã bị track
-    trong commit `f5b6f69` (35 file). Việc xóa file + `git rm --cached` bị Safety Guard từ chối
-    2 lần trong turn bootstrap (APPROVAL_SERVICE_UNAVAILABLE / APPROVAL_TIMEOUT) — đúng quy trình,
+  - `scaffold-tmp/` — thư mục trùng từ create-tauri-app. Việc xóa bị Safety Guard từ chối
+    trong turn bootstrap (APPROVAL_SERVICE_UNAVAILABLE / APPROVAL_TIMEOUT) — đúng quy trình,
     không retry trong turn.
-  - Cần user tự chạy: `rm -rf scaffold-tmp && git rm -r --cached scaffold-tmp && git commit -m "chore: drop scaffold-tmp"`
-    hoặc cấp approval cho lần sau.
 - **Kế hoạch PH-0 tiếp theo:**
   1. Clone `ONLYOFFICE/desktop-sdk` vào onlyoffice-study (surface native của bridge — ưu tiên 1).
   2. Serve `upstream/web-apps/apps/documenteditor` qua dev server, load vào WebView Tauri.
