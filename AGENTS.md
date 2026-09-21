@@ -33,9 +33,9 @@ nanooffice/
    Cần thay đổi hành vi engine → làm ở lớp wrapper/adapter phía mình (shim, monkey-patch qua config API).
    Lý do: giữ khả năng pull upstream theo quý. Xem `harness/rules/upstream-read-only.md`.
 2. **Không sửa upstream → không vi phạm AGPL cho phần code của mình.** Phần code NanoOffice tự viết
-   có license riêng; engine AGPL giữ nguyên provenance qua submodule. Khi PHÁT HÀNH binary có nhúng
+   dùng **MIT** (`LICENSE` ở root); engine AGPL giữ nguyên provenance qua submodule. Khi PHÁT HÀNH binary có nhúng
    AGPL component → vẫn phải tuân thủ AGPL cho component đó (mở source component + ghi credit).
-   Xem `harness/rules/licensing.md`.
+   Xem `harness/rules/licensing.md` và `docs/vision.md`.
 3. **Mọi nhận định về upstream phải có đường dẫn file làm bằng chứng.** Ghi vào `docs/reference.map.md`.
    Cấm đoán mò. Xem `harness/rules/evidence-discipline.md`.
 4. **Bridge là hợp đồng.** Mỗi method `window.AscDesktopEditor` phải có stub khai báo ở
@@ -43,6 +43,9 @@ nanooffice/
    `harness/skills/bridge-shim/SKILL.md`.
 5. **Verification trước khi tuyên bố xong.** Lệnh kiểm chứng + exit code phải được nêu trong
    báo cáo. "ZCode/chrome devtools nói chạy được" ≠ đã verify.
+6. **MIT purity.** Không copy code/text từ `upstream/` vào code của mình (kể cả gián tiếp qua
+   subagent); dependency mới phải qua license gate trong verify.sh; `engines/**` không commit.
+   Xem `harness/rules/mit-purity.md`.
 
 ## Progress snapshot (cập nhật khi hoàn thành phase)
 
@@ -56,13 +59,13 @@ nanooffice/
 
 ## Việc còn treo
 
-- `scaffold-tmp/` — thư mục trùng từ `pnpm create tauri-app` (code gốc đã copy vào repo).
-  Việc xóa bị Safety Guard chặn trong turn bootstrap (không có approval service).
-  Cần user xác nhận rồi xóa: `rm -rf scaffold-tmp` + `git add -A`.
+- (đóng 22.09.2026) `scaffold-tmp/` — user xác nhận, đã `git rm --cached` + `rm -rf`; deletion
+  đang staged chờ commit cùng đợt dọn dẹp tiếp theo.
+- Kế tiếp: **PH-0** — bắt đầu từ `docs/handoff-ph0.md` (handoff prompt cho session mới).
 
 ## Khi bắt đầu một phiên làm việc
 
-1. Đọc `docs/conventions.md` (quy ước code + kiến trúc mục tiêu).
+1. Đọc `docs/vision.md` (tầm nhìn + quyết định sản phẩm) và `docs/conventions.md` (quy ước code + kiến trúc mục tiêu).
 2. Việc mới → kiểm tra `harness/skills/` có skill tương ứng không trước khi tự làm.
 3. Sửa code xong → chạy `harness/scripts/verify.sh` (nếu tồn tại) trước khi báo complete.
 4. Phát hiện điều mới về upstream → ghi bằng chứng vào `docs/reference.map.md`, đừng để chỉ trong chat.
