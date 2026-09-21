@@ -8,3 +8,9 @@ engines/*
 !engines/.gitkeep
 # file tạm
 *.log
+
+# skills CLI store (nội dung đã copy vào .agents/skills/, lock nằm ở skills-lock.json)
+/skills/
+
+# SemIf engine model GGUF (1.5GB artifact — tải bằng model_setup.sh, không commit)
+/harness/semif_engine/models/
