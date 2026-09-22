@@ -46,7 +46,7 @@ Chỉ dùng set tối thiểu — thêm skill mới phải qua acceptance giốn
 | Module/layer mới | `codebase-design` + đọc `harness/rules/mit-purity.md` trước khi viết |
 | Trước khi tuyên bố xong | `verification-before-completion` — bằng chứng chạy thật trước khi claim (khớp rule gốc #5) |
 | Trước khi commit | `code-review` trên diff; diff lớn/nghi over-engineering → thêm `ponytail-review` |
-| Định kỳ (cuối mỗi phase) | `ponytail-audit` — quét cả repo tìm bloat, kết quả vào backlog phase kế |
+| Định kỳ (cuối mỗi phase) | Hai phần: **"gọn"** → `ponytail-audit` quét repo tìm bloat; **"không loạn"** → `/improve-codebase-architecture` soi hot-spot theo git history, đề xuất deepening (report HTML ở /tmp, không vào repo; user chọn cái nào mới đào). Đối chiếu quyết định cũ với `vision.md` (vai trò ADR) + `reference.map.md` (vai trò CONTEXT.md) — không re-litigate. Kết quả vào backlog phase kế; chỉ refactor khi có consumer thật |
 
 Spawn subagent → prompt PHẢI nhúng/ trỏ tới `harness/rules/mit-purity.md` (subagent không tự đọc AGENTS.md).
 
