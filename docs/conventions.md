@@ -42,6 +42,7 @@ Chỉ dùng set tối thiểu — thêm skill mới phải qua acceptance giốn
 | Loại việc | Skill |
 |---|---|
 | Mọi việc viết/sửa code | `ponytail` — ladder YAGNI: cần tồn tại? → có sẵn trong codebase? → stdlib? → native platform? → dep đã cài? → 1 dòng? → mới viết tối thiểu |
+| Brainstorm / đào sâu hướng giải quyết | `grilling` (user gọi `/grill-me`) — phỏng vấn design-tree theo vòng: mỗi round hỏi cả frontier câu hỏi khả dĩ + kèm đáp án đề xuất, sub-agent tự tra facts; xong khi frontier rỗng (không còn gì ngầm định) |
 | Module/layer mới | `codebase-design` + đọc `harness/rules/mit-purity.md` trước khi viết |
 | Trước khi tuyên bố xong | `verification-before-completion` — bằng chứng chạy thật trước khi claim (khớp rule gốc #5) |
 | Trước khi commit | `code-review` trên diff; diff lớn/nghi over-engineering → thêm `ponytail-review` |
