@@ -5,6 +5,53 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-09-22 · PH-0: engine boot được trong WKWebView; open pipeline treo sau khi nhận Editor.bin
+
+- **Kiến trúc chạy được (reproduced):** engine sdkjs/web-apps (AGPL artifact copy từ
+  ONLYOFFICE.app build 9.4.0.129 → `engines/editors/`, git-ignored) boot đầy đủ trong Tauri
+  WKWebView qua loopback HTTP `http://127.0.0.1:14321` (Rust `protocol/filesrv.rs`: statics
+  `/editors/…` + fonts `/fonts/app|sys/…` + documents `/file/<id>/…`, Range 206, ACAO `*`,
+  OPTIONS preflight). Logs: hàng trăm asset 200; `fonts.wasm` tải OK; UI toolbar/ribbon/canvas
+  hệ thống hiện; không crash WKWebView → **bằng chứng mạnh: không cần CEF**.
+- **Bridge 2 chiều hoạt động:** shim vanilla JS inject `initialization_script_for_all_frames`
+  (main frame → boot page iframe → editor iframe, relay postMessage 2 chiều, sync-truth table
+  cho method engine gọi sync). Observations (log stdout): `CreateEditorApi`, `IsLocalFile`,
+  `GetEncryptedHeader`, `CheckUserId`, `GetInstallPlugins`, `IsSignaturesSupport`,
+  `SetDocumentName`, `LocalFileSetSaved/RecoverFolder/SetSourcePath/GetSourcePath`,
+  `LocalStartOpen`, `execCommand` (`webapps:entry`, `webapps:features`, `editor:onready`,
+  `editor:config`, `title:button`), `IsLocalFile(true)` gates — chi tiết trạng thái từng method
+  trong `docs/reference.map.md`.
+- **Open contract desktop tái tạo (reproduced):** LocalStartOpen (engine) → x2t convert
+  docx→Editor.bin (magic `DOCY`, **28–116 ms** cho fixture 1.9 KB) → deliver base64 + decodedLen
+  → `window.DesktopOfflineAppDocumentEndLoad(folder, b64, len)` — khớp chuẩn shell thật
+  (desktop-sdk client_renderer_wrapper.cpp `onlocaldocument_loadend` → `GetFileData2` =
+  `GetFilePathBase64`). EndLoad chạy qua không exception; `brb` vào nhánh `Uwe` (tRb=true).
+- **Điểm treo (candidate, chưa giải mã hết):** sau khi nhận Editor.bin, pipeline open dừng im
+  lặng — không `asc_onError`, không `asc_onDocumentContentReady`, KHÔNG có request fonts
+  (0 fetch `/fonts/…`), `id_viewer` canvas 2302×0. Data đầu vào đã kiểm chứng tuyệt đối:
+  zP.decode → Uint8Array 1586 bytes head `68,79,67,89`; roundtrip x2t Editor.bin→docx giữ
+  nguyên nội dung (kể cả tiếng Việt). Nghi vấn chính: một thủ tục async của app-layer thật
+  (editor:config answer từ native app, hoặc chữ ký OfflineApp/docsco chưa khớp) — cần trace
+  tiếp bằng devtools engine frame hoặc so trace app thật.
+- **Bẫy đã gặp (đề phòng tái diễn):** (1) `read_to_end` vào buffer pre-fill `vec![0u8; len]`
+  → response bị nhân đôi NUL (api.js SyntaxError) — có unit test hồi quy; (2) engine từ chối
+  document URL scheme lạ (`getUrlType` → Invalid, allowlist `https?|ftps|file|tessa|joplin|smb`
+  — editorscommon.js:2939) → KHÔNG dùng được `nanooffice-file://` làm document URL của engine,
+  phải qua loopback HTTP (deviation kiến trúc, xem reference.map); (3) custom-scheme page
+  (secure context) fetch `http://` = mixed-content block → engine + document phải cùng origin
+  loopback; (4) `include_str!` không kích hoạt rebuild khi file JS đổi — phải `touch`/build tay;
+  (5) vite 8 default port 5173 ≠ devUrl 1420 — `vite.config.ts` pin port + strictPort.
+- **Baseline PH-0 (debug build, dev server — số chưa phải release):** shell binary 30 MB
+  (debug); engines payload 313 MB (full copy, chưa trim per-app — budget ≤100 MB là việc
+  PH-4/trim); RAM idle start-page: process shell 133 MB RSS (devtools mở, debug build;
+  node vite ~160 MB là dev-only không ship). ONLYOFFICE.app cài sẵn: 1.1 GB disk,
+  ~1.07 GB RAM / 7 processes (đo 21.09). Cold start → start page loaded ~1–2 s (dev).
+  → Đủ dữ liệu sơ bộ cho Quyết định 2, chốt số release khi PH-4.
+- **Trạng thái:** observed/reproduced (các phần nêu trên); open pipeline = **candidate-treo**,
+  chờ user quyết hướng debug tiếp.
+
+---
+
 ## 2026-09-22 · Xóa scaffold-tmp + handoff PH-0
 
 - **scaffold-tmp/:** user xác nhận xóa → `git rm -r --cached` (35 file, đang staged) + `rm -rf`.

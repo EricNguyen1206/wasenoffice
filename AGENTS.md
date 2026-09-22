@@ -51,7 +51,7 @@ nanooffice/
 
 | Phase | Trạng thái | Ghi chú |
 |---|---|---|
-| PH-0 Spike (load editor + render DOCX trong WKWebView) | ⬜ chưa bắt đầu | harness bootstrap xong (f5b6f69); bước kế: clone `desktop-sdk`, load documenteditor vào WebView |
+| PH-0 Spike (load editor + render DOCX trong WKWebView) | 🟨 đang làm — engine+bridge chạy, còn điểm treo open | engine boot OK trong WKWebView (không CEF); bridge 15+ method DONE-PH0; treo ở bước cuối open pipeline — xem `docs/diagnostics.md` 22.09 |
 | PH-1 Vòng đời file (open/save/convert qua x2t sidecar) | ⬜ | |
 | PH-2 Trải nghiệm desktop (print/clipboard/fonts/tabs) | ⬜ | |
 | PH-3 Tùy chọn (crypto/signature/cloud) | ⬜ | có thể cắt vĩnh viễn |
