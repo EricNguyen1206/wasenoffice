@@ -5,6 +5,57 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-09-22 (bổ sung) · Phương án 1: phát hiện LoadJS bootstrap contract; oracle CDP app thật; render vẫn chưa qua vạch
+
+- **Bootstrap contract (reproduced — fix có thật):** `word/sdk-all-min.js` chỉ là BOOTSTRAP —
+  engine thật `sdk-all.js` được shell nạp qua bridge **`AscDesktopEditor.LoadJS(url)`** (return
+  1 sync / 2 async) phối hợp `window.local_load_add(store, name, url)` / `local_load_remove`
+  (sdk-all-min `rb()`; callback `completeLoad` phải bắn sau khi eval xong). Thiếu em → runtime
+  dual-build inconsistent. Shim đã implement: fetch text → eval → completeLoad → return 2
+  (sdk-all.js, fonts.js, ChartStyles.js nạp đúng qua LoadJS).
+- **Bẫy wasm scriptDirectory (reproduced — fix có thật):** emscripten glue resolve
+  `fonts.wasm` theo `document.currentScript` — khi JS chạy qua LoadJS eval, currentScript =
+  null → glue rơi về thư mục PAGE (`documenteditor/main/fonts.wasm` → 404) →
+  `RuntimeError: Aborted (both async and sync fetching of the wasm failed)` → font engine
+  chết im lặng. Fix 2 lớp: shim set `window.Module.locateFile` (map theo basename) trước mỗi
+  eval + filesrv redirect mọi engine payload request sai thư mục về vị trí chuẩn
+  (`resolve_engine_payload`). Sau fix: 0 Aborted, wasm init OK.
+- **Oracle CDP app thật (observed — phương pháp cho phiên sau):**
+  `/Applications/ONLYOFFICE.app/Contents/MacOS/ONLYOFFICE --remote-debugging-port=9222` +
+  `open -a ONLYOFFICE <file>` → CDP `Runtime.evaluate` trong editor iframe (frames[0] của
+  boot page). Số liệu app thật mở fixture: editor frame có `Asc.editor` ✓, viewer canvas
+  **2654×1312** (đang render), `window.native` = undefined, `NATIVE_EDITOR_ENJINE` = undefined
+  → **app thật chạy cùng pipeline wasm+canvas, KHÔNG phải native graphics**; không thấy font
+  fetch qua network trong frame (entries có thể không ghi với file:// scheme — chưa chốt).
+- **Vẫn chưa qua vạch render (candidate):** runtime NanoOffice sau các fix: parse + styles
+  preload chạy sâu (56 `II(styleName)` ok — `I3.prototype.gCh` là styles manager, KHÔNG phải
+  font loader như suy luận trước), `SetDocumentName` bắn, KHÔNG exception, KHÔNG
+  asc_onError — nhưng `id_viewer` vẫn 0 height, không `asc_onDocumentContentReady`, font
+  pipeline của FULL build (AscFonts.Wg — glyph manager, KHÔNG dùng `g_font_files`/
+  `g_fontApplication` như apiBase cũ) không khởi động. Hệ quả cấu trúc phát hiện thêm:
+  `word/sdk-all.js` KHÔNG chứa `DocsCoApi`/apiBase/GlobalLoaders (chúng nằm trong
+  sdk-all-min bundle); `DocsCoApi` không tồn tại trong word build → "web-mode cần docsco" là
+  suy luận SAI cho word — socket polling `/editors/doc/<key>/c/` đến từ web-apps (Gs class),
+  không phải docsco.
+- **Bẫy vặt ghi lại:** `safe_join` trả Some(path) dù file không tồn tại → fallback
+  `or_else` không bao giờ chạy (dùng `is_none_or(|p| !p.is_file())`); python `str.replace`
+  patch file im lặng không làm gì khi pattern lệch — phải verify sau mỗi patch;
+  `include_str!` không kích hoạt cargo rebuild khi file include đổi.
+- **Đề nghị phiên kế (cho user chọn):**
+  (a) tiếp tục oracle-diff: cdp-eval từng trạng thái `AscFonts.Wg` (vue/handle, font stream
+  nguồn) của app thật vs của ta ngay sau EndLoad — khai thác còn 1 mù về nguồn font data của
+  FULL build; (b) hoặc chấp nhận dùng **EditorForCompare/Editor.bin của chính app thật**:
+  mở file trong ONLYOFFICE thật rồi copy `~/Library/.../recovery`/`cache` — không giải quyết
+  render; (c) hoặc reverse `AscFonts.Wg` trong full build (9.9 MB, tên đọc được — I3/gCh đã
+  tìm đúng vị trí, cần trace font data entry point `Wg.wf`/`Vue` handle).
+
+- **Trạng thái:** observed/reproduced từng phần; render = **chưa đạt** — theo chỉ đạo user,
+  phương án 2 (docsco/Gs tối giản) là bước dự phòng, nhưng phát hiện mới cho thấy word build
+  không dùng DocsCoApi → phương án 2 cần reverse `AscCommon.Gs` (protocol socket của word),
+  không phải docsco — cập nhật lại kế hoạch trước khi làm.
+
+---
+
 ## 2026-09-22 · PH-0: engine boot được trong WKWebView; open pipeline treo sau khi nhận Editor.bin
 
 - **Kiến trúc chạy được (reproduced):** engine sdkjs/web-apps (AGPL artifact copy từ

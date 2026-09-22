@@ -161,10 +161,20 @@
    *  conversion) — retry until Asc.editor exists. */
   function consumeDeliveredDocument(deliver) {
     var editorApi = window.Asc && (window.Asc.editor || window.editor);
-    if (!editorApi || typeof window.DesktopOfflineAppDocumentEndLoad !== 'function') {
-      if (deliver.__tries === undefined) deliver.__tries = 0;
-      if (++deliver.__tries > 40) {
-        forwardLog('error', 'document delivery aborted: engine api not ready after 20s');
+    // The wasm font engine must be fully initialized BEFORE the open: the
+    // glyph manager (AscFonts.Wg.II) silently no-ops while its wasm handle
+    // (vue) is absent, so a font queued too early is never loaded.
+    var wasmReady = window.AscFonts && window.AscFonts.Wg && !!window.AscFonts.Wg.vue;
+    if (!editorApi || !wasmReady || typeof window.DesktopOfflineAppDocumentEndLoad !== 'function') {
+      if (deliver.__tries === undefined) {
+        deliver.__tries = 0;
+        forwardLog('info', 'delivery waiting: api=' + !!editorApi
+          + ' wasmReady=' + !!wasmReady
+          + ' endload=' + (typeof window.DesktopOfflineAppDocumentEndLoad));
+      }
+      if (++deliver.__tries > 120) {
+        forwardLog('error', 'document delivery aborted: engine not ready after 60s'
+          + ' (api=' + !!editorApi + ' wasmReady=' + !!wasmReady + ')');
         return;
       }
       setTimeout(function () { consumeDeliveredDocument(deliver); }, 500);
@@ -218,7 +228,11 @@
       } catch (dbgErr) {
         forwardLog('error', 'DocInfo probe failed: ' + dbgErr);
       }
-      window.DesktopOfflineAppDocumentEndLoad(deliver.folder, deliver.b64, decodedLen);
+      // The shell's loadend sequence continues with the signatures hook
+      // (wrapper cpp fires it unconditionally right after EndLoad).
+      if (typeof window.DesktopOfflineAppDocumentSignatures === 'function') {
+        window.DesktopOfflineAppDocumentSignatures('');
+      }
       // PH-0 render evidence: canvas count/size a few seconds after open.
       setTimeout(function () {
         var root = document.getElementById('editor_sdk') || document.body;
@@ -350,7 +364,65 @@
       relay('execCommand', [cmd, json]);
       return LOCAL_TRUTHS.execCommand(cmd, json);
     };
+    /**
+     * sdk-all-min.js is a BOOTSTRAP: the real engine (sdk-all.js) loads through
+     * this bridge method in the desktop shell (sdk-all-min rb(): return codes
+     * 1 = sync, 2 = async with local_load_add completeLoad, else web fallback).
+     * Without it the runtime ends up with an inconsistent dual-build state.
+     */
+    bridge.LoadJS = function (url) {
+      var abs;
+      try {
+        abs = new URL(url, window.location.href).href;
+      } catch (e) {
+        abs = url;
+      }
+      fetch(abs)
+        .then(function (r) { return r.text(); })
+        .then(function (text) {
+          // Emscripten glue resolves the wasm payload via scriptDirectory,
+          // which is empty when the script runs through LoadJS eval (no
+          // currentScript). Give the glue an explicit locateFile: engine
+          // payloads live in fixed sdkjs/engine directories (by basename).
+          window.Module = {
+            locateFile: function (path) {
+              var map = {
+                'fonts.wasm': '/editors/sdkjs/common/libfont/engine/',
+                'zlib.wasm': '/editors/sdkjs/common/zlib/engine/',
+                'engine.wasm': '/editors/sdkjs/common/hash/hash/engine/',
+                'drawingfile.wasm': '/editors/sdkjs/pdf/src/engine/',
+                'spell.wasm': '/editors/sdkjs/common/spell/spell/',
+              };
+              return (map[path] || '/editors/sdkjs/common/libfont/engine/') + path;
+            },
+          };
+          // jshint evil:true — the engine payload itself (AGPL artifact).
+          (0, eval)(text);
+          var pending = window.__nanooffice_pending_js;
+          var done = pending && pending[url];
+          if (done) {
+            delete pending[url];
+            done();
+          }
+          forwardLog('info', 'LoadJS executed: ' + abs.slice(0, 100));
+        })
+        .catch(function (err) {
+          forwardLog('error', 'LoadJS failed: ' + abs + ' — ' + err);
+        });
+      return 2; // async; completeLoad fires when executed
+    };
     window.AscDesktopEditor = bridge;
+
+    // Coordination tables for LoadJS (see rb() in sdk-all-min).
+    window.local_load_add = function (store, name, url) {
+      window.__nanooffice_pending_js = window.__nanooffice_pending_js || {};
+      window.__nanooffice_pending_js[url] = store.completeLoad;
+      return store;
+    };
+    window.local_load_remove = function (url) {
+      if (window.__nanooffice_pending_js) delete window.__nanooffice_pending_js[url];
+    };
+
 
     // Native → JS channel stubs (real handlers arrive with PH-1/PH-2 work).
     if (!window.RendererProcessVariable) window.RendererProcessVariable = {};

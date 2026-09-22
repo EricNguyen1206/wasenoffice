@@ -113,8 +113,15 @@ fn handle(mut stream: TcpStream, registry: Arc<FileRegistry>) {
         return;
     }
     if let Some(rest) = engine_path.strip_prefix("editors/") {
-        let full =
+        let mut full =
             super::engines_root().and_then(|root| super::safe_join(&root.join("editors"), rest));
+        // Emscripten glue loaded via LoadJS eval loses scriptDirectory and
+        // resolves wasm payloads relative to the editor page; when the
+        // requested location does not exist, redirect to the canonical
+        // sdkjs engine payload by basename.
+        if full.as_ref().is_none_or(|p| !p.is_file()) {
+            full = resolve_engine_payload(rest).or(full);
+        }
         match full {
             Some(full) => serve(
                 &mut stream,
@@ -227,6 +234,22 @@ fn respond(stream: &mut TcpStream, code: u16, _headers: &[(&str, &str)], _body: 
     let resp = format!("HTTP/1.1 {code} {status}\r\nContent-Length: 0\r\n\r\n");
     let _ = std::io::Write::write_all(stream, resp.as_bytes());
     let _ = head;
+}
+
+/// Known engine payloads (wasm/wasm-adjacent) resolved by basename from the
+/// canonical sdkjs locations, regardless of the requesting page directory.
+fn resolve_engine_payload(rest: &str) -> Option<PathBuf> {
+    let basename = rest.rsplit('/').next()?;
+    let dir = match basename {
+        "fonts.wasm" => "sdkjs/common/libfont/engine/",
+        "zlib.wasm" => "sdkjs/common/zlib/engine/",
+        "engine.wasm" => "sdkjs/common/hash/hash/engine/",
+        "drawingfile.wasm" => "sdkjs/pdf/src/engine/",
+        "spell.wasm" => "sdkjs/common/spell/spell/",
+        _ => return None,
+    };
+    let engines = super::engines_root()?;
+    super::safe_join(&engines.join("editors"), &format!("{dir}{basename}"))
 }
 
 /// `app/<enc>` | `sys/<enc>` → whitelisted absolute font path.
