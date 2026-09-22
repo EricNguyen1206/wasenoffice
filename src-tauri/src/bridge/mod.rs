@@ -9,11 +9,12 @@
 use serde_json::Value;
 
 #[derive(Debug)]
-#[allow(dead_code)] // Runtime variant wires up in PH-1 when real handlers land
 pub enum BridgeError {
     /// Method known but not implemented yet.
     Unsupported(String),
-    /// Implemented call failed at runtime.
+    /// Implemented call failed at runtime. (First real runtime errors arrive
+    /// with PH-1 file lifecycle handlers.)
+    #[allow(dead_code)]
     Runtime(String),
 }
 
@@ -21,11 +22,55 @@ pub struct BridgeCmd;
 
 impl BridgeCmd {
     /// Dispatch a bridge method by its exact upstream name.
-    pub fn dispatch(method: &str, _payload: Value) -> Result<Value, BridgeError> {
-        // TODO(ph0): implement first wave of methods the editor needs at open-time:
-        //   IsLocalFile, CreateEditorApi (registration ack), LoadFontBase, GetImageBase,
-        //   OpenFilenameDialog, LocalFileGetImageUrl, LocalFileSave...
-        // Every other known method must fall through as Unsupported (logged as UNIMPL).
-        Err(BridgeError::Unsupported(method.to_string()))
+    ///
+    /// PH-0 first wave (open/render flow, evidence in docs/reference.map.md):
+    /// - `CreateEditorApi` — engine hands over its api object at init
+    ///   (upstream/sdkjs/common/apiBase.js:266); we only acknowledge.
+    /// - `IsLocalFile` — sync boolean gates in apiBase.js (e.g. :2394, :3222);
+    ///   PH-0 is local-only, so always `true`.
+    /// - `execCommand` — status channel from web-apps (desktopinit.js sends
+    ///   `webapps:entry` on boot); acknowledge and log the command.
+    /// - `GetEncryptedHeader` — called synchronously at sdk-all load
+    ///   (upstream/sdkjs/common/editorscommon.js:12380); "ENCRYPTED;" is the
+    ///   engine's own fallback value when the method is absent.
+    /// - Local-open delivery acks (`LocalFileSetSaved`, `LocalFileRecoverFolder`,
+    ///   `LocalFileSetSourcePath`, `LocalFileSetOpenChangesCount`) — the CEF shell
+    ///   fires them around `DesktopOfflineAppDocumentEndLoad`; the bytes arrive
+    ///   through that separate engine-global (see protocol delivery chain).
+    /// - `GetInstallPlugins` — parsed as JSON by the engine; "[]" = no plugins.
+    pub fn dispatch(method: &str, payload: Value) -> Result<Value, BridgeError> {
+        match method {
+            "CreateEditorApi" => Ok(Value::Null),
+            "IsLocalFile" => Ok(Value::Bool(true)),
+            "getEngineVersion" => Ok(Value::String(env!("CARGO_PKG_VERSION").into())),
+            "GetEncryptedHeader" => Ok(Value::String("ENCRYPTED;".into())),
+            "CheckUserId" => Ok(Value::String("nanooffice-ph0".into())),
+            "GetInstallPlugins" => Ok(Value::String(
+                r#"[{"url":"","pluginsData":[]},{"url":"","pluginsData":[]}]"#.into(),
+            )),
+            "isSupportPlugins" | "isSupportMacroses" => Ok(Value::Bool(true)),
+            "IsSignaturesSupport" => Ok(Value::Bool(false)),
+            "SetDocumentName" => {
+                if let Some(name) = payload
+                    .get("args")
+                    .and_then(|a| a.get(0))
+                    .and_then(Value::as_str)
+                {
+                    log::info!("document name: {name}");
+                }
+                Ok(Value::Null)
+            }
+            "LocalFileSetSaved"
+            | "LocalFileRecoverFolder"
+            | "LocalFileSetSourcePath"
+            | "LocalFileSetOpenChangesCount" => Ok(Value::Null),
+            "execCommand" => {
+                if let Some(cmd) = payload.get("cmd").and_then(Value::as_str) {
+                    log::info!("bridge execCommand: {cmd}");
+                }
+                Ok(Value::Null)
+            }
+            _ => Err(BridgeError::Unsupported(method.to_string())),
+        }
     }
 }

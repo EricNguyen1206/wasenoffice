@@ -11,15 +11,6 @@
   },
   "app": {
     "withGlobalTauri": true,
-    "windows": [
-      {
-        "title": "NanoOffice",
-        "width": 1280,
-        "height": 800,
-        "minWidth": 940,
-        "minHeight": 560
-      }
-    ],
     "security": {
       "csp": null
     }

@@ -95,6 +95,64 @@ button {
   margin-right: 5px;
 }
 
+/* PH-0 spike layout: header with open-form, editor fills the rest */
+.container {
+  padding-top: 0;
+  height: 100vh;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+#app header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+}
+
+#app header h1 {
+  margin: 0;
+  font-size: 1.1em;
+}
+
+#app header h1 small {
+  font-weight: 400;
+  opacity: 0.6;
+}
+
+#open-form {
+  display: flex;
+  flex: 1;
+  gap: 8px;
+}
+
+#open-form input {
+  flex: 1;
+}
+
+#editor-root {
+  flex: 1;
+  position: relative;
+}
+
+#editor-root iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+#ph0-log {
+  max-height: 4.5em;
+  overflow: auto;
+  font-size: 0.72em;
+  opacity: 0.75;
+  padding: 0 16px;
+  font-family: ui-monospace, monospace;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     color: #f6f6f6;
