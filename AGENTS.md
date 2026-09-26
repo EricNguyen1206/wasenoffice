@@ -59,9 +59,10 @@ nanooffice/
 
 ## Việc còn treo
 
-- (đóng 22.09.2026) `scaffold-tmp/` — user xác nhận, đã `git rm --cached` + `rm -rf`; deletion
-  đang staged chờ commit cùng đợt dọn dẹp tiếp theo.
-- Kế tiếp: **PH-0** — bắt đầu từ `docs/handoff-ph0.md` (handoff prompt cho session mới).
+- **PH-0 đang chạy dở** (bắt đầu 22.09 từ `docs/handoff-ph0.md`): engine boot + bridge first
+  wave OK, còn treo render — 3 phương án chờ user chọn, xem `docs/diagnostics.md` entry
+  "22.09 (bổ sung)".
+- Stack đã chốt: **giữ Rust + Tauri** (re-validate 26.09 — `docs/techstack-analysis.md`).
 
 ## Khi bắt đầu một phiên làm việc
 

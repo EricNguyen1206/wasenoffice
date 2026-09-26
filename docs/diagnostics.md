@@ -5,6 +5,23 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-09-26 · Chốt stack (giữ Rust) — research Bun/Go/Rust
+
+- **Nhiệm vụ:** agent nền thực hiện phân tích Bun vs Golang vs Rust theo
+  `docs/handoff-techstack-analysis.md` → đầu ra `docs/techstack-analysis.md` (3.779 từ,
+  10 section, decision matrix 3×6, đo thật trên máy).
+- **Kết quả:** Rust+Tauri 4.85/5 > Go+Wails 3.60 > Bun 1.90. Số observed: binary release
+  Rust 5.0 MB (app 1.141 LOC) vs Wails 7.9 MB vs Bun compiled 61 MB; RSS idle ~181 MB
+  (chủ yếu WebKit macOS) vs Wails ~198–218 MB; chỉ Tauri có mobile stable. Phát hiện:
+  Bun MIT nhưng binary compiled nhúng JSC/WebKit **LGPL-2.1 static-link** → nghĩa vụ
+  relink/source-offer.
+- **Quyết định user (26.09):** **không đổi stack** — giữ Rust + Tauri; file phân tích là
+  research, KHÔNG commit (để untracked). Đã ghi vào `vision.md` § Định vị (câu hỏi ĐÓNG)
+  + `AGENTS.md` § Việc còn treo (dọn stale: scaffold-tmp đã commit từ b60df56).
+- **Trạng thái:** reproduced (số liệu trong file phân tích); quyết định = user.
+
+---
+
 ## 2026-09-22 (bổ sung) · Phương án 1: phát hiện LoadJS bootstrap contract; oracle CDP app thật; render vẫn chưa qua vạch
 
 - **Bootstrap contract (reproduced — fix có thật):** `word/sdk-all-min.js` chỉ là BOOTSTRAP —

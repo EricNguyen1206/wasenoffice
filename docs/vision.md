@@ -6,6 +6,10 @@ Sửa quyết định = sửa file này + ghi entry mới vào `docs/diagnostics
 ## Định vị
 
 - **Open source ngay từ đầu** (quyết định của user, 21.09.2026).
+- **Stack shell: GIỮ Rust + Tauri** (chốt 26.09.2026) — re-validate Bun/Go/Rust theo 6 tiêu chí,
+  Rust thắng áp đảo (binary 5.0 MB vs 7.9/61 MB; mobile stable duy nhất; MIT không phải yếu tố
+  ngôn ngữ). Chi tiết: `docs/techstack-analysis.md` (research, không commit). Câu hỏi ĐÓNG —
+  không mở lại nếu không có bằng chứng mới.
 - Sản phẩm: office suite desktop **"nhẹ hơn và có AI"** — 3 tiêu chí: AI Native · ultra lightweight · multi platform.
 - Mũi nhọn khác biệt: nhẹ + AI local-first + dữ liệu không rời máy — điểm MS 365 / Google Docs không đánh được.
 
