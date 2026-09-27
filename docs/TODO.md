@@ -21,7 +21,8 @@ type: queue
 |---|---|---|---|---|---|
 | PH-0  |  6  | 3  | 0  | 1  | 2  |
 | PH-1  |  2  | 0  | 0  | 0  | 2  |
-| META  |  7  | 5  | 0  | 0  | 2  |
+| PH-4  |  2  | 0  | 0  | 0  | 2  |
+| META  |  8  | 5  | 0  | 0  | 3  |
 
 ## PH-0 — Spike editor + render DOCX (go/no-go)
 
@@ -37,12 +38,18 @@ type: queue
 - [ ] ⬜ T-010 · Open/save/convert end-to-end qua x2t sidecar · ← T-003
 - [ ] ⬜ T-011 · Round-trip test tự động thêm vào verify.sh · ← T-010
 
+## PH-4 — Đóng gói + updater (trigger: PH-2 xong)
+
+- [ ] ⬜ T-040 · Trim engines payload 313 MB → ≤100 MB budget (per-app-type build, strip loginpage/cloud) · vision QĐ2
+- [ ] ⬜ T-041 · Quyết bundle vs download-first cho engine AGPL (OQ — vision Câu hỏi mở) · ← T-040
+
 ## META — harness / docs / skills
 
 - [ ] ⬜ T-020 · Add 2 skill theo audit 26.09: `systematic-debugging` (superpowers) + `handoff` (mattpocock) qua cổng acceptance · **chờ user duyệt**
 - [ ] ⬜ T-021 · CI + gates số liệu size/RAM/startup · trigger: PH-4
+- [ ] ⬜ T-034 · Bật GitNexus index `upstream/sdkjs` phục vụ reverse font pipeline (trigger đã chạm: bridge first wave xong) · ← T-001 · skill: gitnexus-cli
 - [x] ✅ T-022 · Migration OKF-thin: frontmatter `type` toàn docs + gate check-docs.mjs (QĐ8) · 27.09
 - [x] ✅ T-030 · QĐ5 hai ngôi nhà harness/.agents + QĐ6 hệ DD/TEST mã hóa màn hình + CONTRIBUTING + docs routing · 26–27.09 · bbb99b1
 - [x] ✅ T-031 · QĐ7 TODO queue + template handoff + vòng đời task + protocol đa-phiên · 27.09
-- [x] ✅ T-032 · Chốt stack giữ Rust+Tauri (re-validate) · 26.09 · ea24231
+- [x] ✅ T-032 · Chốt stack giữ Rust+Tauri (re-validate) · 26.09 · ea24231 · research: `techstack-analysis.md` (untracked — user: research không commit)
 - [x] ✅ T-033 · Quyết định 5 "hai ngôi nhà" ghi vision · 26.09
