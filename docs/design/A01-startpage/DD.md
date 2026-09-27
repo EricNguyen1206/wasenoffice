@@ -1,3 +1,6 @@
+---
+type: design
+---
 # Detail Design (DD) — A01 · Trang bắt đầu (startpage)
 
 ## 0. Metadata

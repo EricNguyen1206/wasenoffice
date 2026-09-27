@@ -1,3 +1,6 @@
+---
+type: registry
+---
 # docs/handoff/ — quản lý context giữa các phiên agent
 
 > Nhà của handoff: prompt tự chứa cho phiên agent mới (QĐ7). Template: `_TEMPLATE.md`.

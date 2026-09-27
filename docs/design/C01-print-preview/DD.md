@@ -1,3 +1,6 @@
+---
+type: design
+---
 # Detail Design (DD) — C01 · Xem trước khi in (print-preview)
 
 | Trường | Giá trị |

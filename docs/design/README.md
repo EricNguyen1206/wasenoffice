@@ -1,3 +1,6 @@
+---
+type: registry
+---
 # docs/design/ — registry màn hình & tài liệu thiết kế
 
 > Source of truth cho thiết kế (DD) + kiểm thử (TEST) từng màn hình — public official (`docs/vision.md` QĐ6).

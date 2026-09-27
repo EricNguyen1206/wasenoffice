@@ -1,7 +1,31 @@
+---
+type: log
+---
 # docs/diagnostics.md — nhật ký chẩn đoán
 
 Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, trạng thái
 (observed / candidate / reproduced / confirmed). Entry mới thêm TRÊN CÙNG.
+
+---
+
+## 2026-09-27 · QĐ8: migration docs sang chuẩn OKF v0.2 thin + gate check-docs.mjs
+
+- **Nhiệm vụ (T-022):** sau điều tra OKF (report tạm 27.09 — verdict "thin": triết lý repo đã
+  hội tụ ~70–80%, chỉ đáng lấy frontmatter type + doc gate), user chốt migrate.
+- **Đã làm:** (1) 20/20 file `docs/**/*.md` thêm frontmatter `type` theo vocabulary 11 giá trị
+  (decision/convention/evidence/log/design/test/template/queue/handoff/registry/research);
+  (2) `harness/scripts/check-docs.mjs` (zero-dep) — check frontmatter type, markdown link nội
+  bộ resolve, coverage index trong docs/README.md; (3) gate thêm vào `verify.sh`; (4) ràng buộc
+  agent-sinh-doc: conventions § OKF-thin (vocabulary + quy tắc), docs/README quy tắc, 3 template
+  ghi chú "đổi type khi copy"; (5) vision QĐ8 (trigger nâng cấp full: public + external agent
+  hoặc v1.0).
+- **Gate bắt vi phạm thật ngay lần chạy đầu (reproduced):** 5 lỗi — 2 link placeholder trong
+  template (TEST.md/DD.md chưa tồn tại cạnh template — đổi sang inline code) + 3 thư mục stub
+  dùng brace `{A02,C01,X01}` trong index không máy-đọc được (tách 3 path đầy đủ). Sau sửa:
+  `20 files · 0 link gãy · coverage đủ`, exit 0.
+- **Ghi chú:** `docs/techstack-analysis.md` (untracked) cũng được gán `type: research` — file
+  nghiên cứu không commit nhưng nằm trong cây docs thì phải qua gate khi có mặt.
+- **Trạng thái:** confirmed (quyết định user; verify.sh full exit 0 — kết quả trong báo cáo).
 
 ---
 

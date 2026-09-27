@@ -1,8 +1,11 @@
+---
+type: template
+---
 # Handoff — <tên việc> (dành cho session mới)
 
 <!-- Copy file này vào docs/handoff/<tên-kebab>.md rồi điền (quy tắc viết/ghi tiếp/xoá:
-     docs/handoff/README.md). Handoff là PROMPT cho phiên mới: mọi giả định phải thành chữ
-     trong file — không được nằm trong chat. -->
+     docs/handoff/README.md). SAU KHI COPY: đổi `type: template` thành `type: handoff`.
+     Handoff là PROMPT cho phiên mới: mọi giả định phải thành chữ trong file — không nằm trong chat. -->
 
 > Bạn (agent) đang ở phiên mới. File này LÀ prompt công việc: đọc nó + các file nó trỏ tới
 > theo thứ tự, rồi triển khai. Đi tuần tự, không nhảy cóc.

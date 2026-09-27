@@ -1,3 +1,6 @@
+---
+type: registry
+---
 # docs/ — chỉ mục & định tuyến tài liệu
 
 > File này là chỗ **duy nhất** liệt kê mọi tài liệu của dự án: doc không có dòng ở đây = chưa chính thức.
@@ -35,12 +38,15 @@ Ngoài `docs/`: contract cho agent = `AGENTS.md` (root) · luật bắt buộc =
 | `docs/design/_TEMPLATE-TEST.md` | template Test Plan theo màn hình |
 | `docs/design/D01-editor/` | DD + TEST cửa sổ soạn thảo DOCX (PH-0) |
 | `docs/design/A01-startpage/` | DD + TEST trang bắt đầu (draft, PH-2) |
-| `docs/design/{A02-about,C01-print-preview,X01-settings}/` | stub màn kế hoạch (planned) |
+| `docs/design/A02-about/` · `docs/design/C01-print-preview/` · `docs/design/X01-settings/` | stub màn kế hoạch (planned) |
 | `docs/techstack-analysis.md` | research Bun/Go/Rust 26.09 (untracked theo QĐ stack) |
 
 ## Quy tắc chung
 
 - **Một loại thông tin = một ngôi nhà.** Cấm copy nội dung giữa các nhà — chỉ cross-link.
+- **OKF-thin (QĐ8):** mọi `docs/**/*.md` mang frontmatter `type` thuộc vocabulary cố định
+  (bảng: `conventions.md` § Chuẩn tài liệu OKF-thin); doc mới phải có dòng index ở đây —
+  gate `harness/scripts/check-docs.mjs` chặn vi phạm khi chạy verify.
 - **Ngôn ngữ: tiếng Việt** cho mọi tài liệu dự án (chốt user 26.09, QĐ6); payload công cụ
   (System-1, fixture script…) giữ tiếng Anh.
 - Mỗi tự khai báo protocol cập nhật ở header riêng (mẫu: `diagnostics.md`).

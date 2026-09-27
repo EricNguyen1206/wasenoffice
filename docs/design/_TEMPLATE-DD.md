@@ -1,7 +1,10 @@
+---
+type: template
+---
 # Detail Design (DD) — <Tên màn hình>
 
-<!-- Copy file này vào docs/design/[Mã]-[tên]/DD.md và điền.
-     Không xoá section — mục nào chưa dùng thì ghi "N/A (<lý do ngắn>)".
+<!-- Copy file này vào docs/design/[Mã]-[tên]/DD.md và điền; SAU KHI COPY đổi `type: template`
+     thành `type: design`. Không xoá section — mục nào chưa dùng thì ghi "N/A (<lý do ngắn>)".
      Đọc quy tắc tại docs/design/README.md (registry + cấp mã) trước khi viết. -->
 
 ## 0. Metadata
@@ -15,7 +18,7 @@
 | Phase | PH-x |
 | Owner | `<người phụ trách>` |
 | Cập nhật gần nhất | YYYY-MM-DD |
-| TEST tương ứng | [`TEST.md`](TEST.md) |
+| TEST tương ứng | `TEST.md` (cùng thư mục — sau khi copy) |
 
 ## 1. Tổng quan
 

@@ -1,3 +1,6 @@
+---
+type: queue
+---
 # docs/TODO.md — hàng đợi công việc theo phase
 
 > Nhà **duy nhất** của task vận hành (routing: `docs/README.md`). 1 task = 1 dòng pointer —
@@ -18,7 +21,7 @@
 |---|---|---|---|---|---|
 | PH-0  |  6  | 3  | 0  | 1  | 2  |
 | PH-1  |  2  | 0  | 0  | 0  | 2  |
-| META  |  6  | 4  | 0  | 0  | 2  |
+| META  |  7  | 5  | 0  | 0  | 2  |
 
 ## PH-0 — Spike editor + render DOCX (go/no-go)
 
@@ -38,6 +41,7 @@
 
 - [ ] ⬜ T-020 · Add 2 skill theo audit 26.09: `systematic-debugging` (superpowers) + `handoff` (mattpocock) qua cổng acceptance · **chờ user duyệt**
 - [ ] ⬜ T-021 · CI + gates số liệu size/RAM/startup · trigger: PH-4
+- [x] ✅ T-022 · Migration OKF-thin: frontmatter `type` toàn docs + gate check-docs.mjs (QĐ8) · 27.09
 - [x] ✅ T-030 · QĐ5 hai ngôi nhà harness/.agents + QĐ6 hệ DD/TEST mã hóa màn hình + CONTRIBUTING + docs routing · 26–27.09 · bbb99b1
 - [x] ✅ T-031 · QĐ7 TODO queue + template handoff + vòng đời task + protocol đa-phiên · 27.09
 - [x] ✅ T-032 · Chốt stack giữ Rust+Tauri (re-validate) · 26.09 · ea24231

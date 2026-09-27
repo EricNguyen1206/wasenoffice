@@ -1,14 +1,17 @@
+---
+type: template
+---
 # Test Plan — <Tên màn hình>
 
-<!-- Copy file này vào docs/design/[Mã]-[tên]/TEST.md và điền.
-     Mọi test case phải truy vết được về mục tương ứng trong DD.md. -->
+<!-- Copy file này vào docs/design/[Mã]-[tên]/TEST.md và điền; SAU KHI COPY đổi `type: template`
+     thành `type: test`. Mọi test case phải truy vết được về mục tương ứng trong DD.md. -->
 
 ## 0. Metadata
 
 | Trường | Giá trị |
 |---|---|
 | Mã màn hình | `<Chữ><2 số>[-n]` — vd `D01` |
-| DD tương ứng | [`DD.md`](DD.md) |
+| DD tương ứng | `DD.md` (cùng thư mục — sau khi copy) |
 | Phase / điều kiện chạy | PH-x |
 | Cập nhật gần nhất | YYYY-MM-DD |
 

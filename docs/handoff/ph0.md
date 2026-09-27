@@ -1,3 +1,6 @@
+---
+type: handoff
+---
 # Handoff — bắt đầu PH-0 (dành cho session mới)
 
 > Bạn (agent) đang ở phiên mới. File này LÀ prompt công việc: đọc nó + các file nó trỏ tới

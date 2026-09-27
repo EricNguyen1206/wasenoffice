@@ -1,3 +1,6 @@
+---
+type: decision
+---
 # docs/vision.md — tầm nhìn & quyết định sản phẩm
 
 Chốt trong phiên brainstorm 21.09.2026. Mọi quyết định scope/kiến trúc về sau đối chiếu về đây.
@@ -128,6 +131,21 @@ Chốt 27.09.2026 (user duyệt format chia theo phase + placement `docs/`).
   dashboard cuối phiên — ghi vào AGENTS.md checklist.
 - AGENTS.md "Việc còn treo" chỉ còn pointer + điểm nổi bật. Khi public repo: migrate queue
   sang GitHub Issues (nhà của spec doc không đổi).
+
+## Quyết định 8 — Chuẩn tài liệu: OKF v0.2 dạng thin (CHỐT)
+
+Chốt 27.09.2026 (user, sau điều tra chuẩn OKF — Open Knowledge Format, Google Cloud công bố
+12.06.2026, hiện v0.2; phân tích so sánh trong report tạm 27.09).
+
+- Áp **dạng thin**: mỗi file `docs/**/*.md` mang 1 dòng frontmatter `type` từ vocabulary cố định
+  (bảng: `conventions.md` § OKF-thin) + gate `harness/scripts/check-docs.mjs` trong `verify.sh`
+  (frontmatter · link nội bộ · coverage index). Phần triết lý OKF còn lại repo đã có sẵn
+  (index/log/path-là-danh-tính/cross-link/provenance) — compatible-by-construction.
+- KHÔNG áp full: không đổi tên `index.md`/`log.md`, không metadata đầy đủ, không attestation/
+  `sources`/`generated` — over-engineer ở quy mô solo (metadata đôi, vocabulary nghèo hơn, chuẩn
+  v0.x còn rung — 2 breaking changes trong 3 tháng).
+- **Trigger nâng cấp full OKF:** repo public + có external agent đọc docs theo OKF, hoặc chuẩn
+  đạt v1.0 ổn định. Lúc đó chỉ bọc thêm YAML — cây/luật giữ nguyên.
 
 ## Horizons
 

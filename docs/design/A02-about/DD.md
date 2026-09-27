@@ -1,3 +1,6 @@
+---
+type: design
+---
 # Detail Design (DD) — A02 · Giới thiệu & credit license (about)
 
 | Trường | Giá trị |

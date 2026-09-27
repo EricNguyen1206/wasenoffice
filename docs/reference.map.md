@@ -1,3 +1,6 @@
+---
+type: evidence
+---
 # docs/reference.map.md
 
 Bản đồ bằng chứng: upstream code ↔ nanooffice cần làm gì. Trạng thái: observed (có path) /

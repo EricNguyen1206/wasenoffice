@@ -1,3 +1,6 @@
+---
+type: convention
+---
 # docs/conventions.md — quy ước NanoOffice
 
 ## Kiến trúc mục tiêu (đã chốt theo feasibility study 21.09.2026)
@@ -83,6 +86,33 @@ vào backlog phase kế + sinh handoff phase kế.
 - Định tuyến mọi loại tài liệu: `docs/README.md` (ngôi nhà duy nhất của chỉ mục).
 - Ngôn ngữ tài liệu: tiếng Việt (public official — QĐ6).
 
+## Chuẩn tài liệu OKF-thin (QĐ8)
+
+- Mọi file `docs/**/*.md` phải có frontmatter YAML với **khóa bắt buộc duy nhất `type`** thuộc
+  vocabulary cố định dưới đây — khóa định tuyến máy đọc được (chuẩn Open Knowledge Format v0.2
+  của Google, áp dạng thin — `docs/vision.md` QĐ8).
+
+| type | Nghĩa | Ví dụ |
+|---|---|---|
+| `decision` | quyết định đã chốt (ADR) | `vision.md` |
+| `convention` | quy ước / quy tắc | `conventions.md` |
+| `evidence` | bản đồ bằng chứng | `reference.map.md` |
+| `log` | nhật ký theo ngày, mới trên cùng | `diagnostics.md` |
+| `design` | DD màn hình | `design/D01-editor/DD.md` |
+| `test` | test plan màn hình | `design/D01-editor/TEST.md` |
+| `template` | khuôn để copy | `design/_TEMPLATE-DD.md` |
+| `queue` | hàng đợi công việc | `TODO.md` |
+| `handoff` | prompt bàn giao phiên | `handoff/ph0.md` |
+| `registry` | chỉ mục / danh mục | `docs/README.md`, `design/README.md` |
+| `research` | research một lần, không duy trì | `techstack-analysis.md` |
+
+- **Ràng buộc cho agent sinh doc mới:** thêm frontmatter `type` đúng vocabulary + đăng ký dòng
+  index trong `docs/README.md` — không bước nào khác; gate `harness/scripts/check-docs.mjs`
+  (chạy trong `verify.sh`) chặn: thiếu type, type lạ, link nội bộ gãy, file chưa index.
+- Template khi copy: **đổi `type: template`** thành type thật (`design` / `test` / `handoff`).
+- KHÔNG áp full OKF: không đổi tên `README.md`→`index.md` hay `diagnostics.md`→`log.md`, không
+  thêm metadata đầy đủ / attestation — trigger nâng cấp ghi ở QĐ8.
+
 ## Chế độ vận hành: đơn nhiệm (chốt bởi user 21.09.2026)
 
 - **KHÔNG dùng git worktree, không song song hóa task.** Mỗi phiên = 1 task, chạy thẳng đến xong.
@@ -134,7 +164,8 @@ vào backlog phase kế + sinh handoff phase kế.
 
 - Chạy `./harness/scripts/verify.sh` — gồm: cargo check · cargo fmt --check · cargo clippy
   (-D warnings) · pnpm build · license gate (`check-licenses.mjs`, allowlist trong script) ·
-  submodules clean · không file `upstream/`/`engines/` nào staged.
+  doc gate OKF-thin (`check-docs.mjs` — QĐ8) · submodules clean · không file `upstream/`/`engines/`
+  nào staged.
 - Có thay đổi bridge/protocol → chạy smoke: mở app, load editor, log các method UNIMPL bị gọi
   (thủ tục chuẩn hóa: `docs/design/D01-editor/TEST.md`).
 

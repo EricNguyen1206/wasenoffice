@@ -1,3 +1,6 @@
+---
+type: design
+---
 # Detail Design (DD) — X01 · Cài đặt (settings)
 
 | Trường | Giá trị |

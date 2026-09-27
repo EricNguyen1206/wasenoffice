@@ -1,3 +1,6 @@
+---
+type: design
+---
 # Detail Design (DD) — D01 · Cửa sổ soạn thảo tài liệu (editor)
 
 ## 0. Metadata

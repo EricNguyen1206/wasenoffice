@@ -1,3 +1,6 @@
+---
+type: test
+---
 # Test Plan — A01 · Trang bắt đầu (startpage)
 
 ## 0. Metadata

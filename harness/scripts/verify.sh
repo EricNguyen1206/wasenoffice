@@ -19,6 +19,9 @@ pnpm build --logLevel error || fail=1
 echo "▸ license allowlist (cargo graph + node_modules)"
 node harness/scripts/check-licenses.mjs || fail=1
 
+echo "▸ doc OKF-thin (frontmatter type + links + index coverage)"
+node harness/scripts/check-docs.mjs || fail=1
+
 echo "▸ upstream submodules clean?"
 if [ -n "$(git submodule status | grep '^[+MU]')" ]; then
   echo "  ✗ submodules dirty/different:"; git submodule status; fail=1
