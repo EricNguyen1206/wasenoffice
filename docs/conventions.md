@@ -52,6 +52,24 @@ Chỉ dùng set tối thiểu — thêm skill mới phải qua acceptance giốn
 
 Spawn subagent → prompt PHẢI nhúng/ trỏ tới `harness/rules/mit-purity.md` (subagent không tự đọc AGENTS.md).
 
+## Vòng đời task — từ brainstorm đến đóng (6 sân khấu, 5 cổng)
+
+0. **Backlog** — ý tưởng → 1 dòng trong `docs/TODO.md` (section đúng phase hoặc META).
+1. **Quyết định** — nhỏ/lặp: `quick_decision_router`; có tầm: `/grill-me`. **G1:** QĐ ghi
+   `vision.md` + entry `diagnostics.md` trước khi code.
+2. **Spec** — task nhỏ: done-criteria 3–6 dòng ngay trong dòng TODO; task vừa/lớn/mở phase:
+   `docs/handoff-<tên>.md` theo `docs/_TEMPLATE-handoff.md`. **G2:** done-criteria measurable
+   tồn tại trước khi code.
+3. **Code** — ponytail ladder trước mỗi file/dep mới · skill theo loại việc · subagent prompt
+   nhúng `mit-purity.md` · upstream read-only · commit `phase(scope):` từng unit chạy được.
+4. **Verify** — **G3:** `verify.sh` exit 0 (+ smoke bridge/protocol theo DD-TEST màn) +
+   `code-review` diff (+ `ponytail-review` nếu lớn) · report kèm lệnh + output + exit code.
+5. **Ghi & đóng** — **G4:** phát hiện về đúng nhà (reference.map / diagnostics / vision) ·
+   **G5:** cập nhật TODO (✅ + commit hash, sink đáy) + AGENTS Progress snapshot khi xong phase.
+
+Cuối phase: cặp review định kỳ (ponytail-audit + `/improve-codebase-architecture`) → kết quả
+vào backlog phase kế + sinh handoff phase kế.
+
 ## Tài liệu thiết kế màn hình — DD + TEST (QĐ6)
 
 - Mỗi màn hình có 1 thư mục `docs/design/[Mã]-[tên]/` gồm `DD.md` (thiết kế chi tiết) + `TEST.md`
@@ -71,7 +89,7 @@ Spawn subagent → prompt PHẢI nhúng/ trỏ tới `harness/rules/mit-purity.m
   tiên khả năng đa nhiệm.
 - Checklist bắt buộc mỗi task:
   - Trước khi làm: đọc `vision.md` + `conventions.md`; check `harness/skills/` + `.agents/skills/`
-    có skill tương ứng không.
+    có skill tương ứng không; **claim task trong `docs/TODO.md`** (🟨 + ngày).
   - Trong khi làm: ladder YAGNI (skill `ponytail`) trước mỗi file/dependency mới; không mở front
     mới khi front cũ chưa xong; subagent prompt phải nhúng `mit-purity.md`.
   - Trước khi báo xong: `verify.sh` exit 0 → `code-review` trên diff (thêm `ponytail-review` nếu
@@ -82,6 +100,19 @@ Spawn subagent → prompt PHẢI nhúng/ trỏ tới `harness/rules/mit-purity.m
     `System-1: X calls · Y auto · Z escalated → main-agent · tiết kiệm ~Y×300 tokens (ước tính
     bảo thủ theo quy ước; System-1 chạy local = 0 token cloud)`.
     Không gọi lần nào → ghi `System-1: 0 calls`. KHÔNG thổi số: escalated không tính là tiết kiệm.
+
+### Handoff vào/ra giữa các phiên
+
+- Cuối phase (hoặc việc vừa/mớ lớn) → sinh `docs/handoff-<tên>.md` theo `docs/_TEMPLATE-handoff.md`.
+- Phiên dở giữa chừng → **ghi tiếp vào handoff hiện có** (trạng thái, việc còn lại), không mở
+  file mới — state không được sống duy nhất trong chat.
+
+### Protocol đa-phiên (nhiều agent trên một cây làm việc)
+
+- `git add` **scoped theo file**, tuyệt đối không `git add -A` / `git add .`.
+- Trước khi verify/commit → chụp `git status`; thấy thay đổi lạ (không do mình) → inspect
+  mtime/diff, **báo user**, không tự commit/revert giùm.
+- Không chạy hai agent ghi cùng một lúc trên cùng thư mục làm việc.
 
 ## Công cụ cục bộ hỗ trợ agent
 

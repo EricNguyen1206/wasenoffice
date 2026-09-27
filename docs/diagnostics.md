@@ -5,6 +5,26 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-09-27 · QĐ7: TODO queue theo phase + template handoff + vòng đời task + protocol đa-phiên
+
+- **Nhiệm vụ:** user duyệt format TODO (chia section theo phase, priority = thứ tự, dashboard
+  đầu file) + placement (`docs/TODO.md` — root chỉ chứa contract), yêu cầu migrate toàn bộ tài
+  liệu theo kiến trúc mới rồi commit.
+- **Artifacts (mới):** `docs/TODO.md` — seed nội dung thật: PH-0 (T-001 ⏸ chờ user chọn
+  phương án phá blocker, T-002/003 ⏜, 3 ✅ 22.09), PH-1 (2 ⬜), META (T-020 add 2 skill theo
+  audit = chờ user duyệt; T-021 CI trigger PH-4; 4 ✅) · `docs/_TEMPLATE-handoff.md` (6 section,
+  G2 done-criteria trước khi code).
+- **Wire-up:** AGENTS.md — "Việc còn treo" → pointer TODO; checklist đầu phiên +bước claim;
+  sửa comment stale rules "(migration, evidence, release)" → đúng 4 rules thật ·
+  conventions.md — section "Vòng đời task" (6 sân khấu, G1–G5), checklist +claim,
+  mục "Handoff vào/ra" + "Protocol đa-phiên" (git add scoped, chụp status, không
+  commit/revert thay đổi lạ) · docs/README.md routing + index · vision.md QĐ7.
+- **Commit:** batch 1 (QĐ5+QĐ6+mã hóa) = `bbb99b1` trước khi làm task này; batch 2 (QĐ7) commit
+  sau verify cuối. `docs/techstack-analysis.md` cố ý untracked (research).
+- **Trạng thái:** confirmed (quyết định user; verify.sh 2 lần exit 0 — trước mỗi commit).
+
+---
+
 ## 2026-09-27 · QĐ6 bổ sung: mã hóa màn hình trong docs/design + migration
 
 - **Nhiệm vụ:** user yêu cầu tổ chức lại docs/design theo mã màn (`[Chữ][2 số]`, màn con `-n`,

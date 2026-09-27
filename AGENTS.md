@@ -18,7 +18,7 @@ nanooffice/
 ├── docs/                ← kiến thức bằng chứng: reference.map, diagnostics, conventions
 │   └── design/          ← DD + TEST theo màn hình (source of truth UI, public — QĐ6)
 ├── harness/
-│   ├── rules/           ← quy tắc bắt buộc (migration, evidence, release)
+│   ├── rules/           ← quy tắc bắt buộc (upstream-read-only, licensing, mit-purity, evidence-discipline; migration/release sinh theo phase)
 │   └── skills/          ← quy trình từng việc cụ thể (open-docx, bridge-shim, ...)
 ├── upstream/            ← MẢNG CHỈ ĐỌC — chỉ để tra cứu bằng git/submodule, không sửa, không commit vào
 │   ├── sdkjs/           (gitlink → ONLYOFFICE/sdkjs)
@@ -60,14 +60,15 @@ nanooffice/
 
 ## Việc còn treo
 
-- **PH-0 đang chạy dở** (bắt đầu 22.09 từ `docs/handoff-ph0.md`): engine boot + bridge first
-  wave OK, còn treo render — 3 phương án chờ user chọn, xem `docs/diagnostics.md` entry
-  "22.09 (bổ sung)".
+Hàng đợi công việc sống ở **`docs/TODO.md`** (QĐ7 — quy tắc + dashboard ở đầu file đó).
+Điểm nổi bật hiện tại: PH-0 dở — 3 phương án phá blocker render **chờ user chọn**
+(D01 DD §10, `docs/diagnostics.md` entry "22.09 (bổ sung)").
 - Stack đã chốt: **giữ Rust + Tauri** (re-validate 26.09 — `docs/techstack-analysis.md`).
 
 ## Khi bắt đầu một phiên làm việc
 
 1. Đọc `docs/vision.md` (tầm nhìn + quyết định sản phẩm) và `docs/conventions.md` (quy ước code + kiến trúc mục tiêu).
-2. Việc mới → kiểm tra `harness/skills/` có skill tương ứng không trước khi tự làm.
-3. Sửa code xong → chạy `harness/scripts/verify.sh` (nếu tồn tại) trước khi báo complete.
-4. Phát hiện điều mới về upstream → ghi bằng chứng vào `docs/reference.map.md`, đừng để chỉ trong chat.
+2. Đọc `docs/TODO.md` → **claim đúng 1 task** (🟨 + ngày); không đụng task 🟨 của session khác. Cuối phiên: cập nhật trạng thái + dashboard + dòng ▶.
+3. Việc mới → kiểm tra `harness/skills/` có skill tương ứng không trước khi tự làm.
+4. Sửa code xong → chạy `harness/scripts/verify.sh` (nếu tồn tại) trước khi báo complete.
+5. Phát hiện điều mới về upstream → ghi bằng chứng vào `docs/reference.map.md`, đừng để chỉ trong chat.

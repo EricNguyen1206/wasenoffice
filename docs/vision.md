@@ -114,6 +114,21 @@ kiểm thử (TEST) của từng màn hình — public official ngay từ đầu
 - Lý do: "open source ngay từ đầu" (§ Định vị) — contributor cần entry point + source of truth,
   không phải đọc ngược chat/diagnostics để hiểu hệ thống.
 
+## Quyết định 7 — Quản lý công việc: TODO queue theo phase (CHỐT)
+
+Chốt 27.09.2026 (user duyệt format chia theo phase + placement `docs/`).
+
+- `docs/TODO.md` = nhà **duy nhất** của task vận hành: chia section theo phase (+ section
+  **META** cho việc harness/docs/skills), thứ tự trong section = priority, dashboard đếm +
+  dòng `▶ Đang làm` ở đầu file.
+- 1 task = 1 dòng **pointer** (chi tiết ở handoff/DD-TEST/diagnostics); ID `T-n`; trạng thái
+  ⬜/🟨/⏸/✅/🚫; toàn file ≤ 1 🟨 (đơn nhiệm); ✅ sink đáy section + archive theo phase
+  (`docs/TODO-archive.md` khi đóng phase).
+- Agent: claim đầu phiên (🟨 + ngày, không đụng 🟨 của session khác), release + cập nhật
+  dashboard cuối phiên — ghi vào AGENTS.md checklist.
+- AGENTS.md "Việc còn treo" chỉ còn pointer + điểm nổi bật. Khi public repo: migrate queue
+  sang GitHub Issues (nhà của spec doc không đổi).
+
 ## Horizons
 
 | Horizon | Phạm vi |
