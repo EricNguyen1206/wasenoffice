@@ -22,6 +22,9 @@ node harness/scripts/check-licenses.mjs || fail=1
 echo "▸ doc OKF-thin (frontmatter type + links + index coverage)"
 node harness/scripts/check-docs.mjs || fail=1
 
+echo "▸ smoke render behavioral (TC-D01-06: boot app, render fixture DOCX)"
+harness/scripts/smoke-render.sh || fail=1
+
 echo "▸ upstream submodules clean?"
 if [ -n "$(git submodule status | grep '^[+MU]')" ]; then
   echo "  ✗ submodules dirty/different:"; git submodule status; fail=1
