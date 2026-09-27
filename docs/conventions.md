@@ -102,7 +102,7 @@ vào backlog phase kế + sinh handoff phase kế.
 | `test` | test plan màn hình | `design/D01-editor/TEST.md` |
 | `template` | khuôn để copy | `design/_TEMPLATE-DD.md` |
 | `queue` | hàng đợi công việc | `TODO.md` |
-| `handoff` | prompt bàn giao phiên | `handoff/ph0.md` |
+| `handoff` | prompt bàn giao phiên | `handoff/_TEMPLATE.md` |
 | `registry` | chỉ mục / danh mục | `docs/README.md`, `design/README.md` |
 | `research` | research một lần, không duy trì | `techstack-analysis.md` |
 

@@ -15,23 +15,21 @@ type: queue
 
 ## Tình hình nhanh
 
-▶ Đang làm: (chưa có — T-003 verdict go/no-go PH-0 là việc kế tiếp)
+▶ Kế tiếp: PH-1 — T-045 (refactor open-delivery chain, trigger mở PH-1) rồi T-010 (open/save/convert
+qua x2t sidecar). Lưu ý caveat từ T-003: user xác nhận scroll/edit thủ công ~30s (diagnostics 27.09).
 
 | Phase | Tổng | ✅ | 🟨 | ⏸ | ⬜ |
 |---|---|---|---|---|---|
-| PH-0  |  6  | 5  | 0  | 0  | 1  |
+| PH-0 — ĐÃ ĐÓNG 27.09  |  6  | 6  | 0  | 0  | 0  |
 | PH-1  |  5  | 0  | 0  | 0  | 5  |
 | PH-4  |  2  | 0  | 0  | 0  | 2  |
 | META  | 11  | 6  | 0  | 0  | 5  |
 
-## PH-0 — Spike editor + render DOCX (go/no-go)
+## PH-0 — Spike editor + render DOCX (go/no-go) — ĐÃ ĐÓNG 27.09 · verdict GO WITH CAVEAT
 
-- [ ] ⬜ T-003 · Verdict go/no-go PH-0 + baseline size/RAM/cold-start ghi diagnostics (số debug đã có 22.09; release đo ở PH-4) + kiểm tra scroll/edit cơ bản theo DoD handoff PH-0 · ← T-002
-- [x] ✅ T-004 · Engine boot WKWebView không CEF · 22.09
-- [x] ✅ T-005 · Bridge first wave 15+ method DONE-PH0 · 22.09
-- [x] ✅ T-006 · LoadJS bootstrap contract + wasm locateFile fix · 22.09
-- [x] ✅ T-001 · Chọn phương án phá blocker render · 27.09 · user ủy quyền → **(a) oracle-diff CDP** · triển khai trong T-002
-- [x] ✅ T-002 · Triển khai (a) đến khi render qua vạch — **TC-D01-06 GREEN** (contentReady + viewer 2302×958 + 14 fetch `/fonts`, Hcc=15 khớp oracle app thật) · 27.09 · 14ee92c · diagnostics 27.09
+> Toàn bộ ✅ của phase cắt sang [`docs/TODO-archive.md`](TODO-archive.md). Caveat: criterion (b)
+> scroll/edit keyboard chờ user xác nhận thủ công ~30s — bằng chứng ở `docs/diagnostics.md` 27.09
+> (T-003). Baseline release đo ở PH-4.
 
 ## PH-1 — Vòng đời file (open/save/convert qua x2t sidecar)
 

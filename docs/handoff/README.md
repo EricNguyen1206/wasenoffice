@@ -36,4 +36,4 @@ type: registry
 
 | File | Task | Trạng thái |
 |---|---|---|
-| `ph0.md` | PH-0 spike (T-001 ⏸ chờ user chọn phương án) | đang mở |
+| (trống — `ph0.md` đã xoá 27.09 khi đóng PH-0: tri thức routed về `docs/diagnostics.md` + `docs/TODO-archive.md`) | | |

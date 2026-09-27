@@ -28,7 +28,8 @@ Ngoài `docs/`: contract cho agent = `AGENTS.md` (root) · luật bắt buộc =
 | File | Vai trò |
 |---|---|
 | `docs/TODO.md` | hàng đợi công việc theo phase (QĐ7) — dashboard + quy tắc ở header |
-| `docs/handoff/` | prompt bàn giao phiên agent — README vòng đời (viết/ghi tiếp/xoá) + `_TEMPLATE.md` + `ph0.md` |
+| `docs/TODO-archive.md` | kho ✅ của các phase đã đóng (QĐ7) — cắt từ TODO.md khi đóng phase |
+| `docs/handoff/` | prompt bàn giao phiên agent — README vòng đời (viết/ghi tiếp/xoá) + `_TEMPLATE.md` |
 | `docs/conventions.md` | quy ước code + kiến trúc mục tiêu + workflow skills + chế độ đơn nhiệm |
 | `docs/vision.md` | tầm nhìn + các quyết định đã chốt (QĐ1–QĐ6) — vai trò ADR |
 | `docs/reference.map.md` | bản đồ bằng chứng upstream ↔ việc cần làm (bridge ~130 method, open contract, ràng buộc URL) |
