@@ -8,6 +8,35 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-09-27 · Review kiến trúc định kỳ (improve-codebase-architecture) — 5 candidates, landing
+
+- **Phạm vi quét:** hot-spot từ git history (shim, bridge, filesrv, lib — 5 commit code gần
+  nhất) + agent Explore sweep phần còn lại. Báo cáo đầy đủ là file HTML tạm trong $TMPDIR
+  (thiết kế skill: không vào repo); quyết định + bằng chứng chính được lưu ở đây.
+- **C1 ✅ smoke gate behavioral (Strong)** → T-042 (82502c1) — làm ngay trong phiên.
+- **C2 Strong — bridge method surface 3 nơi/2 ngôn ngữ:** mỗi method sửa tay ở shim
+  (`desktopEditor.js` KNOWN_METHODS + LOCAL_TRUTHS), Rust (`bridge/mod.rs` match), docs
+  (`reference.map.md`); `globals.d.ts` khai báo mọi method `Promise<unknown>` trong khi 11+
+  method sync-truth trả đồng bộ — interface typed duy nhất của dự án đang sai contract. Fix
+  dạng ponytail: 1 registry + check script đối chiếu 3 bảng + sinh type sync/async. → **T-044**.
+- **C3 Worth exploring — open-delivery chain:** ordering sống trong prose/magic number
+  (delay 1500ms `deliverDocument`, retry 120×500ms `consumeDeliveredDocument`, chữ ký
+  `EndLoad` chỉ trong comment, `_offline_` magic, adapter font hai đầu Rust↔JS không chung
+  constant); ~120 dòng probe diagnostics lẫn đường production sẽ mục ở PH-1. Fix: delivery
+  module có tên + probe sau `NANO_OFFICE_PROBE`. → **T-045**.
+- **C4 Worth exploring — stub `sidecar/` + `window/` fail deletion test:** 0 dòng code trong
+  khi conventions.md tuyên bố x2t thuộc sidecar (thực tế inline ở `lib.rs`
+  `get_document_for_delivery`). Fix: xoá stub + sửa docs. → **T-043**.
+- **C5 Speculative — config env sprawl:** 4 biến `NANO_OFFICE_*` đọc tại điểm dùng, 2 quy tắc
+  khám phá artifact (engines/ vs x2t), `:14321` hardcode trong docs trong khi filesrv có thể
+  rơi về `:0`. Fix: `env.rs` deep module — **chưa làm**, trigger PH-1. → **T-046**.
+- **Đang deep tốt (giữ nguyên):** `protocol/mod.rs`, `filesrv.rs`, `bridge/mod.rs` — interface
+  nhỏ, unit test có thật, Range/MIME/path-traversal nằm sau handler mỏng. Minor ghi nhận:
+  logging adapter lặp 2 nơi (3 dòng/nơi), port 1420 duplicate (convention Tauri, benign).
+- **Trạng thái:** observed (đọc code firsthand) + C1 reproduced; còn lại chờ trigger/claim.
+
+---
+
 ## 2026-09-27 · T-042: verify.sh thêm gate 9 — smoke render behavioral (chốt Candidate 1, architecture review)
 
 - **Bối cảnh:** review kiến trúc 27.09 (improve-codebase-architecture + agent sweep) chỉ ra
