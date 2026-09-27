@@ -13,7 +13,7 @@ x2t chạy sidecar. Phần code dự án tự viết dùng MIT (xem `LICENSE`).
 4. `pnpm install` → chạy `./harness/scripts/verify.sh` — phải `ALL CHECKS PASSED` (exit 0)
    trước và sau khi bạn sửa code.
 5. Engine artifact (`engines/`) không nằm trong git — hiện trích từ bản ONLYOFFICE Desktop
-   cài sẵn, hướng dẫn: [`docs/handoff-ph0.md`](docs/handoff-ph0.md) bước 2.
+   cài sẵn, hướng dẫn: [`docs/handoff/ph0.md`](docs/handoff/ph0.md) bước 2.
 
 ## Luật quan trọng (chi tiết: `harness/rules/`)
 

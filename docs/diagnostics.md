@@ -5,6 +5,25 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-09-27 · Gộp handoff vào docs/handoff/ + vòng đời viết/ghi tiếp/xoá
+
+- **Nhiệm vụ:** user muốn folder tập trung handoff để quản lý context agent dài hạn — chọn
+  `docs/` (không phải `harness/`: handoff là artifact theo phiên, không phải máy móc/quy trình)
+  + README hướng dẫn agent khi nào viết, khi nào xoá.
+- **Migration:** `docs/_TEMPLATE-handoff.md` → `docs/handoff/_TEMPLATE.md` ·
+  `docs/handoff-ph0.md` → `docs/handoff/ph0.md` · `docs/handoff-techstack-analysis.md` →
+  **đã dọn (xoá)** theo đúng quy tắc mới: task research stack đóng từ 26.09 (QĐ ghi vision,
+  commit ea24231), tri thức đã về nhà — git history giữ bản gốc. 7 điểm tham chiếu sửa:
+  CONTRIBUTING, conventions (G2, G5 +§Handoff), docs/README (routing + index), D01 TEST ×2,
+  AGENTS (layout tree + checklist step 2), header `docs/techstack-analysis.md` (untracked).
+- **README vòng đời (mới) tại `docs/handoff/README.md`:** VIẾT khi mở task vừa/lớn hoặc phiên
+  dở giữa chừng · GHI TIẾP khi còn cùng task (1 task đang mở ≤ 1 handoff) · XOÁ khi task đóng
+  (verify exit 0 + tri thức về đủ nhà) trong cùng commit đóng việc, chỉ xoá handoff task mình
+  claim, sửa pointer trỏ tới trước khi xoá.
+- **Trạng thái:** confirmed (quyết định user; verify.sh cuối task — kết quả trong báo cáo).
+
+---
+
 ## 2026-09-27 · QĐ7: TODO queue theo phase + template handoff + vòng đời task + protocol đa-phiên
 
 - **Nhiệm vụ:** user duyệt format TODO (chia section theo phase, priority = thứ tự, dashboard

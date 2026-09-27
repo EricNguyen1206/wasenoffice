@@ -16,7 +16,8 @@
 nanooffice/
 ├── AGENTS.md            ← file này — contract cho agent
 ├── docs/                ← kiến thức bằng chứng: reference.map, diagnostics, conventions
-│   └── design/          ← DD + TEST theo màn hình (source of truth UI, public — QĐ6)
+│   ├── design/          ← DD + TEST theo màn hình (source of truth UI, public — QĐ6)
+│   └── handoff/         ← prompt bàn giao phiên agent (viết/ghi tiếp/xoá theo README ở đó)
 ├── harness/
 │   ├── rules/           ← quy tắc bắt buộc (upstream-read-only, licensing, mit-purity, evidence-discipline; migration/release sinh theo phase)
 │   └── skills/          ← quy trình từng việc cụ thể (open-docx, bridge-shim, ...)
@@ -68,7 +69,7 @@ Hàng đợi công việc sống ở **`docs/TODO.md`** (QĐ7 — quy tắc + da
 ## Khi bắt đầu một phiên làm việc
 
 1. Đọc `docs/vision.md` (tầm nhìn + quyết định sản phẩm) và `docs/conventions.md` (quy ước code + kiến trúc mục tiêu).
-2. Đọc `docs/TODO.md` → **claim đúng 1 task** (🟨 + ngày); không đụng task 🟨 của session khác. Cuối phiên: cập nhật trạng thái + dashboard + dòng ▶.
+2. Đọc `docs/TODO.md` → **claim đúng 1 task** (🟨 + ngày); không đụng task 🟨 của session khác. Task có handoff → đọc theo Bước 0 của handoff đó (`docs/handoff/`). Cuối phiên: cập nhật trạng thái + dashboard + dòng ▶.
 3. Việc mới → kiểm tra `harness/skills/` có skill tương ứng không trước khi tự làm.
 4. Sửa code xong → chạy `harness/scripts/verify.sh` (nếu tồn tại) trước khi báo complete.
 5. Phát hiện điều mới về upstream → ghi bằng chứng vào `docs/reference.map.md`, đừng để chỉ trong chat.

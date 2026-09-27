@@ -6,7 +6,7 @@
 |---|---|
 | Mã màn hình | `D01` |
 | DD tương ứng | [`DD.md`](DD.md) |
-| Phase / điều kiện chạy | PH-0 · cần engine artifact trong `engines/` (xem `docs/handoff-ph0.md` bước 2) |
+| Phase / điều kiện chạy | PH-0 · cần engine artifact trong `engines/` (xem `docs/handoff/ph0.md` bước 2) |
 | Cập nhật gần nhất | 2026-09-26 |
 
 ## 1. Phạm vi & ma trận loại test
@@ -20,7 +20,7 @@
 ## 2. Môi trường & fixtures
 
 - Engine artifact: `engines/editors/` trích từ ONLYOFFICE.app 9.4.0 (git-ignored) —
-  hướng dẫn `docs/handoff-ph0.md` bước 2.
+  hướng dẫn `docs/handoff/ph0.md` bước 2.
 - Fixture DOCX: `harness/fixtures/make_docx.py` (fixture chuẩn 1,9 KB, có tiếng Việt).
 - Oracle chéo: ONLYOFFICE.app thật + CDP `--remote-debugging-port=9222`, eval trong editor
   iframe (`frames[0]`) — quy trình `docs/diagnostics.md` entry 22.09 (bổ sung).

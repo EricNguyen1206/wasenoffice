@@ -15,7 +15,7 @@
 | Kế hoạch kiểm thử màn hình (TEST) | `docs/design/[Mã]-[tên]/TEST.md` | cùng commit với DD / khi thêm test case |
 | Danh mục màn hình, mã & cấp mã | `docs/design/README.md` (registry) | khi thêm màn / đổi trạng thái / cấp mã mới |
 | Hàng đợi công việc (task vận hành) | `docs/TODO.md` | claim đầu phiên / release cuối phiên; đổi trạng thái anytime |
-| Prompt bàn giao phiên | `docs/handoff-*.md` (template: `docs/_TEMPLATE-handoff.md`) | cuối phiên dở việc / cuối phase |
+| Prompt bàn giao phiên | `docs/handoff/<tên>.md` (vòng đời viết/ghi tiếp/xoá: `docs/handoff/README.md`) | cuối phiên dở việc / cuối phase |
 | Research một lần (không duy trì) | vd `docs/techstack-analysis.md` | không cập nhật — cố ý untracked |
 
 Ngoài `docs/`: contract cho agent = `AGENTS.md` (root) · luật bắt buộc = `harness/rules/` · quy trình từng việc = `harness/skills/` · hướng dẫn đóng góp = `CONTRIBUTING.md` (root).
@@ -25,7 +25,7 @@ Ngoài `docs/`: contract cho agent = `AGENTS.md` (root) · luật bắt buộc =
 | File | Vai trò |
 |---|---|
 | `docs/TODO.md` | hàng đợi công việc theo phase (QĐ7) — dashboard + quy tắc ở header |
-| `docs/_TEMPLATE-handoff.md` | template handoff cho phiên mới |
+| `docs/handoff/` | prompt bàn giao phiên agent — README vòng đời (viết/ghi tiếp/xoá) + `_TEMPLATE.md` + `ph0.md` |
 | `docs/conventions.md` | quy ước code + kiến trúc mục tiêu + workflow skills + chế độ đơn nhiệm |
 | `docs/vision.md` | tầm nhìn + các quyết định đã chốt (QĐ1–QĐ6) — vai trò ADR |
 | `docs/reference.map.md` | bản đồ bằng chứng upstream ↔ việc cần làm (bridge ~130 method, open contract, ràng buộc URL) |
@@ -36,8 +36,6 @@ Ngoài `docs/`: contract cho agent = `AGENTS.md` (root) · luật bắt buộc =
 | `docs/design/D01-editor/` | DD + TEST cửa sổ soạn thảo DOCX (PH-0) |
 | `docs/design/A01-startpage/` | DD + TEST trang bắt đầu (draft, PH-2) |
 | `docs/design/{A02-about,C01-print-preview,X01-settings}/` | stub màn kế hoạch (planned) |
-| `docs/handoff-ph0.md` | prompt bàn giao PH-0 |
-| `docs/handoff-techstack-analysis.md` | prompt bàn giao phân tích stack |
 | `docs/techstack-analysis.md` | research Bun/Go/Rust 26.09 (untracked theo QĐ stack) |
 
 ## Quy tắc chung

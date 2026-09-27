@@ -1,7 +1,8 @@
 # Handoff — <tên việc> (dành cho session mới)
 
-<!-- Copy file này vào docs/handoff-<tên>.md rồi điền. Handoff là PROMPT cho phiên mới:
-     mọi giả định phải thành chữ trong file — không được nằm trong chat. -->
+<!-- Copy file này vào docs/handoff/<tên-kebab>.md rồi điền (quy tắc viết/ghi tiếp/xoá:
+     docs/handoff/README.md). Handoff là PROMPT cho phiên mới: mọi giả định phải thành chữ
+     trong file — không được nằm trong chat. -->
 
 > Bạn (agent) đang ở phiên mới. File này LÀ prompt công việc: đọc nó + các file nó trỏ tới
 > theo thứ tự, rồi triển khai. Đi tuần tự, không nhảy cóc.

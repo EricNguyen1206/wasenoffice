@@ -58,14 +58,15 @@ Spawn subagent → prompt PHẢI nhúng/ trỏ tới `harness/rules/mit-purity.m
 1. **Quyết định** — nhỏ/lặp: `quick_decision_router`; có tầm: `/grill-me`. **G1:** QĐ ghi
    `vision.md` + entry `diagnostics.md` trước khi code.
 2. **Spec** — task nhỏ: done-criteria 3–6 dòng ngay trong dòng TODO; task vừa/lớn/mở phase:
-   `docs/handoff-<tên>.md` theo `docs/_TEMPLATE-handoff.md`. **G2:** done-criteria measurable
+   `docs/handoff/<tên>.md` theo `docs/handoff/_TEMPLATE.md`. **G2:** done-criteria measurable
    tồn tại trước khi code.
 3. **Code** — ponytail ladder trước mỗi file/dep mới · skill theo loại việc · subagent prompt
    nhúng `mit-purity.md` · upstream read-only · commit `phase(scope):` từng unit chạy được.
 4. **Verify** — **G3:** `verify.sh` exit 0 (+ smoke bridge/protocol theo DD-TEST màn) +
    `code-review` diff (+ `ponytail-review` nếu lớn) · report kèm lệnh + output + exit code.
 5. **Ghi & đóng** — **G4:** phát hiện về đúng nhà (reference.map / diagnostics / vision) ·
-   **G5:** cập nhật TODO (✅ + commit hash, sink đáy) + AGENTS Progress snapshot khi xong phase.
+   **G5:** cập nhật TODO (✅ + commit hash, sink đáy) + xoá handoff của task (nếu có — quy tắc
+   `docs/handoff/README.md`) + AGENTS Progress snapshot khi xong phase.
 
 Cuối phase: cặp review định kỳ (ponytail-audit + `/improve-codebase-architecture`) → kết quả
 vào backlog phase kế + sinh handoff phase kế.
@@ -103,9 +104,11 @@ vào backlog phase kế + sinh handoff phase kế.
 
 ### Handoff vào/ra giữa các phiên
 
-- Cuối phase (hoặc việc vừa/mớ lớn) → sinh `docs/handoff-<tên>.md` theo `docs/_TEMPLATE-handoff.md`.
+- Viết / ghi tiếp / xoá theo vòng đời trong `docs/handoff/README.md` (1 task đang mở ≤ 1 handoff).
+- Cuối phase (hoặc mở task vừa/lớn) → sinh `docs/handoff/<tên>.md` theo `docs/handoff/_TEMPLATE.md`.
 - Phiên dở giữa chừng → **ghi tiếp vào handoff hiện có** (trạng thái, việc còn lại), không mở
   file mới — state không được sống duy nhất trong chat.
+- Task/phase đóng → xoá handoff của task đó **trong cùng commit đóng việc**.
 
 ### Protocol đa-phiên (nhiều agent trên một cây làm việc)
 
