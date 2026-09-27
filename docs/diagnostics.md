@@ -8,6 +8,57 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-09-27 · T-002: PHẢN RENDER PH-0 ĐÃ QUA — TC-D01-06 GREEN (oracle-diff CDP, phương án a)
+
+- **Kết quả (reproduced, WKWebView thật — không CEF):** mở fixture DOCX 1.9 KB →
+  `asc_onDocumentContentReady` bắn · `id_viewer` canvas **2302×958** (clientHeight 479 CSS) ·
+  **14 request `/fonts/…`** chạm filesrv · font-oracle `Hcc=15 loadedFonts=15` (Arial/Courier
+  New/Times New Roman — **đúng bằng bộ 15 stream của app thật**, oracle TC-D01-09) · text render
+  đủ 5 đoạn fixture: heading serif, bold run, tiếng Việt có dấu, tab — screenshot:
+  `docs/media/2026-09-27-tc-d01-06-render.png` (git-ignored) · log: contentReady + oracle trong
+  stdout của `pnpm tauri dev`.
+- **Root cause 1 — shim KHÔNG BAO GIỜ gọi open-call (confirmed, counterfactual = fix):**
+  `consumeDeliveredDocument` chỉ decode-probe + gắn hooks rồi… dừng, thiếu chính lời gọi
+  `window.DesktopOfflineAppDocumentEndLoad(folder, b64, decodedLen)` — engine không bao giờ nhận
+  document (mọi quan sát "parse chạy sâu" trước 27.09 là của engine TRỐNG document). Chuẩn shell
+  thật: desktop-sdk `client_renderer_wrapper.cpp:6480` — signature `(folder, base64, decodedLen)`
+  (cpp:6440–6485: RecoverFolder → SetSourcePath → [ApplyChanges nếu có changes] → EndLoad →
+  Signatures). Fix: gọi EndLoad đúng chỗ trong `src/shim/desktopEditor.js`.
+- **Root cause 2 — font pipeline FULL build đi qua scheme CEF-only (confirmed):** trong pinned
+  word build, CUỐI sdk-all.js định nghĩa LẠI `AscFonts.sje.prototype.BSa` (LoadFontAsync) thành
+  XHR **`ascdesktop://fonts/<Va>`** — scheme mà CEF shell chặn native trả bytes (không phải
+  `LoadFontBase64` như nghi vấn trước — contract đó có thật ở wrapper cpp:1475
+  `window["<path>"]="<size>;<base64>"` sync nhưng build word 9.4 không dùng). Không có scheme
+  handler trong Tauri → mọi font XHR chết im lặng → `jM` pump treo vĩnh viễn. Fix: shim patch
+  entry `AscFonts.sje.prototype.BSa` (sau khi eval sdk-all.js) — same-origin XHR tới URL font
+  loopback mà filesrv đã serve, nạp cùng registry/status/callback (`AscFonts.Hcc` + `AscFonts.G2b`,
+  UB 2→0/1, `wOb`, `sV`) — re-implement từ hành vi quan sát được, không copy code (MIT purity).
+  Chứng minh đối chiếu: app thật 15 streams UB=0 · của ta sau fix 15 streams UB=0.
+- **Root cause 3 — 4 bridge method thiếu gây cascade hậu open (confirmed):** engine gọi sync ngay
+  sau open: `LocalFileGetSaved` (desktop-sdk cpp:2221 trả `m_bLocalIsSaved` — thiếu → TypeError
+  trong font pump → **EditingError −25** → dialog "Save as backup"), `LocalFileGetOpenChangesCount`,
+  `onDocumentModifiedChanged`, `LocalFileRecents/Recovers` (web-apps documenteditor app.js gọi
+  không điều kiện sau open; fire-and-forget). Fix: sync-truth/ack trong shim + mirror Rust.
+- **Candidate còn mở (1):** dialog "An error has occurred while opening the file" (
+  `openErrorText` ← `ConvertationOpenError` `iLa`) vẫn hiện **một số lần** dù contentReady đã
+  bắn và render hoàn chỉnh; emitter `iLa` nằm ở viewer api riêng (`AscViewer.open`,
+  sdk-all-min `g$g`) KHÔNG đi qua `editor.cc` của api chính (đã wrap, không thấy event) —
+  nghi delivery-vs-boot race hoặc viewer ẩn instance. Không chặn PH-0 (render + open OK);
+  để backlog PH-1. Ảnh có dialog: `docs/media/2026-09-27-tc-d01-06-render-with-dialog.png`.
+- **Phương pháp oracle (T-001 = (a), user ủy quyền 27.09):** CDP `Runtime.evaluate` trong editor
+  iframe của app thật (`--remote-debugging-port=9222`, plain Node ≥22, `/tmp` script không vào
+  repo) — đối chiếu `Wg.Of/aVc`, `jM.SIa/PVd`, `Hcc`, loader `Va`/`UB` + Chrome replica của
+  harness (polyfill `__TAURI__` + chính shim của ta, inject qua
+  `Page.addScriptToEvaluateOnNewDocument`) để có frame-level observability. Ghi chú bẫy:
+  init-script CDP KHÔNG lan qua OOPIF iframe — phải attach riêng target iframe.
+- **Devtools docked làm mép layout:** debug build tự mở devtools → viewport webview còn 185px
+  → `id_viewer` 0/10px gây误导. `lib.rs` thêm guard env `NANO_OFFICE_DEVTOOLS=0` để tắt khi
+  verify layout (mặc định vẫn mở).
+- **Trạng thái:** confirmed cho 3 root cause (fix → hết triệu chứng, lặp lại 3+ lần);
+  candidate cho dialog còn lại. TC-D01-06: **GREEN** · TC-D01-09: GREEN (oracle khớp 15 fonts).
+
+---
+
 ## 2026-09-27 · QĐ8: migration docs sang chuẩn OKF v0.2 thin + gate check-docs.mjs
 
 - **Nhiệm vụ (T-022):** sau điều tra OKF (report tạm 27.09 — verdict "thin": triết lý repo đã

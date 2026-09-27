@@ -14,3 +14,6 @@ engines/*
 
 # SemIf engine model GGUF (1.5GB artifact — tải bằng model_setup.sh, không commit)
 /harness/semif_engine/models/
+
+# evidence screenshots (diagnostics tham chiếu path; không commit binary lớn)
+/docs/media/

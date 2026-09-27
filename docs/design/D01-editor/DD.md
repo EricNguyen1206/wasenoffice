@@ -48,8 +48,11 @@ Entry: mở app có sẵn file đối số (PH-0) — sau này từ A01 (startpa
 | **READY (đích PH-0)** | render xong | — | `asc_onDocumentContentReady` bắn + `id_viewer` height > 0 |
 | ERROR | `asc_onError` / RuntimeError | — | hiện pipeline dừng **im lặng** thay vì báo lỗi (xem §10) |
 
-**Hiện trạng (26.09):** đứng ở RENDERING — parse + styles chạy sâu, không exception, nhưng font
-pipeline của FULL build (`AscFonts.Wg` — glyph manager) không khởi động; `id_viewer` 0 height.
+**Hiện trạng (27.09):** **READY đạt** — `asc_onDocumentContentReady` + `id_viewer` 2302×958 +
+14 fetch `/fonts/…`, `Hcc=15` font streams khớp oracle app thật. Root cause của blocker cũ:
+(1) shim thiếu lời gọi `DesktopOfflineAppDocumentEndLoad`, (2) font loader FULL build XHR qua
+scheme CEF-only `ascdesktop://fonts/` (shim đã patch sang loopback), (3) 4 bridge method
+sync-truth thiếu (`LocalFileGetSaved`…). Chi tiết: `docs/diagnostics.md` 27.09.
 
 ## 4. Bố cục & hành vi trực quan
 
@@ -120,12 +123,14 @@ câu hỏi mở mức thấp, xử lý PH-2.
 
 ## 10. Câu hỏi mở
 
-- [ ] **P0 blocker:** font pipeline FULL build (`AscFonts.Wg`) không khởi động sau EndLoad —
-  3 phương án chờ user chọn: (a) oracle-diff trạng thái `AscFonts.Wg` app thật vs của ta;
-  (b) Editor.bin từ app thật (không giải quyết render); (c) reverse `AscFonts.Wg` trong full
-  build. Phương án dự phòng 2 đã sửa thành reverse `AscCommon.Gs` (không phải docsco).
-  Chi tiết: `docs/diagnostics.md` entry 22.09 (bổ sung).
-- [ ] `editor:config` answer từ app-layer có phải đồng phạm của điểm treo? (Desktop.js:141)
+- [x] **P0 blocker (GIẢI QUYẾT 27.09):** phương án (a) oracle-diff CDP — user ủy quyền — đã
+  chỉ ra 3 root cause (EndLoad call thiếu · font loader `ascdesktop://fonts/` · sync-truth
+  thiếu) — chi tiết `docs/diagnostics.md` 27.09 + `docs/reference.map.md` § Font contract.
+- [ ] Dialog Critical "An error has occurred while opening the file" (`iLa`) thỉnh thoảng hiện
+  SAU khi open thành công — emitter nằm ở viewer api riêng, không qua `editor.cc` api chính;
+  không chặn render. Backlog PH-1.
+- [x] `editor:config` answer từ app-layer KHÔNG phải đồng phạm (open qua vạch mà chưa trả lời
+  lời nào) — giữ làm fidelity work PH-1/PH-2.
 - [ ] Dài hạn (PH-1): giữ loopback `127.0.0.1:14321` hay chuyển hẳn `nanooffice-engine://`
   sau khi có sidecar — deviation kiến trúc cần chốt.
 
@@ -135,3 +140,4 @@ câu hỏi mở mức thấp, xử lý PH-2.
 |---|---|---|
 | 2026-09-26 | DD đầu tiên — chốt open-pipeline + boot-flow từ diagnostics/reference.map thành spec | — |
 | 2026-09-27 | Mã hóa màn hình (QĐ6 bổ sung): editor → D01; tham chiếu startpage → A01 | — |
+| 2026-09-27 | Blocker PH-0 giải mã: READY đạt (TC-D01-06 GREEN); §3 hiện trạng + §10 cập nhật | — |

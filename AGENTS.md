@@ -53,7 +53,7 @@ nanooffice/
 
 | Phase | Trạng thái | Ghi chú |
 |---|---|---|
-| PH-0 Spike (load editor + render DOCX trong WKWebView) | 🟨 đang làm — engine+bridge chạy, còn điểm treo open | engine boot OK trong WKWebView (không CEF); bridge 15+ method DONE-PH0; treo ở bước cuối open pipeline — xem `docs/diagnostics.md` 22.09 |
+| PH-0 Spike (load editor + render DOCX trong WKWebView) | 🟨 đang làm — **render DOCX đạt** (TC-D01-06 GREEN 27.09); còn verdict go/no-go + baseline (T-003) | engine boot + open pipeline + font pipeline chạy đủ trong WKWebView; chi tiết `docs/diagnostics.md` 27.09 |
 | PH-1 Vòng đời file (open/save/convert qua x2t sidecar) | ⬜ | |
 | PH-2 Trải nghiệm desktop (print/clipboard/fonts/tabs) | ⬜ | |
 | PH-3 Tùy chọn (crypto/signature/cloud) | ⬜ | có thể cắt vĩnh viễn |
@@ -62,8 +62,8 @@ nanooffice/
 ## Việc còn treo
 
 Hàng đợi công việc sống ở **`docs/TODO.md`** (QĐ7 — quy tắc + dashboard ở đầu file đó).
-Điểm nổi bật hiện tại: PH-0 dở — 3 phương án phá blocker render **chờ user chọn**
-(D01 DD §10, `docs/diagnostics.md` entry "22.09 (bổ sung)").
+Điểm nổi bật hiện tại: PH-0 **render đã qua vạch** (TC-D01-06 GREEN, 27.09) — còn verdict
+go/no-go + baseline (T-003); 1 candidate UI treo nhẹ ghi ở `docs/diagnostics.md` 27.09.
 - Stack đã chốt: **giữ Rust + Tauri** (re-validate 26.09 — `docs/techstack-analysis.md`).
 
 ## Khi bắt đầu một phiên làm việc

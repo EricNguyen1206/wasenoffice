@@ -36,8 +36,13 @@ async bridge không thay thế được — call-sites dùng trong `if` / lúc l
 | `IsSignaturesSupport` | apiBase | DONE (false — signature là PH-3) |
 | `execCommand` | desktopinit.js / Desktop.js: `webapps:entry`, `webapps:features`, `editor:onready`, `editor:config`, `title:button` | **DONE-PH0** (ack + log; chưa trả lời `editor:config` — xem điểm treo) |
 | `LocalFileSetSaved` / `LocalFileRecoverFolder` / `LocalFileSetSourcePath` / `LocalFileGetSourcePath` / `LocalFileSetOpenChangesCount` | desktop-sdk wrapper cpp `onlocaldocument_loadend` sequence (6396–6485) | **DONE-PH0** (ack; GetSourcePath trả path đã set) |
-| `LocalStartOpen` | sdkjs Local/common.js:64, cefview.cpp:3013 | **PARTIAL** (ack + khởi delivery chain) |
-| Còn lại (~115 method) | bảng gốc bên dưới | STUB (UNIMPL logged khi bị gọi) |
+| `LocalFileGetSaved` / `LocalFileSetSaved(v)` | wrapper cpp:2221–2233 (trả `m_bLocalIsSaved`; SetSaved chỉ nhận khi đang unsaved) | **DONE-PH0** (sync-truth bool, mặc định true = fresh open đã save) |
+| `LocalFileGetOpenChangesCount` | web-apps DE app.js gọi sync sau open | **DONE-PH0** (sync-truth 0 — PH-0 mở không changes) |
+| `onDocumentModifiedChanged` | engine gọi ngay sau open (báo dirty state) | **DONE-PH0** (ack; shell thật track cho title/save — PH-1) |
+| `LocalFileRecents` / `LocalFileRecovers` / `LocalFileOpenRecent` / `LocalFileOpenRecover` | web-apps documenteditor app.js (`i.LocalFileRecents()` sau `doc:onready`) + loginpage panels.js | **DONE-PH0** (ack null; push list qua `onupdaterecents` là PH-2) |
+| `LocalStartOpen` | sdkjs Local/common.js:64, cefview.cpp:3013 | **DONE-PH0** (ack + delivery chain EndLoad chạy thật) |
+| `LoadFontBase64` | wrapper cpp:1475 — sync set `window["<path>"]="<size>;<base64>"`; **build word 9.4 KHÔNG dùng** (font đi qua scheme `ascdesktop://fonts/`, xem § Font contract) | STUB (UNIMPL khi bị gọi — giữ quan sát) |
+| Còn lại (~110 method) | bảng gốc bên dưới | STUB (UNIMPL logged khi bị gọi) |
 
 ## Desktop open contract (observed 22.09, từ desktop-sdk + runtime NanoOffice)
 
@@ -54,11 +59,30 @@ Chuỗi mở file local của shell thật — NanoOffice tái tạo trong shim 
 4. Engine: `$$ = zP.decode(b64, false, len)` → `g.tRb = f$c(data, "DOCY")` → `brb`
    (`h.prototype.brb`) → nhánh `Uwe` (tRb truthy) → `WKa.At(stream)` parse → fonts → render.
 
-**Điểm treo PH-0:** sau bước 4 pipeline dừng im lặng — không `asc_onError`, không
-`asc_onDocumentContentReady`, không fetch fonts, `id_viewer` canvas 0 height. Data đã kiểm
-chứng đúng (probe Uint8Array 1586 bytes head DOCY; roundtrip x2t giữ nguyên nội dung).
-Nghi vấn: thủ tục async app-layer (editor:config answer) hoặc docsco/offline flag chưa khớp.
-Chi tiết: `docs/diagnostics.md` 22.09.
+**Đã giải mã (27.09, TC-D01-06 GREEN):** điểm treo là shim thiếu chính lời gọi EndLoad
+(`consumeDeliveredDocument` chỉ probe/hook — xem diagnostics 27.09). Chuẩn EndLoad:
+`client_renderer_wrapper.cpp:6480` — `window.DesktopOfflineAppDocumentEndLoad("<folder>",
+"<base64>", <decodedLen>)`, ngay sau đó cpp:6483 bắn `DesktopOfflineAppDocumentSignatures("")`
+(empty string được engine xử lý đúng — nhánh `""!=a`).
+
+## Font contract FULL desktop build (mới 27.09 — quyết định cho PH-0)
+
+- **Engine (word build 9.4):** CUỐI `engines/editors/sdkjs/word/sdk-all.js` (~offset 9.9 MB)
+  định nghĩa LẠI `AscFonts.sje.prototype.BSa` = XHR async **`"ascdesktop://fonts/" + this.Va`**
+  (`responseType="arraybuffer"`; onload: push `new AscFonts.G2b(bytes,len)` vào
+  `AscFonts.Hcc`, `wOb(index)`, `UB=0`; lỗi `UB=1`; `UB=-1` = chưa nạp, `2` = đang nạp).
+  `Va` = path gốc trong `window.__fonts_files` (AllFonts.js). `AscCommon.jM` (font manager,
+  `XFg="../../../../fonts/"`) pump queue `tVa` poll 50 ms; `AscFonts.fU.YD(name)` tra font.
+- **Shell thật:** CEF chặn scheme `ascdesktop://fonts/<abs disk path>` trả bytes font
+  (runtime observed: mở fixture → `Hcc=15` streams UB=0 — Arial/Courier New/Times New Roman).
+- **NanoOffice:** Rust filesrv rewrite path font → loopback URL khi serve AllFonts.js
+  (`protocol/mod.rs` `rewrite_font_paths`); shim patch `AscFonts.sje.prototype.BSa` ngay sau
+  khi eval sdk-all.js (`patchDesktopFontLoader` trong `src/shim/desktopEditor.js`) — same-origin
+  XHR tới URL đó, nạp cùng registry/status/callback. Re-implement từ behavior, không copy code.
+- **`LoadFontBase64`** (wrapper cpp:1475): contract sync `window["<path>"]="<size>;<base64>"`
+  (decoder engine `zP.decode(s,true)` parse size prefix trước `;`) — nhưng word 9.4 không gọi;
+  để STUB quan sát. Font nhúng (`embedded*`): shell eval `<convert folder>/fonts/<name>.js`
+  (cpp:1475 nhánh else) — PH-1.
 
 ## Ràng buộc URL (mới 22.09, quan trọng cho PH-1)
 
@@ -123,4 +147,4 @@ Chi tiết: `docs/diagnostics.md` 22.09.
 |---|---|---|
 | Shim bridge đầy đủ | `ONLYOFFICE/desktop-sdk` ✅ | nguồn chân lý native surface + cơ chế inject |
 | Build engine/x2t từ source | `ONLYOFFICE/build_tools` | pipeline deps + WASM + packaging |
-| Mac app layer (editor:config answer, app lifecycle) | repo mac của ONLYOFFICE (chưa xác định) | giải mã điểm treo open pipeline |
+| Mac app layer (editor:config answer, recents push, app lifecycle) | repo mac của ONLYOFFICE (chưa xác định) | fidelity UI desktop còn thiếu: editor:config reply, `onupdaterecents` push, dialog lỗi iLa từ viewer api (diagnostics 27.09) |

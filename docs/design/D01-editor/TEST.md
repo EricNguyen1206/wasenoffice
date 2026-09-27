@@ -38,9 +38,9 @@ type: test
 | TC-D01-03 | P0 | E2E manual | §5 LoadJS | When bootstrap gọi `LoadJS(sdk-all.js, fonts.js, ChartStyles.js)` / Then eval xong + `completeLoad` | 3 payload resolve (0 × 404); `completeLoad` bắn | GREEN |
 | TC-D01-04 | P0 | E2E manual | §6 wasm | When payload request sai thư mục / Then filesrv redirect về vị trí chuẩn | 0 × `both async and sync fetching of the wasm failed`; `fonts.wasm` init OK | GREEN |
 | TC-D01-05 | P0 | E2E manual | §5 open 1–3 | When mở fixture DOCX / Then `LocalStartOpen` → x2t → `EndLoad` nhận b64+len đúng | convert 28–116 ms; probe decode head `DOCY`; `SetDocumentName` bắn | GREEN |
-| **TC-D01-06** | **P0** | E2E manual | §3 READY | When RENDERING chạy / Then `asc_onDocumentContentReady` + `id_viewer` height > 0 + font fetch `/fonts/…` | 3 dấu hiệu trên đồng thời | **RED** — blocker PH-0 (DD §10 câu hỏi 1) |
+| **TC-D01-06** | **P0** | E2E manual | §3 READY | When RENDERING chạy / Then `asc_onDocumentContentReady` + `id_viewer` height > 0 + font fetch `/fonts/…` | 3 dấu hiệu trên đồng thời | **GREEN** (27.09: contentReady + viewer 2302×958 + 14 fetch, `Hcc=15`; screenshot `docs/media/2026-09-27-tc-d01-06-render.png`) |
 | TC-D01-07 | P1 | unit | §6 NUL | When response body lớn / Then không nhân đôi NUL | unit test hồi quy trong filesrv pass (đã có từ 22.09) | GREEN |
-| TC-D01-08 | P1 | E2E manual | §5 interface | When mở file / Then log mọi method `UNIMPL` bị gọi | danh sách UNIMPL thu hẹp theo từng wave — cập nhật `reference.map.md` | GREEN (danh sách còn ~115) |
+| TC-D01-08 | P1 | E2E manual | §5 interface | When mở file / Then log mọi method `UNIMPL` bị gọi | danh sách UNIMPL thu hẹp theo từng wave — cập nhật `reference.map.md` | GREEN (danh sách còn ~110) |
 | TC-D01-09 | P0 | E2E manual | §9 oracle | Given ONLYOFFICE.app thật + CDP / When mở cùng fixture / Then editor frame render canvas | `Asc.editor` tồn tại; canvas ~2654×1312 — dùng làm chuẩn diff trạng thái `AscFonts.Wg` | GREEN |
 
 ## 4. Chính sách hồi quy
@@ -51,10 +51,10 @@ type: test
 
 ## 5. Tiêu chí sign-off PH-0
 
-- [ ] Mọi P0 GREEN — hiện còn TC-D01-06 RED (blocker font pipeline, DD §10)
-- [ ] Bảng bridge: số method gọi / DONE / UNIMPL còn lại — cập nhật `reference.map.md`
-- [ ] Baseline số liệu (disk/RAM/cold-start) ghi `diagnostics.md`
-- [ ] Verdict go/no-go kèm bằng chứng — NO-GO thì dừng chờ user, không tự đổi kiến trúc
+- [x] Mọi P0 GREEN — TC-D01-06 chuyển GREEN 27.09 (blocker đã giải mã, diagnostics 27.09)
+- [x] Bảng bridge: số method gọi / DONE / UNIMPL còn lại — cập nhật `reference.map.md` (27.09)
+- [x] Baseline số liệu (disk/RAM/cold-start) ghi `diagnostics.md` (số 22.09; release đo ở PH-4)
+- [ ] Verdict go/no-go kèm bằng chứng — **T-003** (verdict go + baseline release còn lại)
 
 ## 6. Changelog
 
@@ -62,3 +62,4 @@ type: test
 |---|---|---|
 | 2026-09-26 | Test plan đầu tiên — chuẩn hóa smoke protocol từ `conventions.md` + diagnostics | — |
 | 2026-09-27 | Mã hóa màn hình: TC-ED-nn → TC-D01-nn | — |
+| 2026-09-27 | TC-D01-06 GREEN + TC-D01-08 cập nhật danh sách UNIMPL | — |
