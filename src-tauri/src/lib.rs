@@ -217,8 +217,12 @@ pub fn run() {
                 .initialization_script_for_all_frames(BRIDGE_JS)
                 .build()?;
             // Debug builds only: engine console is the primary PH-0 evidence source.
+            // Disable with NANO_OFFICE_DEVTOOLS=0 — the docked panel squeezes the
+            // webview viewport and skews layout/render verification.
             #[cfg(debug_assertions)]
-            win.open_devtools();
+            if std::env::var("NANO_OFFICE_DEVTOOLS").as_deref() != Ok("0") {
+                win.open_devtools();
+            }
             let _ = win;
             Ok(())
         })

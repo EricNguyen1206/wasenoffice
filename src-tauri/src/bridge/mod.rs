@@ -63,7 +63,25 @@ impl BridgeCmd {
             "LocalFileSetSaved"
             | "LocalFileRecoverFolder"
             | "LocalFileSetSourcePath"
+            | "LocalFileGetSourcePath"
             | "LocalFileSetOpenChangesCount" => Ok(Value::Null),
+            // sync-truth mirror: fresh local open = saved (shim answers true).
+            "LocalFileGetSaved" => Ok(Value::Bool(true)),
+            // sync-truth mirror: PH-0 documents open clean (shim answers 0).
+            "LocalFileGetOpenChangesCount" => Ok(serde_json::json!(0)),
+            // modified-flag sink: the real shell tracks dirty state for the
+            // title/save UI (PH-1); acknowledging keeps the engine flowing.
+            "onDocumentModifiedChanged" => Ok(Value::Null),
+            // Recents surface: the editor UI calls these unconditionally after
+            // open (fire-and-forget); the shell would push lists back via the
+            // onupdaterecents/onupdaterecovers globals (PH-2).
+            "LocalFileRecents"
+            | "LocalFileRecovers"
+            | "LocalFileOpenRecent"
+            | "LocalFileOpenRecover" => Ok(Value::Null),
+            // Acknowledged — the actual delivery chain (x2t convert →
+            // DesktopOfflineAppDocumentEndLoad) is driven from lib.rs/shim.
+            "LocalStartOpen" => Ok(Value::Null),
             "execCommand" => {
                 if let Some(cmd) = payload.get("cmd").and_then(Value::as_str) {
                     log::info!("bridge execCommand: {cmd}");

@@ -35,8 +35,11 @@
     'loadLocalFile', 'GetDropFiles', 'convertFile', 'startExternalConvertation',
     'ResaveFile', 'CreateEditorApi',
     // desktop local-open delivery (ack'd; bytes flow via DesktopOfflineAppDocumentEndLoad)
-    'LocalFileSetSaved', 'LocalFileRecoverFolder', 'LocalFileSetSourcePath',
-    'LocalFileGetSourcePath', 'LocalFileSetOpenChangesCount', 'CheckUserId',
+    'LocalFileSetSaved', 'LocalFileGetSaved', 'LocalFileRecoverFolder', 'LocalFileSetSourcePath',
+    'LocalFileGetSourcePath', 'LocalFileSetOpenChangesCount',
+    'LocalFileGetOpenChangesCount', 'onDocumentModifiedChanged', 'CheckUserId',
+    // desktop recents (see LOCAL_TRUTHS note)
+    'LocalFileRecents', 'LocalFileRecovers', 'LocalFileOpenRecent', 'LocalFileOpenRecover',
     // fonts/media
     'LoadFontBase', 'LoadFontBase64', 'GetImageBase', 'GetImageFormat',
     'GetImageOriginalSize', 'MediaStart', 'CallMediaPlayerCommand', 'AddVideo', 'AddAudio',
@@ -90,14 +93,62 @@
     SetDocumentName: function () { return null; },
     IsSignaturesSupport: function () { return false; },
     // local-open delivery acks (bytes themselves flow via DesktopOfflineAppDocumentEndLoad)
-    LocalFileSetSaved: function () { return null; },
+    LocalFileSetSaved: function (v) { localSaved = v !== false; return null; },
+    LocalFileGetSaved: function () { return localSaved; },
     LocalFileRecoverFolder: function () { return null; },
     LocalFileSetSourcePath: function (p) { localSourcePath = p; return null; },
     LocalFileGetSourcePath: function () { return localSourcePath; },
     LocalFileSetOpenChangesCount: function () { return null; },
+    // sync-truth: PH-0 documents open clean (0 unsaved changes)
+    LocalFileGetOpenChangesCount: function () { return 0; },
+    // desktop recents (fire-and-forget: the shell pushes lists back via the
+    // onupdaterecents/onupdaterecovers globals — PH-2; must EXIST because the
+    // editor UI calls them unconditionally after open — loginpage panels.js)
+    LocalFileRecents: function () { return null; },
+    LocalFileRecovers: function () { return null; },
+    LocalFileOpenRecent: function () { return null; },
+    LocalFileOpenRecover: function () { return null; },
+    // modified-flag sink: the engine reports dirty state; the real shell tracks
+    // it for the title/save UI (PH-1). Must exist — called right after open.
+    onDocumentModifiedChanged: function () { return null; },
   };
 
   var localSourcePath = '';
+  var localSaved = true; // fresh local open = saved (desktop-sdk m_bLocalIsSaved)
+
+  /**
+   * PH-0 oracle probe: dump the same font-pipeline fields observed in the real
+   * app via CDP (docs/diagnostics.md) so the two runtimes can be diffed from
+   * stdout alone. Runs once, 8s after the document reaches the engine.
+   */
+  function logFontOracleState() {
+    try {
+      var Wg = window.AscFonts && window.AscFonts.Wg;
+      var jM = window.AscCommon && window.AscCommon.jM;
+      var iEc = window.AscFonts && window.AscFonts.iEc;
+      var Hcc = window.AscFonts && window.AscFonts.Hcc;
+      var loaded = [];
+      if (iEc) {
+        for (var i = 0; i < iEc.length; i++) {
+          if (iEc[i].UB !== -1) loaded.push(iEc[i].Va.slice(-40) + ' UB=' + iEc[i].UB);
+        }
+      }
+      var root = document.getElementById('editor_sdk') || document.body;
+      var viewer = document.getElementById('id_viewer');
+      var sdkBox = root.getBoundingClientRect();
+      forwardLog('info', 'font-oracle: Wg.Of=' + (Wg ? Wg.Of.length : '?')
+        + ' aVc=' + (Wg ? Object.keys(Wg.aVc || {}).length : '?')
+        + ' jM.SIa=' + (jM && jM.SIa ? jM.SIa.length : 'undef')
+        + ' jM.PVd=' + (jM && jM.PVd ? jM.PVd.length : 'undef')
+        + ' Hcc=' + (Hcc ? Hcc.length : 'undef')
+        + ' loadedFonts=' + loaded.length + (loaded.length ? ' [' + loaded.slice(0, 6).join(' | ') + ']' : '')
+        + ' viewer=' + (viewer ? viewer.clientWidth + 'x' + viewer.clientHeight : 'none')
+        + ' geom[inner=' + window.innerWidth + 'x' + window.innerHeight
+        + ' editor_sdk=' + Math.round(sdkBox.width) + 'x' + Math.round(sdkBox.height) + ']');
+    } catch (e) {
+      forwardLog('error', 'font-oracle probe failed: ' + e);
+    }
+  }
 
   function safeArgs(args) {
     try {
@@ -205,8 +256,10 @@
       // synchronous open errors are not missed.
       var ed2 = window.Asc && (window.Asc.editor || window.editor);
       if (ed2 && ed2.attachEvent) {
-        ed2.attachEvent('asc_onError', function (err) {
-          forwardLog('error', 'asc_onError: ' + ((err && (err.id + ' ' + err.msg)) || JSON.stringify(err)));
+        ed2.attachEvent('asc_onError', function () {
+          // api emits (errorMessage, errorLevel) — log raw values
+          forwardLog('error', 'asc_onError: '
+            + Array.prototype.slice.call(arguments).map(String).join(' | '));
         });
         ed2.attachEvent('asc_onDocumentContentReady', function () {
           forwardLog('info', '=== asc_onDocumentContentReady — DOCUMENT OPENED ===');
@@ -220,6 +273,21 @@
       } else {
         forwardLog('error', 'editor api has no attachEvent — cannot hook open signals');
       }
+      // Observe the api event stream directly (asc_onError reaching the UI
+      // layer without touching our attachEvent hooks still passes through
+      // the api's internal sendEvent).
+      if (ed2 && ed2.cc && !ed2.__nanooffice_cc_wrapped) {
+        ed2.__nanooffice_cc_wrapped = true;
+        var origCc = ed2.cc;
+        ed2.cc = function (ev) {
+          var s = String(ev);
+          if (s.indexOf('Error') !== -1) {
+            forwardLog('error', 'api event ' + s + ' args='
+              + Array.prototype.slice.call(arguments, 1).map(String).join(' | ').slice(0, 300));
+          }
+          return origCc.apply(this, arguments);
+        };
+      }
       try {
         var di = ed2 && ed2.DocInfo;
         forwardLog('info', 'DocInfo: offlineApp=' + (di ? di.get_OfflineApp() : 'noDocInfo')
@@ -228,6 +296,12 @@
       } catch (dbgErr) {
         forwardLog('error', 'DocInfo probe failed: ' + dbgErr);
       }
+      // THE open call itself (desktop-sdk client_renderer_wrapper.cpp:6480):
+      // window.DesktopOfflineAppDocumentEndLoad("<folder>", "<base64>", <decodedLen>).
+      // Everything above this line is probe/hook setup only — the engine
+      // learns about the document HERE and nowhere else.
+      window.DesktopOfflineAppDocumentEndLoad(deliver.folder, deliver.b64, decodedLen);
+      forwardLog('info', 'DesktopOfflineAppDocumentEndLoad executed');
       // The shell's loadend sequence continues with the signatures hook
       // (wrapper cpp fires it unconditionally right after EndLoad).
       if (typeof window.DesktopOfflineAppDocumentSignatures === 'function') {
@@ -243,6 +317,7 @@
         }
         forwardLog('info', 'canvas probe (' + root.id + '): ' + canvases.length + ' canvas(es) ' + info.join(' '));
       }, 6000);
+      setTimeout(logFontOracleState, 8000);
       setTimeout(function () {
         var root = document.getElementById('editor_sdk') || document.body;
         var canvases = root.querySelectorAll('canvas');
@@ -337,6 +412,65 @@
     });
   }
 
+  /**
+   * Font-file loader adaptation for the FULL desktop build (PH-0).
+   *
+   * Observed engine behavior (pinned word build): near the END of sdk-all.js
+   * the font-file loader entry (`AscFonts.sje.prototype.BSa` / LoadFontAsync)
+   * is rerouted to an async XHR of `ascdesktop://fonts/<font path>` — a scheme
+   * the CEF desktop shell intercepts natively and answers with the font bytes.
+   * Observed real-shell runtime: fonts land in the engine stream registry
+   * (`AscFonts.Hcc` entries of `AscFonts.G2b`) with loader status `UB` 2 →
+   * 0 (loaded) / 1 (failed), stream index assigned via the loader's `wOb`,
+   * and the loader's callbacks fired when the bytes are in.
+   *
+   * A Tauri WKWebView has no `ascdesktop://` scheme handler, so every font
+   * XHR would die (CORS/unknown scheme) and the document open would wait on
+   * fonts forever. This adapter swaps the SAME entry point for a same-origin
+   * XHR of the font URL itself — the Rust filesrv already serves every font
+   * listed in `__fonts_files` under its (rewritten) URL — then feeds the
+   * registry/status/callback contract described above. Behavior is
+   * re-implemented from runtime observation; no upstream code is copied.
+   */
+  function patchDesktopFontLoader() {
+    if (!(window.AscFonts && window.AscFonts.sje && window.AscFonts.Hcc
+          && window.AscFonts.sje.prototype)) {
+      forwardLog('warn', 'font loader patch: sdkjs font registry not found');
+      return;
+    }
+    var proto = window.AscFonts.sje.prototype;
+    if (proto.__nanooffice_patched) return;
+    proto.__nanooffice_patched = true;
+    proto.BSa = function (_baseUrl, onDone) {
+      var self = this;
+      if (self.UB !== -1) return true; // loading (2) / loaded (0) / failed (1)
+      self.UB = 2;
+      self.sV = onDone || null;
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', self.Va, true); // same-origin loopback font URL
+      xhr.responseType = 'arraybuffer';
+      xhr.onload = function () {
+        if (xhr.status !== 200 || !xhr.response) {
+          self.UB = 1; // failed (final state — the engine treats 1 as done)
+          return;
+        }
+        var bytes = new Uint8Array(xhr.response);
+        window.AscFonts.Hcc.push(new window.AscFonts.G2b(bytes, bytes.length));
+        self.wOb(window.AscFonts.Hcc.length - 1);
+        self.UB = 0;
+        if (self.sV) { var cb = self.sV; self.sV = null; cb(); }
+        if (self.externalCallback) self.externalCallback();
+      };
+      xhr.onerror = function () {
+        self.UB = 1;
+        forwardLog('warn', 'font fetch failed: ' + String(self.Va).slice(0, 110));
+      };
+      xhr.send();
+      return false; // async load in flight
+    };
+    forwardLog('info', 'desktop font loader patched for loopback delivery');
+  }
+
   function install() {
     if (window.AscDesktopEditor) return;
 
@@ -398,6 +532,9 @@
           };
           // jshint evil:true — the engine payload itself (AGPL artifact).
           (0, eval)(text);
+          if (abs.indexOf('sdk-all.js') !== -1) {
+            patchDesktopFontLoader();
+          }
           var pending = window.__nanooffice_pending_js;
           var done = pending && pending[url];
           if (done) {
