@@ -53,7 +53,7 @@ nanooffice/
 
 | Phase | Trạng thái | Ghi chú |
 |---|---|---|
-| PH-0 Spike (load editor + render DOCX trong WKWebView) | 🟨 đang làm — **render DOCX đạt** (TC-D01-06 GREEN 27.09); còn verdict go/no-go + baseline (T-003) | engine boot + open pipeline + font pipeline chạy đủ trong WKWebView; chi tiết `docs/diagnostics.md` 27.09 |
+| PH-0 Spike (load editor + render DOCX trong WKWebView) | ✅ ĐÓNG 27.09 — verdict **GO WITH CAVEAT** | render GREEN tự động (verify.sh gate 9, TC-D01-06); baseline debug 27.09: RAM 1 doc ~561–579 MB vs ONLYOFFICE 570 MB (start page); caveat duy nhất: scroll/edit keyboard chờ user xác nhận thủ công ~30s — `docs/diagnostics.md` 27.09 T-003 |
 | PH-1 Vòng đời file (open/save/convert qua x2t sidecar) | ⬜ | |
 | PH-2 Trải nghiệm desktop (print/clipboard/fonts/tabs) | ⬜ | |
 | PH-3 Tùy chọn (crypto/signature/cloud) | ⬜ | có thể cắt vĩnh viễn |
@@ -62,8 +62,9 @@ nanooffice/
 ## Việc còn treo
 
 Hàng đợi công việc sống ở **`docs/TODO.md`** (QĐ7 — quy tắc + dashboard ở đầu file đó).
-Điểm nổi bật hiện tại: PH-0 **render đã qua vạch** (TC-D01-06 GREEN, 27.09) — còn verdict
-go/no-go + baseline (T-003); 1 candidate UI treo nhẹ ghi ở `docs/diagnostics.md` 27.09.
+Điểm nổi bật hiện tại: PH-0 đã đóng 27.09 (GO WITH CAVEAT — caveat ~30s: user xác nhận
+scroll/edit thủ công, `docs/diagnostics.md` 27.09 T-003) → kế tiếp **PH-1**: T-045 (refactor
+open-delivery chain) rồi T-010 (open/save/convert qua x2t sidecar).
 - Stack đã chốt: **giữ Rust + Tauri** (re-validate 26.09 — `docs/techstack-analysis.md`).
 
 ## Khi bắt đầu một phiên làm việc

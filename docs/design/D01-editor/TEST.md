@@ -9,8 +9,8 @@ type: test
 |---|---|
 | Mã màn hình | `D01` |
 | DD tương ứng | [`DD.md`](DD.md) |
-| Phase / điều kiện chạy | PH-0 · cần engine artifact trong `engines/` (xem `docs/handoff/ph0.md` bước 2) |
-| Cập nhật gần nhất | 2026-09-26 |
+| Phase / điều kiện chạy | PH-0 · cần engine artifact trong `engines/` (trích từ ONLYOFFICE.app 9.4.0 — quy trình ở diagnostics entry 22.09; PH-0 đã đóng 27.09 — `docs/TODO-archive.md`) |
+| Cập nhật gần nhất | 2026-09-27 |
 
 ## 1. Phạm vi & ma trận loại test
 
@@ -24,7 +24,8 @@ type: test
 ## 2. Môi trường & fixtures
 
 - Engine artifact: `engines/editors/` trích từ ONLYOFFICE.app 9.4.0 (git-ignored) —
-  hướng dẫn `docs/handoff/ph0.md` bước 2.
+  bằng chứng nguồn + kiến trúc loopback ở diagnostics entry 22.09 (handoff ph0 đã xoá khi
+  đóng PH-0 27.09).
 - Fixture DOCX: `harness/fixtures/make_docx.py` (fixture chuẩn 1,9 KB, có tiếng Việt).
 - Oracle chéo: ONLYOFFICE.app thật + CDP `--remote-debugging-port=9222`, eval trong editor
   iframe (`frames[0]`) — quy trình `docs/diagnostics.md` entry 22.09 (bổ sung).
@@ -55,7 +56,9 @@ type: test
 - [x] Mọi P0 GREEN — TC-D01-06 chuyển GREEN 27.09 (blocker đã giải mã, diagnostics 27.09)
 - [x] Bảng bridge: số method gọi / DONE / UNIMPL còn lại — cập nhật `reference.map.md` (27.09)
 - [x] Baseline số liệu (disk/RAM/cold-start) ghi `diagnostics.md` (số 22.09; release đo ở PH-4)
-- [ ] Verdict go/no-go kèm bằng chứng — **T-003** (verdict go + baseline release còn lại)
+- [x] Verdict go/no-go kèm bằng chứng — **T-003** · 27.09 · **GO WITH CAVEAT**: (a)(c)(d) đạt,
+  (b) scroll/edit chờ user xác nhận thủ công ~30s (GUI bị chiếm dụng live khi đo — diagnostics
+  27.09 T-003); baseline debug đã ghi, release đo ở PH-4
 
 ## 6. Changelog
 
@@ -65,3 +68,4 @@ type: test
 | 2026-09-27 | Mã hóa màn hình: TC-ED-nn → TC-D01-nn | — |
 | 2026-09-27 | TC-D01-06 GREEN + TC-D01-08 cập nhật danh sách UNIMPL | — |
 | 2026-09-27 | TC-D01-06 → E2E auto: gate 9 smoke render trong verify.sh (T-042) | — |
+| 2026-09-27 | §5 sign-off đủ — T-003 verdict GO WITH CAVEAT + baseline; tham chiếu handoff/ph0 → diagnostics/TODO-archive | — |

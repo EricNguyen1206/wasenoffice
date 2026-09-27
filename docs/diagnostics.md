@@ -8,6 +8,51 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-09-27 · T-003: PH-0 verdict — GO WITH CAVEAT + baseline
+
+- **Verdict: GO WITH CAVEAT** — render + open pipeline GREEN; scroll/edit qua bàn phím tự động
+  (criteria b) KHÔNG test được một cách an toàn: GUI đang bị user chiếm dùng live (foreground
+  liên tục đổi app giữa các lần chụp) và `osascript click at` bị macOS từ
+  (`-25211 … not allowed assistive access`). Gửi tiếp phím tự động = nguy cơ inject text vào app
+  đang mở của user → DỪNG, fallback theo pre-decided rule của T-003. Caveat: user cần ~30 giây
+  xác nhận thủ công (mở app, PageDown/PageUp, gõ chữ, Cmd+Z — chữ hiện, không crash) để chốt (b).
+- **Criteria walk:**
+  - **(a) render GREEN — đạt:** verify.sh gate 9 `smoke-render.sh` PASSED (đủ 3 tín hiệu:
+    `asc_onDocumentContentReady` · `id_viewer 2190x958` height>0 · `GET /fonts/sys/Symbol.ttf`);
+    full `verify.sh` **ALL CHECKS PASSED, exit 0** (27.09).
+  - **(b) scroll/edit — UNTESTABLE-SAFELY:** boot 2/2 lần 27.09 đều hiện dialog lỗi T-047
+    (không tạo dòng `asc_onError` trong log — đúng như T-047 đã ghi). Baseline tương tác =
+    dòng 191 của `/tmp/t003-edit.log`; sau marker chỉ có probe định kỳ của shim
+    (`canvas probe-2` 08:35:53, `viewer=1151x479`) — **0 dòng bridge mới**, tức phím probe
+    (PageDown+T) đã rơi vào foreground app của user, không phải NanoOffice. Log có
+    `onDocumentModifiedChanged([false])` nhưng chỉ boot-time (không phải bằng chứng edit).
+    Screenshot trước tương tác: app frontmost sau AXRaise, render đủ 5 đoạn fixture + dialog
+    T-047 (`/tmp/t003-before3.png`, file /tmp không commit). Không crash, không error storm.
+  - **(c) baseline đã đo — bảng dưới** (số tươi 27.09, không copy số cũ).
+  - **(d) không phát hiện gì phá giả định WKWebView no-CEF** — T-047 là race đã biết
+    (backlog PH-1), canvas sống, không CEF.
+- **Baseline 27.09 (debug build, macOS arm64; RSS = `ps -o rss=` KB→MB/1024; "helper" = 3 WebKit
+  XPC (WebContent/Networking/GPU) nhận diện theo PID kề app; node vite ~160 MB là dev-only
+  không ship; đo khi `pnpm dev` :1420 + `NANO_OFFICE_DEVTOOLS=0 RUST_LOG=info
+  ./src-tauri/target/debug/nanooffice` — idle: không `NANO_OFFICE_OPEN`; 1-doc: có):**
+
+| Chỉ số | NanoOffice (debug) | ONLYOFFICE.app | Ghi chú |
+|---|---|---|---|
+| Shell binary | **29 MB** (`ls -lh src-tauri/target/debug/nanooffice`) | — | 22.09: 30 MB (khớp) |
+| engines/ payload | **313 MB** (`du -sh engines/`) | **1.1 GB** (`du -sh /Applications/ONLYOFFICE.app`) | budget ≤100 MB → T-040 (PH-4) |
+| RAM idle (start page) | app 114.4 + helper 88.4 (WC 35.8/Net 23.0/GPU 29.6) ≈ **203 MB** · 4 processes | **570 MB** · 5 processes (đo 27.09: `open -a ONLYOFFICE`, sleep 15s, chưa mở document) | 22.09: 133 MB — số cũ ĐO KHI DEVTOOLS MỞ, không so trực tiếp được |
+| RAM 1 doc (fixture 1.9 KB) | run1 ≈ **561 MB** (app 112.1 + WC 369.3/GPU 52.3/Net 26.9); run2 ≈ **579 MB** (app 114.8 + WC 375.1/GPU 53.3/Net 36.0) | 21.09: ~1.07 GB / 7 processes (số cũ, chỉ đối chiếu) | engine (WebContent) chiếm ~370 MB — mục trim chính cho T-040 |
+| Cold start → contentReady | **3.62 s** (run1) · **3.37 s** (run2) — wall time, poll 100ms | — | marker `asc_onDocumentContentReady` (nghiêm hơn marker `frame ready:` của shim `desktopEditor.js:574`); dev server warm, chưa phải số release |
+| Processes khi chạy | shell + 3 WebKit XPC = 4 | 5 (start page) · 7 (21.09, có document) | |
+
+- Lệnh đo ONLYOFFICE: `ps aux | grep -i onlyoffice | grep -v grep | awk '{sum+=$6; n++} END
+  {print n, sum/1024 " MB"}'` → `5 569.688 MB`; quit bằng `osascript 'quit app "ONLYOFFICE"'
+  (exit 0, không orphan). App NanoOffice sau mỗi run: kill trực tiếp + kiểm tra `ps`.
+- **Trạng thái:** (a)(c)(d) reproduced; (b) candidate — chờ xác nhận thủ công 30s của user.
+  PH-0 đóng với caveat này; baseline release đo ở PH-4 (T-021/T-040).
+
+---
+
 ## 2026-09-27 · Review kiến trúc định kỳ (improve-codebase-architecture) — 5 candidates, landing
 
 - **Phạm vi quét:** hot-spot từ git history (shim, bridge, filesrv, lib — 5 commit code gần
