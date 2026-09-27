@@ -5,6 +5,68 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-09-27 · QĐ6 bổ sung: mã hóa màn hình trong docs/design + migration
+
+- **Nhiệm vụ:** user yêu cầu tổ chức lại docs/design theo mã màn (`[Chữ][2 số]`, màn con `-n`,
+  folder `[Mã]-[tên]`, tài liệu màn con trong thư mục màn chính). Phân tích pros/cons qua
+  improve-codebase-architecture (report HTML tạm 27.09): chấp nhận kèm cải thiện — bảng cấp chữ
+  trong registry, quy tắc không tái dùng mã, mã dùng thống nhất cho OQ/TC.
+- **Bảng chữ user chốt (27.09):** A = trang chủ + thông tin chung (Intro/About/TOS) ·
+  B = tài liệu về phần mềm (hướng dẫn) · C = màn dùng chung nhiều màn · D/E/P = DOCX/XLSX/PPTX ·
+  M = markdown editor · T = txt editor · X = settings. M/T ngoài roadmap hiện tại (chỉ namespace).
+- **Migration (map cũ → mới):** `design/editor/` → `design/D01-editor/` (TC-ED-nn → TC-D01-nn,
+  16 chỗ) · `design/startpage/` → `design/A01-startpage/` (TC-SP-nn → TC-A01-nn) ·
+  `design/print-preview/` → `design/C01-print-preview/` (top-level cụm common, theo quy tắc C
+  của user) · `design/settings/` → `design/X01-settings/` · `design/about/` → `design/A02-about/`.
+  Files untracked → `mv` thường, không ảnh hưởng git history. Entry cũ trong file này nhắc đường
+  dẫn cũ (TC-ED-06…) — **giữ nguyên không sửa** (log); tra cứu theo map ở trên.
+- **Wire-up:** design/README.md viết lại (registry + bảng cấp mã + 12 quy tắc) · 2 template
+  thêm trường Mã/Mã cha + quy ước `TC-<mã>-nn` · docs/README.md (routing + index) ·
+  conventions.md (`<id>` → `[Mã]-[tên]`, đường dẫn smoke) · vision.md QĐ6 (bullet bổ sung 27.09).
+  AGENTS.md/CONTRIBUTING.md không phải sửa (chỉ trỏ design/ chung chung — đã grep).
+- **Trạng thái:** confirmed (quyết định user; verify.sh chạy cuối task — kết quả trong báo cáo).
+
+---
+
+## 2026-09-26 · Quyết định 6: hệ tài liệu public DD + TEST theo màn hình + CONTRIBUTING
+
+- **Nhiệm vụ:** user yêu cầu tài liệu detail design (DD) theo màn hình + test plan tương ứng
+  làm source of truth, chuẩn public official cho contributor ngoài (kiểm kê 26.09 xác nhận:
+  chưa có ARCHITECTURE/DESIGN/Screenlist riêng — kiến trúc sống phân vai ở conventions/vision/
+  reference.map, giữ nguyên không gộp).
+- **Quyết định user (26.09):** ngôn ngữ **tiếng Việt** · khởi tạo **editor + startpage + 3 stub**
+  (print-preview, settings, about) · **CONTRIBUTING.md minimal tạo ngay**.
+- **Artifacts (mới):** `docs/design/` — README (screenlist + vòng đời planned→draft→
+  in-development→stable→deprecated, 6 quy tắc) · `_TEMPLATE-DD.md` (11 section, cảm hứng
+  Google Design Doc + RFC status) · `_TEMPLATE-TEST.md` (traceability DD, trạng thái
+  GREEN/RED/BLOCKED) · `editor/{DD,TEST}.md` — chốt open-pipeline + boot-flow từ
+  diagnostics/reference.map thành spec; TEST ghi rõ TC-ED-06 = RED (blocker font pipeline)
+  · `startpage/{DD,TEST}.md` (draft PH-2) · 3 stub planned. Ngoài ra: `docs/README.md`
+  (chỉ mục + bảng định tuyến — lấp gap đã thống nhất các phiên trước) · `CONTRIBUTING.md`
+  (root). Wire-up: conventions.md thêm section "DD + TEST", AGENTS.md layout tree,
+  vision.md QĐ6.
+- **Trạng thái:** confirmed (quyết định user; verify.sh chạy cuối task — kết quả trong báo cáo).
+
+---
+
+## 2026-09-26 · Quyết định 5: chốt "hai ngôi nhà" `harness/` vs `.agents/` (ADR vào vision.md)
+
+- **Nhiệm vụ:** owner hỏi vì sao có `harness/` riêng thay vì gộp vào `.agents/` → chạy
+  improve-codebase-architecture (scope chỉ định sẵn), report 3 candidates (HTML tạm, không vào repo).
+- **Bằng chứng (confirmed):** zero trùng nội dung giữa hai folder (grep hai chiều 26.09);
+  `harness/` từ bootstrap `f5b6f69` (21.09), bị tham chiếu bằng path từ code chạy thật —
+  `harness/scripts/verify.sh:20` exec `check-licenses.mjs`, AGENTS.md ×4, comment trong
+  `src-tauri/src/{bridge,sidecar,protocol}/mod.rs`, `licensing.md`, `.gitignore`;
+  `.agents/skills/` từ `1830d50` (22.09) — path do CLI skills.sh dictate, hash-lock
+  `skills-lock.json`, 9 skill import generic, tool-discovery qua frontmatter.
+- **Quyết định user (26.09):** chọn card 2 — ghi ADR "hai ngôi nhà" vào `vision.md`
+  § Quyết định 5 (cấm merge khi không có bằng chứng mới) + sửa câu chéo `conventions.md`
+  § Workflow skills. Card 1 (merge) bác bỏ; card 3 (pointer-skill cho 3 skill harness trong
+  `.agents/`) để backlog, kèm gate: probe `npx skills update -p` xem có prune entry lạ không.
+- **Trạng thái:** confirmed (quyết định của user; verify gate chạy cuối task, kết quả trong report phiên).
+
+---
+
 ## 2026-09-26 · Chốt stack (giữ Rust) — research Bun/Go/Rust
 
 - **Nhiệm vụ:** agent nền thực hiện phân tích Bun vs Golang vs Rust theo

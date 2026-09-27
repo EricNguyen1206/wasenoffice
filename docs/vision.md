@@ -75,6 +75,45 @@ Model strategy: BYO-key cloud trước (0 byte tăng installer) → local model 
 - Mobile (Tauri v2): engine JS chạy mọi webview (đã verify 0 CEF-dependency — `reference.map.md`),
   bottleneck duy nhất là x2t binary per-platform → mobile convert ở desktop/cloud thay vì build x2t mobile.
 
+## Quyết định 5 — Hai ngôi nhà agent: `harness/` và `.agents/` (CHỐT)
+
+Chốt 26.09.2026 (architecture review định kỳ, report HTML tạm). Hai folder phục vụ hai seam khác nhau,
+zero trùng nội dung (đã grep hai chiều) — **không gộp**:
+
+| Ngôi nhà | Bản chất | Ai consumes |
+|---|---|---|
+| `harness/` | contract first-party tự viết (rules · skills project · verify.sh · system1) | `verify.sh:20` exec `check-licenses.mjs`; AGENTS.md; comment path trong `src-tauri/src/{bridge,sidecar,protocol}/mod.rs`; `licensing.md`, `.gitignore` |
+| `.agents/skills/` | skill generic import từ marketplace skills.sh, hash-lock qua `skills-lock.json` | ZCode Skill discovery; `npx skills update -p` (CLI sở hữu dir) |
+
+- Lịch sử: `harness/` từ bootstrap `f5b6f69` (21.09); `.agents/` từ `1830d50` (22.09) — path `.agents/skills/`
+  do CLI skills.sh dictate, không phải lựa chọn thiết kế cạnh tranh với `harness/`.
+- **Cấm merge `harness/` → `.agents/`** khi không có bằng chứng mới: vỡ verify gate (path chết trong verify.sh),
+  ~10 tham chiếu path thành stale, file tay thành foreign entry trong dir tool bên ngoài sở hữu.
+- Muốn skill harness tự-trigger được: chỉ bằng pointer-skill mỏng trong `.agents/` (không copy nội dung),
+  phải probe CLI trước + qua acceptance YAGNI. Chưa có consumer thực → để backlog.
+
+## Quyết định 6 — Tài liệu public: DD + TEST theo màn hình (CHỐT)
+
+Chốt 26.09.2026 (user). `docs/design/` là source of truth cho thiết kế chi tiết (DD) + kế hoạch
+kiểm thử (TEST) của từng màn hình — public official ngay từ đầu, phục vụ contributor ngoài.
+
+- Cấu trúc: `docs/design/[Mã]-[tên]/` gồm `DD.md` + `TEST.md`; registry (danh sách màn + cấp mã)
+  ở `docs/design/README.md`; template chuẩn `_TEMPLATE-*.md` (cảm hứng Google Design Doc + RFC
+  status lifecycle + test-plan tách riêng).
+- **Bổ sung 27.09 — mã hóa màn hình:** mỗi màn có mã ổn định `[Chữ][2 số]` (màn con `-n`), chữ =
+  nhóm chức năng: **A** trang chủ + thông tin chung (A01 startpage, A02 about) · **B** tài liệu về
+  phần mềm (hướng dẫn) · **C** màn dùng chung nhiều màn (C01 print-preview) · **D/E/P** màn
+  DOCX/XLSX/PPTX (D01 editor) · **M** markdown editor · **T** txt editor · **X** cài đặt (X01).
+  M/T ngoài roadmap hiện tại — chỉ giữ namespace. Chi tiết + quy tắc cấp mã: `docs/design/README.md`.
+- **Ngôn ngữ: tiếng Việt** (chốt user 26.09 — nhất quán toàn bộ docs dự án).
+- Luật: đổi hành vi màn hình → cập nhật DD + TEST **cùng commit**; màn mới → đăng ký screenlist
+  trước; TEST là điều kiện sign-off (P0 phải GREEN hoặc RED có lý do).
+- Khởi tạo 26.09: editor + startpage + 3 stub planned (print-preview, settings, about).
+  `CONTRIBUTING.md` ở root từ 26.09. (27.09 mã hóa: D01-editor, A01-startpage, A02-about,
+  C01-print-preview, X01-settings.)
+- Lý do: "open source ngay từ đầu" (§ Định vị) — contributor cần entry point + source of truth,
+  không phải đọc ngược chat/diagnostics để hiểu hệ thống.
+
 ## Horizons
 
 | Horizon | Phạm vi |

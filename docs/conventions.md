@@ -36,7 +36,9 @@ upstream/           submodule chỉ đọc
 
 ## Workflow kỹ năng (skills) — bắt buộc theo loại việc
 
-Skills project nằm ở `.agents/skills/` (lock: `skills-lock.json`; cập nhật: `npx skills update -p`).
+Skills import (generic, từ marketplace) nằm ở `.agents/skills/` — path do skills.sh CLI dictate (lock:
+`skills-lock.json`; cập nhật: `npx skills update -p`). Quy trình RIÊNG của project nằm ở `harness/skills/`
+(contract, đọc-by-path). Hai ngôi nhà khác seam — không gộp (xem `vision.md` Quyết định 5).
 Chỉ dùng set tối thiểu — thêm skill mới phải qua acceptance giống dependency (YAGNI).
 
 | Loại việc | Skill |
@@ -49,6 +51,18 @@ Chỉ dùng set tối thiểu — thêm skill mới phải qua acceptance giốn
 | Định kỳ (cuối mỗi phase) | Hai phần: **"gọn"** → `ponytail-audit` quét repo tìm bloat; **"không loạn"** → `/improve-codebase-architecture` soi hot-spot theo git history, đề xuất deepening (report HTML ở /tmp, không vào repo; user chọn cái nào mới đào). Đối chiếu quyết định cũ với `vision.md` (vai trò ADR) + `reference.map.md` (vai trò CONTEXT.md) — không re-litigate. Kết quả vào backlog phase kế; chỉ refactor khi có consumer thật |
 
 Spawn subagent → prompt PHẢI nhúng/ trỏ tới `harness/rules/mit-purity.md` (subagent không tự đọc AGENTS.md).
+
+## Tài liệu thiết kế màn hình — DD + TEST (QĐ6)
+
+- Mỗi màn hình có 1 thư mục `docs/design/[Mã]-[tên]/` gồm `DD.md` (thiết kế chi tiết) + `TEST.md`
+  (kế hoạch kiểm thử). Mã màn `[Chữ][2 số]`, màn con `-n` (vd `D01`, `D01-1`) — bảng cấp chữ +
+  quy tắc cấp mã: `docs/design/README.md` (registry). Template: `docs/design/_TEMPLATE-*.md`.
+- **Đổi hành vi màn hình → cập nhật DD + TEST cùng commit với code.** Màn mới → đăng ký
+  registry (cấp mã) trước khi viết spec.
+- TEST là điều kiện sign-off màn hình: chỉ tính xong khi mọi case P0 GREEN (RED phải có lý do +
+  câu hỏi mở trong DD §10).
+- Định tuyến mọi loại tài liệu: `docs/README.md` (ngôi nhà duy nhất của chỉ mục).
+- Ngôn ngữ tài liệu: tiếng Việt (public official — QĐ6).
 
 ## Chế độ vận hành: đơn nhiệm (chốt bởi user 21.09.2026)
 
@@ -87,7 +101,8 @@ Spawn subagent → prompt PHẢI nhúng/ trỏ tới `harness/rules/mit-purity.m
 - Chạy `./harness/scripts/verify.sh` — gồm: cargo check · cargo fmt --check · cargo clippy
   (-D warnings) · pnpm build · license gate (`check-licenses.mjs`, allowlist trong script) ·
   submodules clean · không file `upstream/`/`engines/` nào staged.
-- Có thay đổi bridge/protocol → chạy smoke: mở app, load editor, log các method UNIMPL bị gọi.
+- Có thay đổi bridge/protocol → chạy smoke: mở app, load editor, log các method UNIMPL bị gọi
+  (thủ tục chuẩn hóa: `docs/design/D01-editor/TEST.md`).
 
 ## Định nghĩa các phase (ngắn gọn)
 

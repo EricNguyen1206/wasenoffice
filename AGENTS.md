@@ -16,6 +16,7 @@
 nanooffice/
 ├── AGENTS.md            ← file này — contract cho agent
 ├── docs/                ← kiến thức bằng chứng: reference.map, diagnostics, conventions
+│   └── design/          ← DD + TEST theo màn hình (source of truth UI, public — QĐ6)
 ├── harness/
 │   ├── rules/           ← quy tắc bắt buộc (migration, evidence, release)
 │   └── skills/          ← quy trình từng việc cụ thể (open-docx, bridge-shim, ...)
