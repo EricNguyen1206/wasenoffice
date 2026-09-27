@@ -8,6 +8,27 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-09-27 · T-042: verify.sh thêm gate 9 — smoke render behavioral (chốt Candidate 1, architecture review)
+
+- **Bối cảnh:** review kiến trúc 27.09 (improve-codebase-architecture + agent sweep) chỉ ra
+  verify.sh 8 gate toàn compile/lint — chuỗi render đắt nhất dự án (5 ngày debug) không có
+  kiểm tra tự động; GREEN của TC-D01-06 chỉ tồn tại dạng khai báo tay.
+- **Gate mới (reproduced):** `harness/scripts/smoke-render.sh` (~60 dòng bash, 0 dependency)
+  boot app thật (`NANO_OFFICE_OPEN=<fixture> NANO_OFFICE_DEVTOOLS=0 pnpm tauri dev`; dọn dẹp
+  bằng process-group kill qua `set -m` + disown, đã kiểm tra không sót orphan) rồi poll log
+  stdout chờ đúng **3 tín hiệu TC-D01-06**: ① `asc_onDocumentContentReady` ② `viewer=WxH` /
+  canvas probe với height > 0 ③ `GET /fonts/` (filesrv log mức info). Đủ 3 trong timeout
+  (default 240s, `SMOKE_TIMEOUT`) → exit 0; hết giờ/app chết sớm → exit 1 kèm log tail.
+  Fixture tự sinh qua `harness/fixtures/make_docx.py` nếu thiếu; chặn sớm nếu port 1420 bận.
+- **Verify (đều chạy thật, 27.09):** positive **exit 0** (contentReady + canvas 2190×958 +
+  `GET /fonts/sys/Symbol.ttf`); **negative exit 1** (`NANO_OFFICE_X2T=/nonexistent` → delivery
+  fail → timeout → FAILED) — gate biết cách fail; full `verify.sh` 9 gate **exit 0**.
+- **Giới hạn (ghi rõ):** gate phụ thuộc log contract của shim — đổi text các dòng evidence
+  phải đổi gate cùng lúc (hai đầu đều có comment trỏ nhau). Window app bật/tắt ngắn khi chạy
+  verify.sh là hành vi designed của gate local. CI headless (T-021) sẽ cần revisit cách boot.
+
+---
+
 ## 2026-09-27 · T-002: PHẢN RENDER PH-0 ĐÃ QUA — TC-D01-06 GREEN (oracle-diff CDP, phương án a)
 
 - **Kết quả (reproduced, WKWebView thật — không CEF):** mở fixture DOCX 1.9 KB →

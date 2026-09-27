@@ -18,6 +18,7 @@ type: test
   hồi quy các bẫy đã gặp.
 - **Out of scope:** save/convert UI (PH-1), print/clipboard (PH-2), crypto (PH-3).
 - Ma trận: ✅ `E2E manual` (app dev + console/filesrv log) · ✅ `unit` (Rust regression) ·
+  ✅ `E2E auto` (gate 9 `smoke-render.sh` trong verify.sh — TC-D01-06) ·
   ⬜ `integration` tự động round-trip (PH-1, thêm vào `verify.sh`) · ⬜ `visual` (PH-4 CI).
 
 ## 2. Môi trường & fixtures
@@ -38,7 +39,7 @@ type: test
 | TC-D01-03 | P0 | E2E manual | §5 LoadJS | When bootstrap gọi `LoadJS(sdk-all.js, fonts.js, ChartStyles.js)` / Then eval xong + `completeLoad` | 3 payload resolve (0 × 404); `completeLoad` bắn | GREEN |
 | TC-D01-04 | P0 | E2E manual | §6 wasm | When payload request sai thư mục / Then filesrv redirect về vị trí chuẩn | 0 × `both async and sync fetching of the wasm failed`; `fonts.wasm` init OK | GREEN |
 | TC-D01-05 | P0 | E2E manual | §5 open 1–3 | When mở fixture DOCX / Then `LocalStartOpen` → x2t → `EndLoad` nhận b64+len đúng | convert 28–116 ms; probe decode head `DOCY`; `SetDocumentName` bắn | GREEN |
-| **TC-D01-06** | **P0** | E2E manual | §3 READY | When RENDERING chạy / Then `asc_onDocumentContentReady` + `id_viewer` height > 0 + font fetch `/fonts/…` | 3 dấu hiệu trên đồng thời | **GREEN** (27.09: contentReady + viewer 2302×958 + 14 fetch, `Hcc=15`; screenshot `docs/media/2026-09-27-tc-d01-06-render.png`) |
+| **TC-D01-06** | **P0** | E2E auto | §3 READY | When RENDERING chạy / Then `asc_onDocumentContentReady` + `id_viewer` height > 0 + font fetch `/fonts/…` | 3 dấu hiệu trên đồng thời | **GREEN** (27.09: contentReady + viewer 2302×958 + 14 fetch, `Hcc=15`; screenshot `docs/media/2026-09-27-tc-d01-06-render.png`; **tự động trong verify.sh gate 9** — `harness/scripts/smoke-render.sh`, diagnostics 27.09 T-042) |
 | TC-D01-07 | P1 | unit | §6 NUL | When response body lớn / Then không nhân đôi NUL | unit test hồi quy trong filesrv pass (đã có từ 22.09) | GREEN |
 | TC-D01-08 | P1 | E2E manual | §5 interface | When mở file / Then log mọi method `UNIMPL` bị gọi | danh sách UNIMPL thu hẹp theo từng wave — cập nhật `reference.map.md` | GREEN (danh sách còn ~110) |
 | TC-D01-09 | P0 | E2E manual | §9 oracle | Given ONLYOFFICE.app thật + CDP / When mở cùng fixture / Then editor frame render canvas | `Asc.editor` tồn tại; canvas ~2654×1312 — dùng làm chuẩn diff trạng thái `AscFonts.Wg` | GREEN |
@@ -63,3 +64,4 @@ type: test
 | 2026-09-26 | Test plan đầu tiên — chuẩn hóa smoke protocol từ `conventions.md` + diagnostics | — |
 | 2026-09-27 | Mã hóa màn hình: TC-ED-nn → TC-D01-nn | — |
 | 2026-09-27 | TC-D01-06 GREEN + TC-D01-08 cập nhật danh sách UNIMPL | — |
+| 2026-09-27 | TC-D01-06 → E2E auto: gate 9 smoke render trong verify.sh (T-042) | — |

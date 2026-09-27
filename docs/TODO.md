@@ -22,7 +22,7 @@ type: queue
 | PH-0  |  6  | 5  | 0  | 0  | 1  |
 | PH-1  |  2  | 0  | 0  | 0  | 2  |
 | PH-4  |  2  | 0  | 0  | 0  | 2  |
-| META  |  8  | 5  | 0  | 0  | 3  |
+| META  |  9  | 6  | 0  | 0  | 3  |
 
 ## PH-0 — Spike editor + render DOCX (go/no-go)
 
@@ -48,6 +48,7 @@ type: queue
 - [ ] ⬜ T-020 · Add 2 skill theo audit 26.09: `systematic-debugging` (superpowers) + `handoff` (mattpocock) qua cổng acceptance · **chờ user duyệt**
 - [ ] ⬜ T-021 · CI + gates số liệu size/RAM/startup · trigger: PH-4
 - [ ] ⬜ T-034 · Bật GitNexus index `upstream/sdkjs` phục vụ reverse font pipeline (trigger đã chạm: bridge first wave xong) · ← T-001 · skill: gitnexus-cli
+- [x] ✅ T-042 · Gate 9 smoke render behavioral trong verify.sh — TC-D01-06 chạy tự động, exit code (architecture review Candidate 1; negative test proven) · 27.09 · 82502c1
 - [x] ✅ T-022 · Migration OKF-thin: frontmatter `type` toàn docs + gate check-docs.mjs (QĐ8) · 27.09
 - [x] ✅ T-030 · QĐ5 hai ngôi nhà harness/.agents + QĐ6 hệ DD/TEST mã hóa màn hình + CONTRIBUTING + docs routing · 26–27.09 · bbb99b1
 - [x] ✅ T-031 · QĐ7 TODO queue + template handoff + vòng đời task + protocol đa-phiên · 27.09
