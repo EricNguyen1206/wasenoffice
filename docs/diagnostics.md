@@ -8,6 +8,29 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-09-28 · T-011: gate 10 — save round-trip tự động
+
+- **Cái gì:** `harness/scripts/smoke-save.sh` (verify.sh gate 10, commit `7ba9150`) tự động hoá
+  bằng chứng thủ công T-010 bên dưới thành gate hành vi: fixture COPY fresh trong `mktemp -d`
+  (KHÔNG save đè file repo, KHÔNG reuse path — file bị mutate theo design) → boot app với
+  `NANO_OFFICE_SAVE_PROBE="T011-<random>-SAVED-BY-NANOOFFICE"` → chờ log round-trip trên stdout
+  tích luỹ → assert TRÊN DISK: size+mtime đổi + `unzip -p … word/document.xml | grep -c` marker ≥ 1
+  (grep trực tiếp đủ — không cần strip tag, khớp T-010, đã chạy thật). PASS in 3 bằng chứng (log
+  line, byte delta, grep count); FAIL/timeout → log tail 40, exit 1; full log giữ ở mktemp như gate 9.
+- **Marker/override:** env `NANO_OFFICE_SAVE_PROBE` vốn CHÍNH LÀ text probe chèn (`lib.rs` inject
+  verbatim thành `__NANO_OFFICE_SAVE_PROBE_TEXT__`) — override có sẵn từ T-010, không đụng code;
+  gate random token theo run (`T011-$RANDOM-…`) nên các run độc lập. Knob `SMOKE_SAVE_NO_PROBE=1`
+  = run counterfactual (probe tắt → gate PHẢI FAIL — negative test của chính gate).
+- **Log contract gate 10:** `save-end delivered to engine` (`delivery.js` consumeSaveEnd) +
+  `save delivered:` (`bridge/save.rs`, phát sau rename đè file gốc) — pointer comment 2 đầu,
+  đổi 1 đầu phải đổi cùng commit (cùng cơ chế với contract frozen gate 9).
+- **Verify:** standalone ×2 exit 0 (marker `T011-6027-…` / `T011-3379-…`, 1962→25618 B, grep ×1,
+  `save-end delivered to engine: code=0`); negative `SMOKE_SAVE_NO_PROBE=1 SMOKE_SAVE_TIMEOUT=90`
+  exit 1 đúng kỳ vọng (app mở OK, `onDocumentModifiedChanged([false])`, không save, timeout);
+  full `verify.sh` 10 gates exit 0.
+
+---
+
 ## 2026-09-28 · T-010: SAVE DOCX hoạt động end-to-end (open → edit → save → disk)
 
 - **Kết quả (confirmed — counterfactual có thật, xem root cause):** mở fixture DOCX → probe
