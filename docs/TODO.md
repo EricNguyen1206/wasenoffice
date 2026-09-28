@@ -15,13 +15,12 @@ type: queue
 
 ## Tình hình nhanh
 
-▶ Kế tiếp: PH-1 — T-045 (refactor open-delivery chain, trigger mở PH-1) rồi T-010 (open/save/convert
-qua x2t sidecar). Lưu ý caveat từ T-003: user xác nhận scroll/edit thủ công ~30s (diagnostics 27.09).
+▶ Kế tiếp: T-010 (open/save/convert qua x2t sidecar) — chuỗi user chỉ đạo: T-045 ✅ (0d8f7a6) → T-010 (save) → T-011; T-048 (multi-format) hạ ưu tiên sau T-011
 
 | Phase | Tổng | ✅ | 🟨 | ⏸ | ⬜ |
 |---|---|---|---|---|---|
 | PH-0 — ĐÃ ĐÓNG 27.09  |  6  | 6  | 0  | 0  | 0  |
-| PH-1  |  6  | 0  | 0  | 0  | 6  |
+| PH-1  |  6  | 1  | 0  | 0  | 5  |
 | PH-4  |  2  | 0  | 0  | 0  | 2  |
 | META  | 11  | 6  | 0  | 0  | 5  |
 
@@ -33,12 +32,12 @@ qua x2t sidecar). Lưu ý caveat từ T-003: user xác nhận scroll/edit thủ 
 
 ## PH-1 — Vòng đời file (open/save/convert qua x2t sidecar)
 
-- [ ] ⬜ T-045 · Refactor open-delivery chain thành module có tên (ready predicate + timeout thành hằng tên) + probe sau `NANO_OFFICE_PROBE` (review C3) · trigger: mở PH-1 · diagnostics 27.09 (review kiến trúc)
 - [ ] ⬜ T-010 · Open/save/convert end-to-end qua x2t sidecar · ← T-003
 - [ ] ⬜ T-011 · Round-trip test tự động thêm vào verify.sh · ← T-010
 - [ ] ⬜ T-048 · Wire entry XLSX/PPTX/PDF: map filetype/doctype theo editor app (spreadsheeteditor/presentationeditor/pdfeditor đã có sẵn trong engines — shell mới wire word) + smoke gate từng loại · ← T-010
 - [ ] ⬜ T-046 · Module config `env.rs` gom `NANO_OFFICE_*` + 2 quy tắc khám phá artifact (review C5 — Speculative) · trigger: T-010 chạm sidecar config · diagnostics 27.09
 - [ ] ⬜ T-047 · Điều tra dialog lỗi "An error has occurred…" thỉnh thoảng hiện sau khi open thành công (emitter `iLa` ở viewer api riêng) · ← T-010 · diagnostics 27.09 (T-002)
+- [x] ✅ T-045 · Refactor open-delivery chain thành module có tên (ready predicate + timeout thành hằng tên) + probe sau `NANO_OFFICE_PROBE` (review C3) · 28.09 · 0d8f7a6
 
 ## PH-4 — Đóng gói + updater (trigger: PH-2 xong)
 

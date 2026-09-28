@@ -27,7 +27,8 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   `canvas probe` · `GET /fonts/`) + comment trỏ chéo 2 chiều shim↔smoke-render.sh (đổi 1 đầu phải
   đổi đầu kia cùng commit).
 - **Verify:** `./harness/scripts/verify.sh` exit 0 (gate 9 boot app thật, đủ 3 tín hiệu);
-  `smoke-render.sh` standalone exit 0; `git status` sạch file lạ. Commit: see TODO T-045.
+  `smoke-render.sh` standalone exit 0; test thêm `NANO_OFFICE_PROBE=0`: 0 dòng probe, delivery
+  production vẫn chạy (contentReady + EndLoad executed); `git status` sạch file lạ. Commit `0d8f7a6`.
 
 ---
 
