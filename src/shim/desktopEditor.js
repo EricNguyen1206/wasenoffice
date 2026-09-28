@@ -20,6 +20,11 @@
  *   client_renderer_wrapper.cpp "onlocaldocument_loadend"): LocalStartOpen
  *   (engine → native) → Rust reads the registered file → main frame relays the
  *   bytes back down → engine frame calls window.DesktopOfflineAppDocumentEndLoad.
+ *   The delivery chain itself lives in src/shim/delivery.js (T-045) — this file
+ *   only triggers it on LocalStartOpen and publishes the shared plumbing
+ *   (`window.__nanooffice_shim`: tauriInvoke/forwardLog) that delivery.js
+ *   consumes. Run order matters: this file loads FIRST in every frame (init
+ *   script order in src-tauri/src/lib.rs, import order in src/main.ts).
  */
 (function (window) {
   'use strict';
@@ -67,7 +72,8 @@
   var BRIDGE_CMD = 'asc_desktop_editor';
   var RELAY_TYPE = '__nanooffice_bridge';   // engine frame → main frame (log + dispatch)
   var LOG_TYPE = '__nanooffice_log';        // any frame → main frame (stdout)
-  var DOWN_TYPE = '__nanooffice_down';      // main frame → engine frame (document delivery)
+  // DOWN_TYPE ('__nanooffice_down', main frame → engine frame document
+  // delivery) lives in src/shim/delivery.js — the only consumer of that lane.
 
   /**
    * Methods answered WITHOUT a Rust round-trip. The upstream editor calls these
@@ -116,40 +122,6 @@
   var localSourcePath = '';
   var localSaved = true; // fresh local open = saved (desktop-sdk m_bLocalIsSaved)
 
-  /**
-   * PH-0 oracle probe: dump the same font-pipeline fields observed in the real
-   * app via CDP (docs/diagnostics.md) so the two runtimes can be diffed from
-   * stdout alone. Runs once, 8s after the document reaches the engine.
-   */
-  function logFontOracleState() {
-    try {
-      var Wg = window.AscFonts && window.AscFonts.Wg;
-      var jM = window.AscCommon && window.AscCommon.jM;
-      var iEc = window.AscFonts && window.AscFonts.iEc;
-      var Hcc = window.AscFonts && window.AscFonts.Hcc;
-      var loaded = [];
-      if (iEc) {
-        for (var i = 0; i < iEc.length; i++) {
-          if (iEc[i].UB !== -1) loaded.push(iEc[i].Va.slice(-40) + ' UB=' + iEc[i].UB);
-        }
-      }
-      var root = document.getElementById('editor_sdk') || document.body;
-      var viewer = document.getElementById('id_viewer');
-      var sdkBox = root.getBoundingClientRect();
-      forwardLog('info', 'font-oracle: Wg.Of=' + (Wg ? Wg.Of.length : '?')
-        + ' aVc=' + (Wg ? Object.keys(Wg.aVc || {}).length : '?')
-        + ' jM.SIa=' + (jM && jM.SIa ? jM.SIa.length : 'undef')
-        + ' jM.PVd=' + (jM && jM.PVd ? jM.PVd.length : 'undef')
-        + ' Hcc=' + (Hcc ? Hcc.length : 'undef')
-        + ' loadedFonts=' + loaded.length + (loaded.length ? ' [' + loaded.slice(0, 6).join(' | ') + ']' : '')
-        + ' viewer=' + (viewer ? viewer.clientWidth + 'x' + viewer.clientHeight : 'none')
-        + ' geom[inner=' + window.innerWidth + 'x' + window.innerHeight
-        + ' editor_sdk=' + Math.round(sdkBox.width) + 'x' + Math.round(sdkBox.height) + ']');
-    } catch (e) {
-      forwardLog('error', 'font-oracle probe failed: ' + e);
-    }
-  }
-
   function safeArgs(args) {
     try {
       var s = JSON.stringify(args);
@@ -179,164 +151,10 @@
     }
   }
 
-  /** Main frame only: fetch the registered document and send it DOWN to the
-   *  engine frame (which asked for it via LocalStartOpen). */
-  function deliverDocument() {
-    var invoke = tauriInvoke();
-    if (!invoke) return;
-    invoke('get_document_for_delivery').then(function (doc) {
-      // The real shell delivers well after LocalStartOpen (it converts first);
-      // give the engine's post-LocalStartOpen init a beat to settle.
-      setTimeout(function () {
-        postDown({ type: DOWN_TYPE, deliver: doc });
-      }, 1500);
-    }).catch(function (err) {
-      forwardLog('error', 'document delivery failed: ' + err);
-    });
-  }
-
-  /** Send a payload one hop DOWN (into every child iframe). */
-  function postDown(data) {
-    var frames = document.querySelectorAll('iframe');
-    for (var i = 0; i < frames.length; i++) {
-      try {
-        data.__hop = (data.__hop || 0) + 1;
-        frames[i].contentWindow.postMessage(data, '*');
-      } catch (e) { /* cross-origin not expected here */ }
-    }
-  }
-
-  /** Engine frame only: consume the delivered document via the engine's own
-   *  offline-open entry (defined by sdk-all.js). The engine api object must be
-   *  fully initialized first (the real desktop app delivers late — after file
-   *  conversion) — retry until Asc.editor exists. */
-  function consumeDeliveredDocument(deliver) {
-    var editorApi = window.Asc && (window.Asc.editor || window.editor);
-    // The wasm font engine must be fully initialized BEFORE the open: the
-    // glyph manager (AscFonts.Wg.II) silently no-ops while its wasm handle
-    // (vue) is absent, so a font queued too early is never loaded.
-    var wasmReady = window.AscFonts && window.AscFonts.Wg && !!window.AscFonts.Wg.vue;
-    if (!editorApi || !wasmReady || typeof window.DesktopOfflineAppDocumentEndLoad !== 'function') {
-      if (deliver.__tries === undefined) {
-        deliver.__tries = 0;
-        forwardLog('info', 'delivery waiting: api=' + !!editorApi
-          + ' wasmReady=' + !!wasmReady
-          + ' endload=' + (typeof window.DesktopOfflineAppDocumentEndLoad));
-      }
-      if (++deliver.__tries > 120) {
-        forwardLog('error', 'document delivery aborted: engine not ready after 60s'
-          + ' (api=' + !!editorApi + ' wasmReady=' + !!wasmReady + ')');
-        return;
-      }
-      setTimeout(function () { consumeDeliveredDocument(deliver); }, 500);
-      return;
-    }
-    try {
-      // EndLoad expects the file as a BASE64 string + decoded byte length
-      // (its $$ helper is AscCommon.zP.decode(b64, false, len)). The head
-      // bytes below are only for the PH-0 evidence log.
-      var bin = atob(deliver.b64);
-      var decodedLen = bin.length;
-      var head = [bin.charCodeAt(0), bin.charCodeAt(1), bin.charCodeAt(2), bin.charCodeAt(3)];
-      var src = deliver.folder + '/' + deliver.name;
-      window.AscDesktopEditor.LocalFileRecoverFolder(deliver.folder);
-      window.AscDesktopEditor.LocalFileSetSourcePath(src);
-      window.AscDesktopEditor.LocalFileSetSaved(true);
-      forwardLog('info', 'delivering document to engine: ' + deliver.name
-        + ' (' + decodedLen + ' bytes, head ' + head.join(',') + ')');
-      try {
-        var probe = AscCommon.zP.decode(deliver.b64, false, decodedLen);
-        forwardLog('info', 'probe decode: type=' + (probe && probe.constructor && probe.constructor.name)
-          + ' len=' + (probe && probe.length)
-          + ' head=' + (probe ? [probe[0], probe[1], probe[2], probe[3]].join(',') : '?'));
-      } catch (dbgErr) {
-        forwardLog('error', 'probe decode failed: ' + dbgErr);
-      }
-      // Definitive open-signal hooks — MUST attach BEFORE EndLoad so
-      // synchronous open errors are not missed.
-      var ed2 = window.Asc && (window.Asc.editor || window.editor);
-      if (ed2 && ed2.attachEvent) {
-        ed2.attachEvent('asc_onError', function () {
-          // api emits (errorMessage, errorLevel) — log raw values
-          forwardLog('error', 'asc_onError: '
-            + Array.prototype.slice.call(arguments).map(String).join(' | '));
-        });
-        ed2.attachEvent('asc_onDocumentContentReady', function () {
-          forwardLog('info', '=== asc_onDocumentContentReady — DOCUMENT OPENED ===');
-        });
-        ed2.attachEvent('asc_onBeginActionEnd', function () {
-          forwardLog('info', 'asc_onBeginActionEnd (open action finished)');
-        });
-        ed2.attachEvent('asc_onAuthChanged', function () {
-          forwardLog('info', 'asc_onAuthChanged');
-        });
-      } else {
-        forwardLog('error', 'editor api has no attachEvent — cannot hook open signals');
-      }
-      // Observe the api event stream directly (asc_onError reaching the UI
-      // layer without touching our attachEvent hooks still passes through
-      // the api's internal sendEvent).
-      if (ed2 && ed2.cc && !ed2.__nanooffice_cc_wrapped) {
-        ed2.__nanooffice_cc_wrapped = true;
-        var origCc = ed2.cc;
-        ed2.cc = function (ev) {
-          var s = String(ev);
-          if (s.indexOf('Error') !== -1) {
-            forwardLog('error', 'api event ' + s + ' args='
-              + Array.prototype.slice.call(arguments, 1).map(String).join(' | ').slice(0, 300));
-          }
-          return origCc.apply(this, arguments);
-        };
-      }
-      try {
-        var di = ed2 && ed2.DocInfo;
-        forwardLog('info', 'DocInfo: offlineApp=' + (di ? di.get_OfflineApp() : 'noDocInfo')
-          + ' documentUrl=' + (ed2 && ed2.documentUrl !== undefined ? ed2.documentUrl : '?')
-          + ' docId=' + (ed2 && ed2.documentId !== undefined ? JSON.stringify(ed2.documentId) : '?'));
-      } catch (dbgErr) {
-        forwardLog('error', 'DocInfo probe failed: ' + dbgErr);
-      }
-      // THE open call itself (desktop-sdk client_renderer_wrapper.cpp:6480):
-      // window.DesktopOfflineAppDocumentEndLoad("<folder>", "<base64>", <decodedLen>).
-      // Everything above this line is probe/hook setup only — the engine
-      // learns about the document HERE and nowhere else.
-      window.DesktopOfflineAppDocumentEndLoad(deliver.folder, deliver.b64, decodedLen);
-      forwardLog('info', 'DesktopOfflineAppDocumentEndLoad executed');
-      // The shell's loadend sequence continues with the signatures hook
-      // (wrapper cpp fires it unconditionally right after EndLoad).
-      if (typeof window.DesktopOfflineAppDocumentSignatures === 'function') {
-        window.DesktopOfflineAppDocumentSignatures('');
-      }
-      // PH-0 render evidence: canvas count/size a few seconds after open.
-      setTimeout(function () {
-        var root = document.getElementById('editor_sdk') || document.body;
-        var canvases = root.querySelectorAll('canvas');
-        var info = [];
-        for (var i = 0; i < canvases.length && i < 4; i++) {
-          info.push(canvases[i].width + 'x' + canvases[i].height);
-        }
-        forwardLog('info', 'canvas probe (' + root.id + '): ' + canvases.length + ' canvas(es) ' + info.join(' '));
-      }, 6000);
-      setTimeout(logFontOracleState, 8000);
-      setTimeout(function () {
-        var root = document.getElementById('editor_sdk') || document.body;
-        var canvases = root.querySelectorAll('canvas');
-        var info = [];
-        for (var i = 0; i < canvases.length; i++) {
-          info.push('#' + i + ':' + canvases[i].id + ' ' + canvases[i].width + 'x' + canvases[i].height);
-        }
-        var ed = window.Asc && (window.Asc.editor || window.editor);
-        forwardLog('info', 'canvas probe-2 (' + root.id + '): ' + canvases.length + ' canvas(es) ' + info.join(' ')
-          + ' | editor state: isDocumentContentReady=' + (ed && ed.isDocumentContentReady ? ed.isDocumentContentReady() : '?'));
-      }, 15000);
-    } catch (e) {
-      forwardLog('error', 'DesktopOfflineAppDocumentEndLoad failed: ' + e);
-    }
-  }
-
-  /** Every frame: route framed messages to where they belong.
-   *  - UP (LOG/RELAY): forward toward the main frame; the main frame invokes Rust.
-   *  - DOWN (DOWN_TYPE): forward into child iframes; the editor frame consumes. */
+  /** Every frame: route framed messages UP toward the main frame — LOG goes
+   *  to stdout (frontend_log), RELAY goes to the Rust dispatch. The DOWN lane
+   *  (document delivery) lives in src/shim/delivery.js (T-045) with its own
+   *  message listener; this relay only triggers the chain on LocalStartOpen. */
   function installRelay() {
     window.addEventListener('message', function (event) {
       var data = event.data;
@@ -355,9 +173,9 @@
       if (data.type === RELAY_TYPE) {
         if (isMainFrame()) {
           if (data.method === 'LocalStartOpen') {
-            // Engine is ready — start the delivery chain.
+            // Engine is ready — start the delivery chain (src/shim/delivery.js).
             mainFrameInvoke('LocalStartOpen', data.args).catch(function () {});
-            deliverDocument();
+            if (window.__nanooffice_delivery) window.__nanooffice_delivery.deliverDocument();
           } else {
             mainFrameInvoke(data.method, data.args).catch(function () {
               /* UNIMPL already logged; PH-0 relay is logging-only */
@@ -369,16 +187,8 @@
         return;
       }
 
-      if (data.type === DOWN_TYPE && data.deliver) {
-        if ((data.__hop || 0) > 6) return; // loop guard
-        var engineReady = typeof window.DesktopOfflineAppDocumentEndLoad === 'function';
-        if (engineReady) {
-          consumeDeliveredDocument(data.deliver);
-        } else {
-          // Not the editor frame (or not ready yet) — keep it moving DOWN.
-          postDown(data);
-        }
-      }
+      // No DOWN branch here: that lane (__nanooffice_down) is handled by
+      // src/shim/delivery.js with its own message listener.
     });
   }
 
@@ -571,6 +381,10 @@
 
     installRelay();
     installErrorForwarding();
+    // Shared plumbing for sibling shim modules: delivery.js loads AFTER this
+    // file in every frame (init-script order in src-tauri/src/lib.rs, import
+    // order in src/main.ts) and consumes exactly this surface. Keep minimal.
+    window.__nanooffice_shim = { tauriInvoke: tauriInvoke, forwardLog: forwardLog };
     forwardLog('info', 'frame ready: ' + window.location.href.slice(0, 120));
   }
 

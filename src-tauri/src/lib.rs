@@ -5,6 +5,10 @@
 //! - `protocol` : `nanooffice-engine://` assets + `nanooffice-file://` user documents
 //! - `sidecar`  : x2t converter process management (PH-1)
 //! - `window`   : window / tab state management (PH-2)
+//!
+//! Shim JS injected into every frame (in this order, see `run`): probe flag →
+//! `BRIDGE_JS` (desktopEditor.js — bridge + relay) → `DELIVERY_JS`
+//! (delivery.js — open-delivery chain); both also bundled by vite via src/main.ts.
 
 mod bridge;
 mod protocol;
@@ -21,6 +25,11 @@ use protocol::FileRegistry;
 /// iframe created by DocsAPI.DocEditor). Same file is bundled with the start
 /// page by vite; keep it framework-free.
 const BRIDGE_JS: &str = include_str!("../../src/shim/desktopEditor.js");
+
+/// Open-delivery chain JS (T-045) — MUST be injected AFTER BRIDGE_JS in every
+/// frame (it consumes `window.__nanooffice_shim`, published by the bridge) and
+/// imported after it in src/main.ts. Same vite double-duty as BRIDGE_JS.
+const DELIVERY_JS: &str = include_str!("../../src/shim/delivery.js");
 
 /// Open a local file for editing: registers it in the FileRegistry and returns
 /// the URL the engine should load — loopback HTTP with an opaque fileId
@@ -210,11 +219,24 @@ pub fn run() {
             if let Err(e) = protocol::filesrv::spawn(registry) {
                 log::error!("{e} — document open will not work");
             }
+            // Probe gate for the shim's diagnostics probes (src/shim/delivery.js
+            // `probesEnabled()`): default ON in debug builds (dev evidence
+            // depends on them), OFF in release; NANO_OFFICE_PROBE=0/1 forces
+            // OFF/ON. Published as a one-line init script so every frame can
+            // read the flag synchronously.
+            let probe_enabled = match std::env::var("NANO_OFFICE_PROBE").as_deref() {
+                Ok("0") => false,
+                Ok("1") => true,
+                _ => cfg!(debug_assertions),
+            };
+            let probe_flag_js = format!("window.__NANO_OFFICE_PROBE__ = {probe_enabled};");
             let win = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
                 .title("NanoOffice")
                 .inner_size(1280.0, 800.0)
                 .min_inner_size(940.0, 560.0)
+                .initialization_script_for_all_frames(probe_flag_js)
                 .initialization_script_for_all_frames(BRIDGE_JS)
+                .initialization_script_for_all_frames(DELIVERY_JS)
                 .build()?;
             // Debug builds only: engine console is the primary PH-0 evidence source.
             // Disable with NANO_OFFICE_DEVTOOLS=0 — the docked panel squeezes the

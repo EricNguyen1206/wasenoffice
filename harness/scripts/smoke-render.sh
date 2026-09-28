@@ -3,9 +3,15 @@
 #
 # Boots the real app (pnpm tauri dev) with a generated DOCX fixture and waits,
 # on the ACCUMULATING stdout log, for the three GREEN signals of TC-D01-06:
-#   1. `asc_onDocumentContentReady` fires            (shim hook, desktopEditor.js)
-#   2. `id_viewer` height > 0                        (font-oracle / canvas probe line)
-#   3. font bytes fetched: `GET /fonts/…`            (filesrv.rs:60, info level)
+#   1. `asc_onDocumentContentReady` fires            (hook + log line in src/shim/delivery.js,
+#                                                    contentReady attachEvent)
+#   2. `id_viewer` height > 0                        (`viewer=WxH` in the font-oracle line, or
+#                                                    `canvas probe …WxH` — both src/shim/delivery.js,
+#                                                    probe-gated, default ON in debug builds)
+#   3. font bytes fetched: `GET /fonts/…`            (Rust side: src-tauri/src/protocol/filesrv.rs:60)
+# LOG CONTRACT frozen (T-045): the emitting lines and the grep patterns below
+# must change in the SAME commit — each side carries a pointer comment (see
+# also the "LOG CONTRACT — FROZEN" header of src/shim/delivery.js).
 # All three within the timeout → exit 0; anything else → exit 1 with log tail.
 #
 # This is verify.sh gate 9 — the first behavioral gate. It exists because the

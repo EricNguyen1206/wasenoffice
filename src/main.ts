@@ -1,4 +1,5 @@
 import './shim/desktopEditor.js';
+import './shim/delivery.js';
 
 /**
  * PH-0 start page: open one real DOCX and boot the editor.
@@ -9,7 +10,21 @@ import './shim/desktopEditor.js';
  * DocsAPI.DocEditor itself — everything on the `nanooffice-engine://` origin,
  * so document + fonts + engine assets are same-origin.
  * The document URL flows through `nanooffice-file://<id>/<name>` (disk path stays in Rust).
+ * Shim load order is load-bearing: desktopEditor.js (bridge + shared plumbing)
+ * before delivery.js (open-delivery chain, consumes window.__nanooffice_shim).
  */
+
+/**
+ * ENGINE_BOOT — the engine boot contract, single home (T-045). The boot page
+ * path mirrors the ONLYOFFICE desktop app (desktop-sdk applicationmanager.cpp:89).
+ * `_offline_` marks the engine's offline open path (apiBase:682): the URL never
+ * carries the document — the bytes arrive via the LocalStartOpen delivery chain
+ * (src/shim/delivery.js) after Rust converts with x2t.
+ */
+const ENGINE_BOOT = {
+  pagePath: '/editors/web-apps/apps/api/documents/index.html',
+  offlineUrlMarker: '_offline_',
+} as const;
 
 const { invoke } = window.__TAURI__.core;
 
@@ -19,7 +34,7 @@ let bootPage: string | null = null;
 async function getBootPage(): Promise<string> {
   if (!bootPage) {
     const base = await invoke<string>('get_engine_base');
-    bootPage = `${base}/editors/web-apps/apps/api/documents/index.html`;
+    bootPage = `${base}${ENGINE_BOOT.pagePath}`;
   }
   return bootPage;
 }
@@ -31,10 +46,10 @@ interface OpenedDoc {
 
 async function mountEditor(doc: OpenedDoc): Promise<void> {
   const boot = await getBootPage();
-  // `_offline_` marks the engine's offline open path (apiBase:682); the bytes
-  // arrive via the LocalStartOpen delivery chain.
+  // `url` = ENGINE_BOOT.offlineUrlMarker — see ENGINE_BOOT above for why the
+  // document itself never travels in this URL.
   const params = new URLSearchParams({
-    url: '_offline_',
+    url: ENGINE_BOOT.offlineUrlMarker,
     title: doc.name,
     filetype: 'docx',
     doctype: 'word',

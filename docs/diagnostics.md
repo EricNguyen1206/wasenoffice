@@ -8,6 +8,29 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-09-28 · T-045: refactor delivery chain (review C3)
+
+- **Module hoá (chưa đụng behavior):** chuỗi open-delivery tách thành `src/shim/delivery.js`
+  (deliverDocument/consumeDeliveredDocument/postDown + DOWN-lane listener riêng; desktopEditor.js
+  giữ bridge/relay/font-patch, publish `window.__nanooffice_shim` = tauriInvoke+forwardLog cho
+  delivery consume — surface 2 chiều tối thiểu). Constants đặt tên: DELIVERY_DELAY_MS=1500 ·
+  RETRY_INTERVAL_MS=500 · RETRY_MAX=120 · HOP_GUARD=6; readiness predicate thành
+  `engineReadiness()` (api + wasm `vue` + EndLoad fn). `src/main.ts`: engine path + `_offline_`
+  về 1 nhà `ENGINE_BOOT`. lib.rs inject thêm DELIVERY_JS ngay sau BRIDGE_JS (init script + vite
+  import đều giữ thứ tự bridge→delivery). x2t spawn KHÔNG đụng (T-043/T-010 sở hữu).
+- **Probe gate:** mọi probe (font-oracle, canvas ×2, DocInfo, cc-wrapper, probe decode) sau predicate
+  duy nhất `probesEnabled()` đọc `window.__NANO_OFFICE_PROBE__` — flag boolean do Rust init script
+  set từ env `NANO_OFFICE_PROBE` (default ON debug / OFF release; `=0` tắt, `=1` bật). Mechanism
+  ghi trong header delivery.js; open-signal hooks (asc_onError/contentReady) KHÔNG gate — là evidence
+  của chính delivery.
+- **Log contract gate 9 nguyên vẹn verbatim** (`asc_onDocumentContentReady` · `viewer=WxH` ·
+  `canvas probe` · `GET /fonts/`) + comment trỏ chéo 2 chiều shim↔smoke-render.sh (đổi 1 đầu phải
+  đổi đầu kia cùng commit).
+- **Verify:** `./harness/scripts/verify.sh` exit 0 (gate 9 boot app thật, đủ 3 tín hiệu);
+  `smoke-render.sh` standalone exit 0; `git status` sạch file lạ. Commit: see TODO T-045.
+
+---
+
 ## 2026-09-27 · T-003: PH-0 verdict — GO WITH CAVEAT + baseline
 
 - **Verdict: GO WITH CAVEAT** — render + open pipeline GREEN; scroll/edit qua bàn phím tự động
