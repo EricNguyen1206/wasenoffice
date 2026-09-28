@@ -8,6 +8,52 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-09-28 · T-010: SAVE DOCX hoạt động end-to-end (open → edit → save → disk)
+
+- **Kết quả (confirmed — counterfactual có thật, xem root cause):** mở fixture DOCX → probe
+  chèn text `asc_AddText("T010 SAVED-BY-NANOOFFICE")` + `asc_Save()` (không keystroke — bẫy
+  T-003) → `save delivered: /private/tmp/t010-fixture.docx (25613 bytes)` (1962 B ban đầu) →
+  `unzip -p … word/document.xml | grep -c "T010 SAVED-BY-NANOOFFICE"` = **1** (grep trực tiếp
+  chạy ngay, không cần strip tag) → mở LẠI file đã lưu: contentReady + `viewer=1151x479` +
+  14 `GET /fonts/` (render GREEN). Full verify.sh **exit 0**. TC-D01-10: GREEN.
+- **Hợp đồng save (word desktop 9.4.0) — chi tiết + file:line ở `reference.map.md` § "Desktop
+  save contract":** engine `asc_Save` → `LocalFileSaveChanges(deltas, deleteIndex, count)`
+  (deltas append vào `<work>/changes/changes0.json`, format byte `"<…>","` của shell) →
+  `OnSave()` → `LocalFileSave(param, pwd, docinfo, fileType, json, oldPwd)` → shell chạy **x2t
+  với params XML** (`<m_sFileFrom>=<work>/Editor.bin` + `<m_bFromChanges>` + `<m_sFileTo>`=file
+  gốc, `<m_nFormatTo>`65=DOCX) → shell eval lại: `LocalFileSetSaved(true)` +
+  `LocalFileSetSourcePath(path)` + `DesktopOfflineAppDocumentEndSave(0)`. UI đẩy trạng thái nút
+  LÊN shell qua `execCommand('title:button', {disabled:{save:…}})` (Desktop.js:259–281) — shell
+  KHÔNG phải đẩy xuống để enable Save; nút toolbar là api-driven.
+- **Root cause lần đầu THẤT BẠI im lặng (confirmed, counterfactual = fix):** save #1 ra file
+  8811 B KHÔNG có marker dù mọi bridge call đúng thứ tự. Điều tra: decode `changes0.json` bằng
+  regex utf-16 liền mạch → kết luận sai "deltas thiếu text" (text trong delta được mã hoá
+  run-length, không scan được kiểu đó). Bằng chứng quyết định: chạy x2t của ta trên recovery
+  copy của app THẬT (dump qua CDP full-trace) → vẫn thiếu marker + `DoctRenderer error
+  code=open`, exit 86. Fix: thêm `<m_sFontDir>` + `<m_sAllFontsPath>` (= thư mục data/fonts của
+  app — cùng nguồn AllFonts.js đã dùng) vào params XML → x2t exit 0, marker xuất hiện ngay cả
+  trên recovery của app thật. Kèm hardening: x2t exit ≠ 0 giờ coi là lỗi (không ghi đè file gốc
+  bằng bản chuyển đổi đã mất changes).
+- **Sự cố oracle (ghi lại để tránh lặp):** CDP wrap toàn bộ `window` (walk prototype chain)
+  phá các global builtin — hàm bị thay thế mất toàn bộ static property (`Object.getPrototypeOf
+  is not a function`), phải restart app sạch. Quy tắc: chỉ wrap object bridge cụ thể.
+  `asc_enterText` KHÔNG có trong bảng export của word build (`prototype['asc_enterText']` không
+  tồn tại) — dùng `asc_AddText` (word/api.js:15634, `AddTextWithPr`).
+- **Bẫy PATH:** `std::env::temp_dir()` trên macOS = `$TMPDIR` (/var/folders/…), KHÔNG phải
+  `/tmp` — workdir x2t nằm ở đó; khi soi workdir phải dùng `$TMPDIR`.
+- **Code:** `src-tauri/src/bridge/save.rs` (append_changes + save_document + unit test byte
+  format), `bridge/mod.rs` (dispatch mới + signature có AppHandle/registry), `lib.rs`
+  (`DeliverableDocument.src` = path gốc; env `NANO_OFFICE_SAVE_PROBE`), `src/shim/desktopEditor.js`
+  (KNOWN_METHODS + LOCAL_TRUTHS mới; relay FULL args — trước đây truncate 500 ký tự sẽ hỏng
+  deltas; FIFO queue cho invoke Rust), `src/shim/delivery.js` (DOWN lane nhận `saveEnd`;
+  probe save sau contentReady). Dọn thêm: unit test `rewrite_font_paths` trong protocol
+  test URL loopback đã stale từ commit ef4ebe5 (verify.sh không chạy cargo test nên không
+  thấy) — sửa expectation cho khớp hành vi committed.
+- **Còn mở:** save-as dialog (PH-2), format khác docx (T-048), tự động hoá round-trip trong
+  verify.sh (T-011), `LocalFileSaveDialog`/`ResaveFile`/`loadLocalFile` vẫn STUB.
+
+---
+
 ## 2026-09-28 · T-045: refactor delivery chain (review C3)
 
 - **Module hoá (chưa đụng behavior):** chuỗi open-delivery tách thành `src/shim/delivery.js`

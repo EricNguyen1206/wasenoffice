@@ -9,17 +9,17 @@ type: test
 |---|---|
 | Mã màn hình | `D01` |
 | DD tương ứng | [`DD.md`](DD.md) |
-| Phase / điều kiện chạy | PH-0 · cần engine artifact trong `engines/` (trích từ ONLYOFFICE.app 9.4.0 — quy trình ở diagnostics entry 22.09; PH-0 đã đóng 27.09 — `docs/TODO-archive.md`) |
-| Cập nhật gần nhất | 2026-09-27 |
+| Phase / điều kiện chạy | PH-0 · cần engine artifact trong `engines/` (trích từ ONLYOFFICE.app 9.4.0 — quy trình ở diagnostics entry 22.09; PH-0 đã đóng 27.09 — `docs/TODO-archive.md`) · PH-1: save DOCX (TC-D01-10) |
+| Cập nhật gần nhất | 2026-09-28 |
 
 ## 1. Phạm vi & ma trận loại test
 
 - **In scope:** boot engine trong WKWebView, luồng open DOCX local, bridge first wave,
-  hồi quy các bẫy đã gặp.
-- **Out of scope:** save/convert UI (PH-1), print/clipboard (PH-2), crypto (PH-3).
+  hồi quy các bẫy đã gặp; **PH-1: luồng save DOCX về file gốc** (TC-D01-10).
+- **Out of scope:** print/clipboard (PH-2), crypto (PH-3).
 - Ma trận: ✅ `E2E manual` (app dev + console/filesrv log) · ✅ `unit` (Rust regression) ·
   ✅ `E2E auto` (gate 9 `smoke-render.sh` trong verify.sh — TC-D01-06) ·
-  ⬜ `integration` tự động round-trip (PH-1, thêm vào `verify.sh`) · ⬜ `visual` (PH-4 CI).
+  ⬜ `integration` tự động round-trip (T-011 sẽ thêm save round-trip vào `verify.sh`) · ⬜ `visual` (PH-4 CI).
 
 ## 2. Môi trường & fixtures
 
@@ -44,6 +44,7 @@ type: test
 | TC-D01-07 | P1 | unit | §6 NUL | When response body lớn / Then không nhân đôi NUL | unit test hồi quy trong filesrv pass (đã có từ 22.09) | GREEN |
 | TC-D01-08 | P1 | E2E manual | §5 interface | When mở file / Then log mọi method `UNIMPL` bị gọi | danh sách UNIMPL thu hẹp theo từng wave — cập nhật `reference.map.md` | GREEN (danh sách còn ~110) |
 | TC-D01-09 | P0 | E2E manual | §9 oracle | Given ONLYOFFICE.app thật + CDP / When mở cùng fixture / Then editor frame render canvas | `Asc.editor` tồn tại; canvas ~2654×1312 — dùng làm chuẩn diff trạng thái `AscFonts.Wg` | GREEN |
+| **TC-D01-10** | **P0** | E2E manual | §5 open + save contract (`reference.map.md` § Desktop save contract) | Given fixture DOCX mở trong app (boot env `NANO_OFFICE_SAVE_PROBE=<text>`) / When shim probe chèn text qua `asc_AddText` + gọi `asc_Save()` (không keystroke — bẫy T-003) / Then file GỐC trên disk đổi và chứa text trong `word/document.xml`, mở lại render GREEN | size 1962→25613 B; `unzip -p … word/document.xml` grep marker = 1; save-end `code=0`; reopen: contentReady + viewer 1151×479 + 14 font fetch | **GREEN** (28.09 — `save delivered: … (25613 bytes)`; hợp đồng save + CDP oracle thật: `reference.map.md` § Desktop save contract, diagnostics 28.09 T-010) |
 
 ## 4. Chính sách hồi quy
 
@@ -69,3 +70,4 @@ type: test
 | 2026-09-27 | TC-D01-06 GREEN + TC-D01-08 cập nhật danh sách UNIMPL | — |
 | 2026-09-27 | TC-D01-06 → E2E auto: gate 9 smoke render trong verify.sh (T-042) | — |
 | 2026-09-27 | §5 sign-off đủ — T-003 verdict GO WITH CAVEAT + baseline; tham chiếu handoff/ph0 → diagnostics/TODO-archive | — |
+| 2026-09-28 | TC-D01-10 (P0) save DOCX round-trip GREEN — hợp đồng save + reverse x2t từ Editor.bin + changes (T-010) | — |

@@ -35,9 +35,14 @@ async bridge không thay thế được — call-sites dùng trong `if` / lúc l
 | `SetDocumentName` | apiBase.js:701 | DONE (ack + log) |
 | `IsSignaturesSupport` | apiBase | DONE (false — signature là PH-3) |
 | `execCommand` | desktopinit.js / Desktop.js: `webapps:entry`, `webapps:features`, `editor:onready`, `editor:config`, `title:button` | **DONE-PH0** (ack + log; chưa trả lời `editor:config` — xem điểm treo) |
-| `LocalFileSetSaved` / `LocalFileRecoverFolder` / `LocalFileSetSourcePath` / `LocalFileGetSourcePath` / `LocalFileSetOpenChangesCount` | desktop-sdk wrapper cpp `onlocaldocument_loadend` sequence (6396–6485) | **DONE-PH0** (ack; GetSourcePath trả path đã set) |
-| `LocalFileGetSaved` / `LocalFileSetSaved(v)` | wrapper cpp:2221–2233 (trả `m_bLocalIsSaved`; SetSaved chỉ nhận khi đang unsaved) | **DONE-PH0** (sync-truth bool, mặc định true = fresh open đã save) |
-| `LocalFileGetOpenChangesCount` | web-apps DE app.js gọi sync sau open | **DONE-PH0** (sync-truth 0 — PH-0 mở không changes) |
+| `LocalFileSetSaved` / `LocalFileRecoverFolder` / `LocalFileSetSourcePath` / `LocalFileGetSourcePath` / `LocalFileSetOpenChangesCount` | wrapper cpp `onlocaldocument_loadend` sequence (6396–6485) | **DONE-PH0** (ack; GetSourcePath trả path đã set). PH-1: `SetOpenChangesCount` ghi lại open-count cho phép tính truncate khi save (`bridge/save.rs`) |
+| `LocalFileGetSaved` / `LocalFileSetSaved(v)` | wrapper cpp:2221–2233 (trả `m_bLocalIsSaved`; SetSaved chỉ nhận khi đang unsaved) | **DONE-PH0** (sync-truth bool, mặc định true = fresh open đã save). PH-1: SetSaved(true/false) từ save-end (`delivery.js` consumeSaveEnd) |
+| `LocalFileGetOpenChangesCount` | web-apps DE app.js gọi sync sau open | **DONE-PH0** (sync-truth 0 — mở không changes) |
+| `LocalFileSaveChanges(data, deleteIndex, count)` | `common/Local/common.js:418` — engine gửi deltas lúc save; cpp append `"<…>","` vào `<recover>/changes/changes0.json` (cpp:2119–2152; truncate cpp:5218) | **DONE-PH1** (`bridge/save.rs::append_changes` — byte-format shell, truncate theo quote (open+delete)×2; sync-truth `true`) |
+| `LocalFileSave(param, pwd, docinfo, fileType, json, oldPwd)` | `word/Local/api.js:264` (+ `DesktopOfflineAppDocumentStartSave` :214); wrapper cpp:2174 → `cefview.cpp:3099` → x2t params XML | **DONE-PH1** (`bridge/save.rs::save_document` — x2t `Editor.bin`+changes → file gốc, atomic rename; lỗi → `EndSave(2)`; cần `<m_sFontDir>`+`<m_sAllFontsPath>` — không có thì x2t drop changes im lặng) |
+| `OnSave` | word/api.js:2710 (`CoAuthoringApi.onUnSaveLock`); wrapper cpp:1757 | **DONE-PH1** (ack) |
+| `CheckNeedWheel` | word/Drawing/HtmlPage.js:2415 (sync `false ===` so sánh); wrapper cpp:1879 trả true | **DONE-PH1** (sync-truth `true` — legacy compat) |
+| `Property_Get/SetCryptoMode` (property `AscDesktopEditor.CryptoMode`) | wrapper cpp:2675 (defineProperty) + 4024/4035; mặc định 0 | **DONE-PH1** (getter 0 / setter ack — crypto PH-3 off) |
 | `onDocumentModifiedChanged` | engine gọi ngay sau open (báo dirty state) | **DONE-PH0** (ack; shell thật track cho title/save — PH-1) |
 | `LocalFileRecents` / `LocalFileRecovers` / `LocalFileOpenRecent` / `LocalFileOpenRecover` | web-apps documenteditor app.js (`i.LocalFileRecents()` sau `doc:onready`) + loginpage panels.js | **DONE-PH0** (ack null; push list qua `onupdaterecents` là PH-2) |
 | `LocalStartOpen` | sdkjs Local/common.js:64, cefview.cpp:3013 | **DONE-PH0** (ack + delivery chain EndLoad chạy thật) |
@@ -84,7 +89,52 @@ Chuỗi mở file local của shell thật — NanoOffice tái tạo trong shim 
   để STUB quan sát. Font nhúng (`embedded*`): shell eval `<convert folder>/fonts/<name>.js`
   (cpp:1475 nhánh else) — PH-1.
 
-## Ràng buộc URL (mới 22.09, quan trọng cho PH-1)
+## Desktop save contract (word, 9.4.0 — mới 28.09, T-010)
+
+Luồng save offline của shell thật — tĩnh (desktop-sdk + sdkjs, file:line) VÀ động (CDP oracle
+trên ONLYOFFICE.app thật 28.09, mở fixture → `asc_AddText` → `asc_Save`):
+
+1. Engine `asc_Save` (build desktop: `upstream/sdkjs/word/Local/api.js:155`) →
+   `CoAuthoringApi.askSaveChanges` (stub offline trả `{saveLock:false}` đồng bộ —
+   `upstream/sdkjs/common/Local/common.js:411`) → `_onSaveCallback` (`apiBase.js:1654`) →
+   `_onSaveCallbackInner` (`word/api.js:2667`) → `CollaborativeEditing.Send_Changes`
+   (override word: `word/Editor/CollaborativeEditing.js:76` → `saveChanges` :152).
+2. Engine → shell: **`LocalFileSaveChanges(joinedChanges, deleteIndex, count)`**
+   (`common/Local/common.js:418`; chuỗi = các change `"<len>;<base64>"` join bằng `","`;
+   cpp append vào `<recover>/changes/changes0.json` — wrapper cpp:2119–2152, truncate khi
+   undo: `RemoveChanges` cpp:5218 cắt tại dấu quote thứ `(openIndex+deleteIndex)*2`).
+   Sync-truth `true`.
+3. Engine → shell: **`LocalFileSave(_param, password, docinfo, fileType, jsonOptions,
+   oldPassword)`** (`word/Local/api.js:264`; `_param` chứa `saveas=true;` khi SaveAs;
+   `DesktopOfflineAppDocumentStartSave` :214). Wrapper cpp:2174 → process message
+   `onlocaldocument_onsavestart` → `cefview.cpp:3099` → không cần dialog → `LocalFile_SaveStart`
+   (cefview.cpp:1409) → thread `CASCFileConverterFromEditor` (`fileconverter.h:936`):
+   chạy **x2t với file params XML** (`<TaskQueueDataConvert>`: `<m_sFileFrom>` = `<recover>/Editor.bin`
+   (open-time) hoặc `EditorWithChanges.bin` (crypto), `<m_sFileTo>` = path gốc,
+   `<m_nFormatTo>` (DOCX = 65 = 0x0041), `<m_bFromChanges>true</m_bFromChanges>` khi
+   `changes/changes0.json` tồn tại, `<m_sAllFontsPath>`, `<m_sTempDir>`, `<m_bDontSaveAdditional>true`)
+   → **bytes KHÔNG đi qua bridge — x2t đọc Editor.bin + changes từ đĩa và ghi file gốc**.
+4. Shell → engine (wrapper eval vào editor frame, cpp:6544–6583 sau `onlocaldocument_onsaveend`):
+   `window.AscDesktopEditor.LocalFileSetSaved(true|false)` →
+   `window.AscDesktopEditor.LocalFileSetSourcePath("<path gốc>")` →
+   **`window.DesktopOfflineAppDocumentEndSave(<0 ok | 2 error>)`** (engine: `word/Local/api.js:269`
+   — tắt block-action Save; error 2 → `ConvertationSaveError`). Shell thật bắn EndSave 2 lần
+   (oracle 28.09) — engine chịu lặp.
+5. Engine sau EndSave(0): `DesktopOfflineUpdateLocalName` (`common/Local/common.js:393`) →
+   `LocalFileGetSourcePath()` + `SetDocumentName(<name>)` (oracle quan sát đúng chuỗi này).
+6. Kèm theo trong oracle: `onDocumentModifiedChanged(true|false)`,
+   `execCommand('title:button', {"disabled":{"save":false|true}})` — **UI đẩy trạng thái nút LÊN
+   shell** (web-apps `Desktop.js:259–281`), shell KHÔNG đẩy xuống để enable Save; nút Save toolbar
+   là api-driven (`asc_onDocumentModifiedChanged`), `file:save` native → `api.asc_Save()`
+   (Desktop.js:225). `OnSave()` ack (word/api.js:2710, wrapper cpp:1757).
+   `CheckNeedWheel()` sync-truth `true` (wrapper cpp:1879, word gọi ở scroll paths).
+   `Property_Get/SetCryptoMode` = getter/setter property `AscDesktopEditor.CryptoMode`
+   (wrapper cpp:2675, 4024; mặc định 0).
+
+Hệ quả kiến trúc: save REVERSE không là `x2t Editor.bin out.docx` thuần (mất edits) — edits
+sống trong `changes0.json`; x2t phải nhận params XML với `<m_bFromChanges>true</m_bFromChanges>`
+và `<m_sFileFrom>` trỏ vào thư mục chứa `changes/`.
+
 
 - Engine phân loại document URL theo chuỗi scheme: editorscommon.js:3088 (`getUrlType`) +
   allowlist `:2939` `(^((https?|ftps?|file|tessa|joplin|smb)://)|(mailto:))` → **custom scheme
@@ -102,7 +152,7 @@ Chuỗi mở file local của shell thật — NanoOffice tái tạo trong shim 
 
 | Nhóm | Method | Call-sites tiêu biểu | Trạng thái NanoOffice |
 |---|---|---|---|
-| File | `OpenFilenameDialog` (20), `LocalFileGetImageUrl` (22), `LocalFileSave(D)`, `ResaveFile`, `loadLocalFile`, `GetDropFiles`, `convertFile`, `startExternalConvertation` | `sdkjs/common/apiBase.js` | STUB (PH-1) |
+| File | `OpenFilenameDialog` (20), `LocalFileGetImageUrl` (22), `LocalFileSaveDialog`, `loadLocalFile`, `GetDropFiles`, `convertFile`, `startExternalConvertation`, `ResaveFile` | `sdkjs/common/apiBase.js` | STUB (PH-1+; riêng `LocalFileSave` + `LocalFileSaveChanges` đã DONE-PH1 — xem bảng trên) |
 | Print | `Print`, `Print_Start/Page/End`, `IsFilePrinting`, `emulateCloudPrinting` (apiBase.js:5684), `localSaveToDrawingFormat` (:5698) | apiBase.js | STUB (PH-2) |
 | Fonts/media | `LoadFontBase`, `GetImageBase`, `GetImageFormat`, `GetImageOriginalSize`, `MediaStart` (:3495), `CallMediaPlayerCommand`, `AddVideo/Audio` | apiBase.js | STUB (PH-2) |
 | Spell | `SpellCheck` (:2385,2391,2466), `getDictionariesPath` | apiBase.js | STUB (spell.wasm có sẵn — khả năng không cần native) |
