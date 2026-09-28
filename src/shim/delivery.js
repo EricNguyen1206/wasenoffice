@@ -47,6 +47,10 @@
  * LocalFileSetSaved(ok) → LocalFileSetSourcePath(path) →
  * window.DesktopOfflineAppDocumentEndSave(code) (0 ok / 2 convert error). The
  * engine then refreshes its title via LocalFileGetSourcePath/SetDocumentName.
+ *
+ * gate 10 (harness/scripts/smoke-save.sh) greps the completion line
+ * `save-end delivered to engine` from consumeSaveEnd below — keep verbatim
+ * (log contract, change in the same commit as the gate).
  */
 (function (window) {
   'use strict';

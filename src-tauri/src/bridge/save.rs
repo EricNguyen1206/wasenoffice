@@ -347,6 +347,8 @@ pub fn save_document(app: &tauri::AppHandle, registry: &FileRegistry, payload: &
         );
     }
     let len = std::fs::metadata(&disk).map(|m| m.len()).unwrap_or(0);
+    // gate 10 (harness/scripts/smoke-save.sh) greps `save delivered:` — keep
+    // verbatim (log contract, change in the same commit as the gate).
     log::info!(
         "save delivered: {} ({} bytes) in {:?}",
         disk.display(),

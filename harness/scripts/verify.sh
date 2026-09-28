@@ -25,6 +25,9 @@ node harness/scripts/check-docs.mjs || fail=1
 echo "▸ smoke render behavioral (TC-D01-06: boot app, render fixture DOCX)"
 harness/scripts/smoke-render.sh || fail=1
 
+echo "▸ smoke save round-trip behavioral (TC-D01-10: edit → save → disk)"
+harness/scripts/smoke-save.sh || fail=1
+
 echo "▸ upstream submodules clean?"
 if [ -n "$(git submodule status | grep '^[+MU]')" ]; then
   echo "  ✗ submodules dirty/different:"; git submodule status; fail=1
