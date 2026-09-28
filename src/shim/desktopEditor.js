@@ -43,6 +43,10 @@
     'LocalFileSetSaved', 'LocalFileGetSaved', 'LocalFileRecoverFolder', 'LocalFileSetSourcePath',
     'LocalFileGetSourcePath', 'LocalFileSetOpenChangesCount',
     'LocalFileGetOpenChangesCount', 'onDocumentModifiedChanged', 'CheckUserId',
+    // desktop local-save (T-010: LocalFileSaveChanges appends deltas, LocalFileSave
+    // triggers the Rust x2t conversion; result returns via DesktopOfflineAppDocumentEndSave)
+    'LocalFileSaveChanges', 'OnSave', 'CheckNeedWheel',
+    'Property_GetCryptoMode', 'Property_SetCryptoMode',
     // desktop recents (see LOCAL_TRUTHS note)
     'LocalFileRecents', 'LocalFileRecovers', 'LocalFileOpenRecent', 'LocalFileOpenRecover',
     // fonts/media
@@ -104,9 +108,20 @@
     LocalFileRecoverFolder: function () { return null; },
     LocalFileSetSourcePath: function (p) { localSourcePath = p; return null; },
     LocalFileGetSourcePath: function () { return localSourcePath; },
-    LocalFileSetOpenChangesCount: function () { return null; },
+    LocalFileSetOpenChangesCount: function (n) { localOpenChangesCount = n | 0; return null; },
     // sync-truth: PH-0 documents open clean (0 unsaved changes)
     LocalFileGetOpenChangesCount: function () { return 0; },
+    // local-save (T-010). LocalFileSaveChanges is sync-answered true (the engine
+    // ignores the return); the deltas themselves travel to Rust via the relay
+    // (FIFO-ordered in the main frame) and land in <workdir>/changes/changes0.json.
+    LocalFileSaveChanges: function () { return true; },
+    // save-finished ack from the engine (fires before LocalFileSave)
+    OnSave: function () { return null; },
+    // legacy wheel-compat hook, sync `false ===` compared by the engine (scroll paths)
+    CheckNeedWheel: function () { return true; },
+    // crypto-mode property surface (AscDesktopEditor.CryptoMode getter/setter) — PH-3 = off
+    Property_GetCryptoMode: function () { return 0; },
+    Property_SetCryptoMode: function () { return null; },
     // desktop recents (fire-and-forget: the shell pushes lists back via the
     // onupdaterecents/onupdaterecovers globals — PH-2; must EXIST because the
     // editor UI calls them unconditionally after open — loginpage panels.js)
@@ -121,6 +136,7 @@
 
   var localSourcePath = '';
   var localSaved = true; // fresh local open = saved (desktop-sdk m_bLocalIsSaved)
+  var localOpenChangesCount = 0; // changes already applied at open (sync-truth 0 in PH-0/PH-1)
 
   function safeArgs(args) {
     try {
@@ -153,9 +169,16 @@
 
   /** Every frame: route framed messages UP toward the main frame — LOG goes
    *  to stdout (frontend_log), RELAY goes to the Rust dispatch. The DOWN lane
-   *  (document delivery) lives in src/shim/delivery.js (T-045) with its own
-   *  message listener; this relay only triggers the chain on LocalStartOpen. */
+   *  (document delivery + save-end) lives in src/shim/delivery.js with its own
+   *  message listener; this relay only triggers the chain on LocalStartOpen.
+   *  RELAY args are forwarded UNTRUNCATED (LocalFileSaveChanges deltas run
+   *  ~KBs; safeArgs is for logging only). */
   function installRelay() {
+    // FIFO for Rust-bound invokes: the engine sends LocalFileSaveChanges
+    // (deltas) before LocalFileSave (convert); both are async IPC — without
+    // the queue the convert could read the changes file before the append
+    // lands. Ordered postMessage + chained invokes preserve the contract.
+    var relayQueue = Promise.resolve();
     window.addEventListener('message', function (event) {
       var data = event.data;
       if (!data) return;
@@ -177,8 +200,10 @@
             mainFrameInvoke('LocalStartOpen', data.args).catch(function () {});
             if (window.__nanooffice_delivery) window.__nanooffice_delivery.deliverDocument();
           } else {
-            mainFrameInvoke(data.method, data.args).catch(function () {
-              /* UNIMPL already logged; PH-0 relay is logging-only */
+            relayQueue = relayQueue.then(function () {
+              return mainFrameInvoke(data.method, data.args);
+            }).catch(function () {
+              /* UNIMPL already logged; save/open relays are handled Rust-side */
             });
           }
         } else if (window.parent && window.parent !== window) {
@@ -297,9 +322,13 @@
         if (isMainFrame()) {
           return mainFrameInvoke(method, args);
         }
-        // Engine/boot frames: surface the missing call, keep it observable.
-        console.warn('[nanooffice-bridge] UNIMPL (iframe, no forward):', method, safeArgs(args));
-        return Promise.reject('UNIMPL:' + method);
+        // Engine/boot frames: the call has been relayed UP (the Rust dispatch
+        // logs UNIMPL for methods it does not know); async shell work answers
+        // through its own channel (e.g. DesktopOfflineAppDocumentEndSave), the
+        // engine never consumes this return value — resolve instead of leaving
+        // a floating rejection on every fire-and-forget call.
+        console.warn('[nanooffice-bridge] async relay (iframe):', method, safeArgs(args));
+        return Promise.resolve(null);
       };
     });
     // Status channel web-apps uses heavily at boot (desktopinit.js, Desktop.js);
@@ -358,6 +387,15 @@
         });
       return 2; // async; completeLoad fires when executed
     };
+    // Crypto-mode property: the engine/plugins read AscDesktopEditor.CryptoMode
+    // synchronously (desktop shell exposes it as a getter → Property_GetCryptoMode).
+    // PH-3 = crypto off → constant 0.
+    try {
+      Object.defineProperty(bridge, 'CryptoMode', {
+        get: function () { return LOCAL_TRUTHS.Property_GetCryptoMode(); },
+        set: function (v) { LOCAL_TRUTHS.Property_SetCryptoMode(v); },
+      });
+    } catch (e) { /* non-fatal: property surface only */ }
     window.AscDesktopEditor = bridge;
 
     // Coordination tables for LoadJS (see rb() in sdk-all-min).
@@ -390,9 +428,10 @@
 
   function relay(method, args) {
     // engine/boot frame → parent chain → main frame → Rust (best effort).
+    // FULL args — truncation here would corrupt LocalFileSaveChanges deltas.
     try {
       if (!isMainFrame() && window.parent && window.parent !== window) {
-        window.parent.postMessage({ type: RELAY_TYPE, method: method, args: safeArgs(args) }, '*');
+        window.parent.postMessage({ type: RELAY_TYPE, method: method, args: args }, '*');
       }
     } catch (e) { /* relay is diagnostic only */ }
   }

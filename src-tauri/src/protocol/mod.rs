@@ -96,8 +96,9 @@ fn engines_root() -> Option<PathBuf> {
 
 /// Source of the generated font index: the installed ONLYOFFICE app enumerates
 /// system + bundled fonts on first run. We reuse the enumeration (not the files)
-/// and rewrite paths to our protocol URLs.
-fn all_fonts_source() -> Option<PathBuf> {
+/// and rewrite paths to our protocol URLs. Also the x2t save-back font dir
+/// (`bridge::save` passes it as `<m_sFontDir>`/`<m_sAllFontsPath>`).
+pub(crate) fn all_fonts_source() -> Option<PathBuf> {
     let home = std::env::var("HOME").ok()?;
     Some(
         PathBuf::from(home)
@@ -468,12 +469,11 @@ mod tests {
 "/Unknown/Place/x.ttf"
 ];"#;
         let out = rewrite_font_paths(js).expect("rewrite ok");
-        assert!(out.contains(&format!(
-            "{ENGINE_SCHEME}://localhost/fonts/app/OpenSans-Bold.ttf"
-        )));
-        assert!(out.contains(&format!(
-            "{ENGINE_SCHEME}://localhost/fonts/sys/Avenir%20Next%20Condensed.ttc"
-        )));
+        // PH-0 deviation (reference.map.md): fonts are served through the
+        // loopback filesrv (`http://127.0.0.1:<port>/fonts/…`) — assert the
+        // rewritten namespaces, not the port-dependent base.
+        assert!(out.contains("/fonts/app/OpenSans-Bold.ttf"));
+        assert!(out.contains("/fonts/sys/Avenir%20Next%20Condensed.ttc"));
         assert!(out.contains("\"/Unknown/Place/x.ttf\""));
     }
 

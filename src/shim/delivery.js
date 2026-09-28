@@ -37,6 +37,16 @@
  *      not emitted by this module
  * The probes emitting ② are gated (above) but default ON in debug — the smoke
  * gate always runs a debug build (`pnpm tauri dev`), so signals stay live.
+ *
+ * ── SAVE-END LANE (T-010) ─────────────────────────────────────────────────
+ * The same DOWN lane also carries the save result: Rust converts Editor.bin +
+ * changes0.json back to the original file (x2t, params XML per the desktop
+ * save contract in docs/reference.map.md) and evals
+ * `window.__nanooffice_delivery.saveEnd({ok, path, code})` in the MAIN frame;
+ * this module forwards it DOWN and the ENGINE frame answers the contract:
+ * LocalFileSetSaved(ok) → LocalFileSetSourcePath(path) →
+ * window.DesktopOfflineAppDocumentEndSave(code) (0 ok / 2 convert error). The
+ * engine then refreshes its title via LocalFileGetSourcePath/SetDocumentName.
  */
 (function (window) {
   'use strict';
@@ -184,7 +194,7 @@
       var bin = atob(deliver.b64);
       var decodedLen = bin.length;
       var head = [bin.charCodeAt(0), bin.charCodeAt(1), bin.charCodeAt(2), bin.charCodeAt(3)];
-      var src = deliver.folder + '/' + deliver.name;
+      var src = deliver.src || (deliver.folder + '/' + deliver.name);
       window.AscDesktopEditor.LocalFileRecoverFolder(deliver.folder);
       window.AscDesktopEditor.LocalFileSetSourcePath(src);
       window.AscDesktopEditor.LocalFileSetSaved(true);
@@ -213,6 +223,7 @@
         // (hook name + log line below) — keep verbatim.
         ed2.attachEvent('asc_onDocumentContentReady', function () {
           forwardLog('info', '=== asc_onDocumentContentReady — DOCUMENT OPENED ===');
+          scheduleSaveProbe(ed2);
         });
         ed2.attachEvent('asc_onBeginActionEnd', function () {
           forwardLog('info', 'asc_onBeginActionEnd (open action finished)');
@@ -290,6 +301,56 @@
     }
   }
 
+  /**
+   * Probe-flag-gated save proof (T-010 test automation, NO keystrokes — the
+   * T-003 lesson). Rust injects `window.__NANO_OFFICE_SAVE_PROBE_TEXT__` from
+   * env NANO_OFFICE_SAVE_PROBE; when it is set (and probes are enabled), the
+   * engine frame inserts the text via the public api (asc_AddText — the same
+   * method used in the CDP oracle; asc_enterText is NOT in the word export
+   * table) and calls asc_Save() — the exact user-equivalent chain.
+   */
+  function scheduleSaveProbe(ed) {
+    var probeText = window.__NANO_OFFICE_SAVE_PROBE_TEXT__;
+    if (!probesEnabled() || !probeText) return;
+    setTimeout(function () {
+      try {
+        if (typeof ed.asc_AddText !== 'function') {
+          forwardLog('error', 'save probe: asc_AddText unavailable');
+          return;
+        }
+        ed.asc_AddText(probeText);
+        forwardLog('info', 'save probe: text inserted (' + probeText.length + ' chars)');
+        setTimeout(function () {
+          try {
+            ed.asc_Save();
+            forwardLog('info', 'save probe: asc_Save() called');
+          } catch (e) {
+            forwardLog('error', 'save probe: asc_Save failed: ' + e);
+          }
+        }, 800);
+      } catch (e) {
+        forwardLog('error', 'save probe failed: ' + e);
+      }
+    }, 2500);
+  }
+
+  /**
+   * Engine frame only: answer the save contract after the Rust-side x2t
+   * conversion finished (see the SAVE-END LANE note in the header). Mirrors
+   * the real shell's post-save eval sequence (docs/reference.map.md).
+   */
+  function consumeSaveEnd(info) {
+    try {
+      window.AscDesktopEditor.LocalFileSetSaved(!!info.ok);
+      if (info.path) window.AscDesktopEditor.LocalFileSetSourcePath(info.path);
+      window.DesktopOfflineAppDocumentEndSave(info.code || 0);
+      forwardLog('info', 'save-end delivered to engine: code=' + (info.code || 0)
+        + ' path=' + (info.path || ''));
+    } catch (e) {
+      forwardLog('error', 'save-end delivery failed: ' + e);
+    }
+  }
+
   /** Every frame: receive the payload travelling DOWN and either consume it
    *  (this is the engine frame) or keep it moving toward the children. This
    *  listener owns the DOWN lane since T-045; the UP lanes (LOG/RELAY) stay in
@@ -297,7 +358,18 @@
   function installDownReceiver() {
     window.addEventListener('message', function (event) {
       var data = event.data;
-      if (!data || data.type !== DOWN_TYPE || !data.deliver) return;
+      if (!data || data.type !== DOWN_TYPE) return;
+
+      if (data.saveEnd) {
+        if ((data.__hop || 0) > HOP_GUARD) return;
+        if (typeof window.DesktopOfflineAppDocumentEndSave === 'function') {
+          consumeSaveEnd(data.saveEnd);
+        } else {
+          postDown(data); // not the engine frame — keep it moving DOWN
+        }
+        return;
+      }
+      if (!data.deliver) return;
 
       if ((data.__hop || 0) > HOP_GUARD) return; // loop guard
       // Deliberately weaker than engineReadiness(): forwarding only needs an
@@ -315,6 +387,10 @@
 
   installDownReceiver();
 
-  // Public surface consumed by desktopEditor.js — kept minimal (T-045).
-  window.__nanooffice_delivery = { deliverDocument: deliverDocument };
+  // Public surface consumed by desktopEditor.js — kept minimal (T-045); T-010
+  // adds saveEnd (Rust evals it in the MAIN frame after the x2t save).
+  window.__nanooffice_delivery = {
+    deliverDocument: deliverDocument,
+    saveEnd: function (info) { postDown({ type: DOWN_TYPE, saveEnd: info }); },
+  };
 })(window);

@@ -88,11 +88,13 @@ fn get_startup_document(
 /// Methods not yet implemented return `Err` with an `UNIMPL` marker.
 #[tauri::command]
 fn asc_desktop_editor(
+    app: tauri::AppHandle,
     method: String,
     payload: serde_json::Value,
+    registry: State<'_, Arc<FileRegistry>>,
 ) -> Result<serde_json::Value, String> {
     log::info!("bridge → {method}({})", payload_to_short(&payload));
-    match bridge::BridgeCmd::dispatch(&method, payload) {
+    match bridge::BridgeCmd::dispatch(&app, registry.inner(), &method, payload) {
         Ok(v) => Ok(v),
         Err(bridge::BridgeError::Unsupported(m)) => {
             log::warn!("bridge UNIMPL: {}", m);
@@ -128,14 +130,12 @@ fn get_document_for_delivery(
         .latest()
         .ok_or_else(|| "no document registered yet".to_string())?;
 
-    let work = std::env::temp_dir().join(format!("nanooffice-doc-{id}"));
+    let work = bridge::save::workdir_for(id);
     let _ = std::fs::remove_dir_all(&work);
     std::fs::create_dir_all(&work).map_err(|e| format!("mkdir {}: {e}", work.display()))?;
     let out = work.join("Editor.bin");
 
-    let x2t = std::env::var("NANO_OFFICE_X2T").unwrap_or_else(|_| {
-        "/Applications/ONLYOFFICE.app/Contents/Resources/converter/x2t".to_string()
-    });
+    let x2t = bridge::save::x2t_path();
     let started = std::time::Instant::now();
     let status = std::process::Command::new(&x2t)
         .arg(&disk)
@@ -163,6 +163,9 @@ fn get_document_for_delivery(
     Ok(DeliverableDocument {
         folder: work.to_string_lossy().into_owned(),
         name: "Editor.bin".into(),
+        // the engine's save-end contract derives the document name from the
+        // source path — it must be the ORIGINAL file, not the workdir artifact
+        src: disk.to_string_lossy().into_owned(),
         b64: base64::engine::general_purpose::STANDARD.encode(&bytes),
     })
 }
@@ -171,6 +174,7 @@ fn get_document_for_delivery(
 pub struct DeliverableDocument {
     folder: String,
     name: String,
+    src: String,
     b64: String,
 }
 
@@ -230,12 +234,30 @@ pub fn run() {
                 _ => cfg!(debug_assertions),
             };
             let probe_flag_js = format!("window.__NANO_OFFICE_PROBE__ = {probe_enabled};");
+            // Save-proof automation (T-010, probe-gated in the shim): env holds
+            // the text the shim inserts via asc_AddText + asc_Save() after
+            // contentReady — no keystrokes (diagnostics 27.09 T-003).
+            let save_probe_js = match std::env::var("NANO_OFFICE_SAVE_PROBE") {
+                Ok(text) if !text.is_empty() => {
+                    format!(
+                        "window.__NANO_OFFICE_SAVE_PROBE_TEXT__ = {};",
+                        serde_json::json!(text)
+                    )
+                }
+                _ => String::new(),
+            };
             let win = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
                 .title("NanoOffice")
                 .inner_size(1280.0, 800.0)
                 .min_inner_size(940.0, 560.0)
-                .initialization_script_for_all_frames(probe_flag_js)
-                .initialization_script_for_all_frames(BRIDGE_JS)
+                .initialization_script_for_all_frames(&probe_flag_js);
+            let win = if save_probe_js.is_empty() {
+                win.initialization_script_for_all_frames(BRIDGE_JS)
+            } else {
+                win.initialization_script_for_all_frames(&save_probe_js)
+                    .initialization_script_for_all_frames(BRIDGE_JS)
+            };
+            let win = win
                 .initialization_script_for_all_frames(DELIVERY_JS)
                 .build()?;
             // Debug builds only: engine console is the primary PH-0 evidence source.

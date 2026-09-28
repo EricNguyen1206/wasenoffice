@@ -8,6 +8,10 @@
 
 use serde_json::Value;
 
+use crate::protocol::FileRegistry;
+
+pub mod save;
+
 #[derive(Debug)]
 pub enum BridgeError {
     /// Method known but not implemented yet.
@@ -38,7 +42,12 @@ impl BridgeCmd {
     ///   fires them around `DesktopOfflineAppDocumentEndLoad`; the bytes arrive
     ///   through that separate engine-global (see protocol delivery chain).
     /// - `GetInstallPlugins` — parsed as JSON by the engine; "[]" = no plugins.
-    pub fn dispatch(method: &str, payload: Value) -> Result<Value, BridgeError> {
+    pub fn dispatch(
+        app: &tauri::AppHandle,
+        registry: &std::sync::Arc<FileRegistry>,
+        method: &str,
+        payload: Value,
+    ) -> Result<Value, BridgeError> {
         match method {
             "CreateEditorApi" => Ok(Value::Null),
             "IsLocalFile" => Ok(Value::Bool(true)),
@@ -63,8 +72,20 @@ impl BridgeCmd {
             "LocalFileSetSaved"
             | "LocalFileRecoverFolder"
             | "LocalFileSetSourcePath"
-            | "LocalFileGetSourcePath"
-            | "LocalFileSetOpenChangesCount" => Ok(Value::Null),
+            | "LocalFileGetSourcePath" => Ok(Value::Null),
+            "LocalFileSetOpenChangesCount" => {
+                // record the open-time changes count for save truncation math
+                if let Some(n) = payload
+                    .get("args")
+                    .and_then(|a| a.get(0))
+                    .and_then(Value::as_i64)
+                {
+                    if let Some((id, _)) = registry.latest() {
+                        save::set_open_changes_count(id, n);
+                    }
+                }
+                Ok(Value::Null)
+            }
             // sync-truth mirror: fresh local open = saved (shim answers true).
             "LocalFileGetSaved" => Ok(Value::Bool(true)),
             // sync-truth mirror: PH-0 documents open clean (shim answers 0).
@@ -72,6 +93,22 @@ impl BridgeCmd {
             // modified-flag sink: the real shell tracks dirty state for the
             // title/save UI (PH-1); acknowledging keeps the engine flowing.
             "onDocumentModifiedChanged" => Ok(Value::Null),
+            // ── local-save wave (T-010, contract in docs/reference.map.md) ──
+            // engine deltas → <workdir>/changes/changes0.json
+            "LocalFileSaveChanges" => save::append_changes(registry, &payload),
+            // Editor.bin (+ changes) → original path via x2t; result returns to
+            // the engine through DesktopOfflineAppDocumentEndSave
+            "LocalFileSave" => {
+                save::save_document(app, registry, &payload);
+                Ok(Value::Null)
+            }
+            // save-finished ack (engine fires it before LocalFileSave)
+            "OnSave" => Ok(Value::Null),
+            // legacy wheel-compat hook (sync `false ===` compared by the engine)
+            "CheckNeedWheel" => Ok(Value::Bool(true)),
+            // crypto-mode property surface — PH-3 = off (shim answers the same)
+            "Property_GetCryptoMode" => Ok(serde_json::json!(0)),
+            "Property_SetCryptoMode" => Ok(Value::Null),
             // Recents surface: the editor UI calls these unconditionally after
             // open (fire-and-forget); the shell would push lists back via the
             // onupdaterecents/onupdaterecovers globals (PH-2).
