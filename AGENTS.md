@@ -65,9 +65,11 @@ nanooffice/
 ## Việc còn treo
 
 Hàng đợi công việc sống ở **`docs/TODO.md`** (QĐ7 — quy tắc + dashboard ở đầu file đó).
-Điểm nổi bật hiện tại: PH-0 đã đóng 27.09 (GO WITH CAVEAT — caveat ~30s: user xác nhận
-scroll/edit thủ công, `docs/diagnostics.md` 27.09 T-003) → kế tiếp **PH-1**: T-045 (refactor
-open-delivery chain) rồi T-010 (open/save/convert qua x2t sidecar).
+Điểm nổi bật hiện tại: T-048 đóng 29.09 — **mở được cả 4 định dạng DOCX/XLSX/PPTX/PDF**
+(map `FILE_FORMATS` trong `src/main.ts`; PDF không qua x2t — deliver file gốc qua
+EndLoad, oracle CDP app thật 29.09) + smoke gate cho từng format trong verify.sh.
+Kế tiếp: **T-A10** mở màn Track A (bundle x2t — QĐ9) hoặc PH-1 còn lại (T-046/T-047/T-049
+save multi-format).
 - Stack đã chốt: **giữ Rust + Tauri** (re-validate 26.09 — `docs/techstack-analysis.md`).
 
 ## Khi bắt đầu một phiên làm việc

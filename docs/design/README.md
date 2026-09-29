@@ -16,8 +16,9 @@ type: registry
 | **B** | Tài liệu về phần mềm (hướng dẫn sử dụng, help) | — | chưa có màn |
 | **C** | Màn dùng chung nhiều màn hình (common) | C01 | tách khỏi màn cha khi thật sự dùng chung |
 | **D** | Các màn liên quan DOCX | D01 | |
-| **E** | Các màn liên quan Excel (XLSX) | — | PH-1+ |
-| **P** | Các màn liên quan PPTX | — | PH-1+ |
+| **E** | Các màn liên quan Excel (XLSX) | E01 | |
+| **P** | Các màn liên quan PPTX | P01 | |
+| **F** | Các màn liên quan PDF | F01 | cấp 29.09 (T-048) — 1 chữ đúng quy tắc `[Chữ][2 số]`, không dùng "PD" 2 chữ |
 | **M** | Editor Markdown (kiểu Obsidian) | — | ngoài roadmap hiện tại — giữ namespace |
 | **T** | Editor txt (kiểu Notepad++) | — | ngoài roadmap hiện tại — giữ namespace |
 | **X** | Cài đặt | X01 | |
@@ -30,6 +31,9 @@ type: registry
 | A02 | Giới thiệu & credit license (about) | — | ⬜ planned | PH-4 (đóng gói) | [stub](A02-about/DD.md) | — | — |
 | C01 | Xem trước khi in (print-preview) | — | ⬜ planned | PH-2 | [stub](C01-print-preview/DD.md) | — | — |
 | D01 | Cửa sổ soạn thảo tài liệu (editor) | — | 🟨 in-development | PH-0 | [DD](D01-editor/DD.md) | [TEST](D01-editor/TEST.md) | `src-tauri/src/`, `src/main.ts`, `src/shim/` |
+| E01 | Cửa sổ soạn thảo bảng tính (editor XLSX) | — | 🟨 in-development | PH-1 | [DD](E01-editor-xlsx/DD.md) | [TEST](E01-editor-xlsx/TEST.md) | `src/main.ts` (FILE_FORMATS), `src/shim/` |
+| P01 | Cửa sổ soạn thảo bài trình bày (editor PPTX) | — | 🟨 in-development | PH-1 | [DD](P01-editor-pptx/DD.md) | [TEST](P01-editor-pptx/TEST.md) | `src/main.ts` (FILE_FORMATS), `src/shim/` |
+| F01 | Cửa sổ xem/soạn PDF (editor PDF) | — | 🟨 in-development | PH-1 | [DD](F01-editor-pdf/DD.md) | [TEST](F01-editor-pdf/TEST.md) | `src/main.ts` (FILE_FORMATS), `src/shim/` |
 | X01 | Cài đặt (settings) | — | ⬜ planned | chưa có QĐ | [stub](X01-settings/DD.md) | — | — |
 
 ## Vòng đời trạng thái

@@ -34,10 +34,13 @@ Ngoài `docs/`: contract cho agent = `AGENTS.md` (root) · luật bắt buộc =
 | `docs/vision.md` | tầm nhìn + các quyết định đã chốt (QĐ1–QĐ6) — vai trò ADR |
 | `docs/reference.map.md` | bản đồ bằng chứng upstream ↔ việc cần làm (bridge ~130 method, open contract, ràng buộc URL) |
 | `docs/diagnostics.md` | nhật ký chẩn đoán: sự cố, bẫy, số liệu đo (entry mới trên cùng) |
-| `docs/design/README.md` | registry màn hình: bảng cấp mã (A/B/C/D/E/P/M/T/X) + vòng đời trạng thái |
+| `docs/design/README.md` | registry màn hình: bảng cấp mã (A/B/C/D/E/P/F/M/T/X) + vòng đời trạng thái |
 | `docs/design/_TEMPLATE-DD.md` | template Detail Design theo màn hình |
 | `docs/design/_TEMPLATE-TEST.md` | template Test Plan theo màn hình |
 | `docs/design/D01-editor/` | DD + TEST cửa sổ soạn thảo DOCX (PH-0) |
+| `docs/design/E01-editor-xlsx/` | DD + TEST cửa sổ soạn thảo XLSX (PH-1, T-048) |
+| `docs/design/P01-editor-pptx/` | DD + TEST cửa sổ soạn thảo PPTX (PH-1, T-048) |
+| `docs/design/F01-editor-pdf/` | DD + TEST cửa sổ xem/soạn PDF (PH-1, T-048) |
 | `docs/design/A01-startpage/` | DD + TEST trang bắt đầu (draft, PH-2) |
 | `docs/design/A02-about/` · `docs/design/C01-print-preview/` · `docs/design/X01-settings/` | stub màn kế hoạch (planned) |
 | `docs/techstack-analysis.md` | research Bun/Go/Rust 26.09 (untracked theo QĐ stack) |

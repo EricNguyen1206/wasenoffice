@@ -15,12 +15,12 @@ type: queue
 
 ## Tình hình nhanh
 
-▶ Kế tiếp: ⬜ T-048 — Wire entry XLSX/PPTX/PDF (T-011 vừa đóng 28.09: gate 10 save round-trip tự động — diagnostics 28.09)
+▶ Kế tiếp: ⬜ T-A10 — A1: Bundle x2t per-platform (T-048 vừa đóng 29.09: mở được cả 4 định dạng DOCX/XLSX/PPTX/PDF + smoke gates — diagnostics 29.09)
 
 | Phase | Tổng | ✅ | 🟨 | ⏸ | ⬜ |
 |---|---|---|---|---|---|
 | PH-0 — ĐÃ ĐÓNG 27.09  |  6  | 6  | 0  | 0  | 0  |
-| PH-1  |  6  | 3  | 0  | 0  | 3  |
+| PH-1  |  7  | 4  | 0  | 0  | 3  |
 | PH-4  |  2  | 0  | 0  | 0  | 0  |
 | Track A (QĐ9) |  4  | 0  | 0  | 0  | 4  |
 | META  | 11  | 6  | 0  | 0  | 5  |
@@ -33,12 +33,13 @@ type: queue
 
 ## PH-1 — Vòng đời file (open/save/convert qua x2t sidecar)
 
-- [ ] ⬜ T-048 · Wire entry XLSX/PPTX/PDF: map filetype/doctype theo editor app (spreadsheeteditor/presentationeditor/pdfeditor đã có sẵn trong engines — shell mới wire word) + smoke gate từng loại · ← T-010
+- [ ] ⬜ T-049 · Save multi-format (XLSX/PPTX) qua x2t from-changes: định danh format code PPTX (spec-ref `AVS_OFFICESTUDIO_FILE_*` — core chưa clone, hoặc oracle tiếp) · XLSX = **257 đã oracle-confirmed** (29.09) · 513 = export PDF (đã obs, không phải PPTX) · PPTY→PPTX cần `<m_sFontDir>`+`<m_sAllFontsPath>` (exit 80 nếu thiếu) · không truyền m_nFormatTo thì extension output quyết định (PK hợp lệ) · save PDF = pipeline khác (`localSaveToDrawingFormat`) cần điều tra riêng (OQ-F01-1) · bằng chứng: reference.map § multi-format · ← T-048
 - [ ] ⬜ T-046 · Module config `env.rs` gom `NANO_OFFICE_*` + 2 quy tắc khám phá artifact (review C5 — Speculative) · trigger: T-010 chạm sidecar config · diagnostics 27.09
 - [ ] ⬜ T-047 · Điều tra dialog lỗi "An error has occurred…" thỉnh thoảng hiện sau khi open thành công (emitter `iLa` ở viewer api riêng) · ← T-010 · diagnostics 27.09 (T-002)
 - [x] ✅ T-045 · Refactor open-delivery chain thành module có tên (ready predicate + timeout thành hằng tên) + probe sau `NANO_OFFICE_PROBE` (review C3) · 28.09 · 0d8f7a6
 - [x] ✅ T-010 · Open/save/convert end-to-end qua x2t sidecar — **SAVE DOCX round-trip GREEN** (mở → `asc_AddText`+`asc_Save` probe → file gốc 1962→25613 B chứa text trong `word/document.xml` → reopen render GREEN; verify.sh exit 0) · 28.09 · a9e69d7 · contract: reference.map § Desktop save contract, diagnostics 28.09
 - [x] ✅ T-011 · Round-trip test tự động trong verify.sh — gate 10 `smoke-save.sh` edit→save→disk (fixture fresh + marker random `NANO_OFFICE_SAVE_PROBE`; TC-D01-11 GREEN: standalone ×2 exit 0 + counterfactual probe-tắt exit 1 đúng kỳ vọng) · 28.09 · 7ba9150 · diagnostics 28.09
+- [x] ✅ T-048 · Wire entry XLSX/PPTX/PDF — **mở được cả 4 định dạng** (map `FILE_FORMATS` 1 nhà trong main.ts: xlsx→cell/pptx→slide/pdf→pdf+isForm=false; PDF không qua x2t — deliver file gốc, oracle CDP app thật; shim font-loader generalise 3 build) · smoke gates xlsx/pptx/pdf trong verify.sh exit 0 + negative proven + gates docx/save regression GREEN · màn E01/P01/F01 đăng ký + DD/TEST · 29.09 · 7725690 · diagnostics 29.09
 
 ## PH-4 — Đóng gói + updater (trigger: PH-2 xong)
 

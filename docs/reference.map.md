@@ -70,6 +70,47 @@ Chuỗi mở file local của shell thật — NanoOffice tái tạo trong shim 
 "<base64>", <decodedLen>)`, ngay sau đó cpp:6483 bắn `DesktopOfflineAppDocumentSignatures("")`
 (empty string được engine xử lý đúng — nhánh `""!=a`).
 
+## Desktop open contract — MULTI-FORMAT (mới 29.09, T-048)
+
+Bản đồ format cho shell (bằng chứng từng dòng ở cột 3). Map ở code: `src/main.ts`
+`FILE_FORMATS` (một nhà); delivery nhánh pdf: `src-tauri/src/lib.rs`
+`get_document_for_delivery`.
+
+| Định dạng | Boot params | Đường deliver | Bằng chứng |
+|---|---|---|---|
+| DOCX | `doctype=word&filetype=docx` | x2t → `Editor.bin` magic `DOCY;v10` | oracle x2t 29.09; contract gốc 22.09 |
+| XLSX | `doctype=cell&filetype=xlsx` | x2t → `Editor.bin` magic `XLSY;v10` | oracle x2t 29.09 (`/tmp/t048-oracle`, exit 0); app chọn: api.js:1125 `cell→spreadsheeteditor` |
+| PPTX | `doctype=slide&filetype=pptx` | x2t → `Editor.bin` magic `PPTY;v10` | oracle x2t 29.09; api.js:1126 `slide→presentationeditor` |
+| PDF | `doctype=pdf&filetype=pdf&isForm=false` | **KHÔNG x2t** — copy file GỐC vào work dir, deliver bytes gốc (raw `%PDF`) qua cùng EndLoad | oracle CDP ONLYOFFICE.app 29.09: recovery folder chỉ chứa `f.pdf` (1003 B nguyên bản) + `changes/` + `media/`, KHÔNG Editor.bin; render GREEN 5 canvases 2772×1364; khớp fallback `folder+"/"+GetFileName(sFileSrc)` khi Editor.bin thiếu — `client_renderer_wrapper.cpp` "onlocaldocument_loadend" (~6410-6416) |
+
+- **doctype values** (upstream api documents): `upstream/web-apps/apps/api/documents/api.js:1120-1127`
+  appMap — `word→documenteditor`, `cell→spreadsheeteditor`, `slide→presentationeditor`,
+  `pdf→pdfeditor` ( boot page `index.html.desktop:56` đọc `doctype`, mặc định `word`).
+  Shell thật tính doctype theo nhóm format: `desktop-sdk applicationmanager_p.h:2888-2935`
+  (`GetFileUrlParams`) — DOCUMENT→word (DOCXF/OFORM có đuôi riêng), SPREADSHEET→cell,
+  PRESENTATION→slide, CROSSPLATFORM (pdf/djvu/xps)→pdf + `isForm=false` + filetype,
+  DRAW→diagram+view.
+- **Boot page dùng chung cho cả 4 app** — api page đọc query params và tự tạo
+  `DocsAPI.DocEditor` theo `documentType`; không có boot page per-app.
+- **Font loader/glyph manager theo build** (observed trong engines artifacts 29.09 —
+  hành vi giống hệt nhau, chỉ khác tên minified; shim generalise qua `detectFontVariant`
+  trong `src/shim/desktopEditor.js` + readiness union trong `src/shim/delivery.js`):
+
+| Build (app) | loader proto | status/path/cb/idx | stream class | registry | glyph mgr.wasm |
+|---|---|---|---|---|---|
+| word (DOCX + PDF) | `AscFonts.sje.prototype.BSa` | UB/Va/sV/wOb | `G2b` | `Hcc` | `Wg.vue` |
+| cell (XLSX) | `AscFonts.mye.prototype.cZa` | GE/Wa/TR/iXb | `uac` | `Nmc` | `hj.RIe` |
+| slide (PPTX) | `AscFonts.K8d.prototype.VMa` | Pz/Na/gY/wFb | `FTb` | `D3b` | `mi.Zie` |
+
+- **Format code x2t cho save multi-format (quan sát 29.09 cho T-049 — chưa implement):**
+  oracle params XML `<m_nFormatTo>`: **257 = XLSX** (exit 0, `file` = "Microsoft Excel
+  2007+"); **513 = EXPORT PDF** từ editor binary bất kỳ (PPTY/XLSY → %PDF 1.7 — KHÔNG
+  phải PPTX); PPTX code chưa định danh (514/515/516/512/1025/8193/4097/258 đều fail) —
+  fallback không truyền `m_nFormatTo` mà dựa extension output hoạt động (PK hợp lệ);
+  cần spec-ref `AVS_OFFICESTUDIO_FILE_*` (core chưa clone) hoặc oracle tiếp. PPTY→PPTX
+  cần `<m_sAllFontsPath>`/`<m_sFontDir>` như DOCX (thiếu → `DoctRenderer error code=open`,
+  exit 80 — cùng signature bài học T-010).
+
 ## Font contract FULL desktop build (mới 27.09 — quyết định cho PH-0)
 
 - **Engine (word build 9.4):** CUỐI `engines/editors/sdkjs/word/sdk-all.js` (~offset 9.9 MB)

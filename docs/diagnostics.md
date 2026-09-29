@@ -8,6 +8,73 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-09-29 · T-048: mở XLSX/PPTX/PDF — shell wire multi-format + smoke gates 9b/9c/9d
+
+- **Kết quả (confirmed):** mở được cả 4 định dạng từ path input + `NANO_OFFICE_OPEN`.
+  Smoke gates mới trong verify.sh: xlsx/pptx/pdf đều exit 0 (3 tín hiệu gate 9 giữ
+  nguyên); gate DOCX mặc định + gate 10 save round-trip vẫn GREEN sau refactor (smoke
+  save 1962→25619 B, marker ×1). Negative test: fixture xlsx hỏng → `document delivery
+  failed: x2t produced no Editor.bin (exit Some(88))` + gate exit 1. Bằng chứng
+  multi-format: `reference.map.md` § "Desktop open contract — MULTI-FORMAT".
+- **Oracle x2t (29.09):** DOCX→`DOCY;v10` · XLSX→`XLSY;v10` · PPTX→`PPTY;v10`;
+  **PDF: x2t KHÔNG convert** (exit 0, không output file) — đường PDF đi qua app thật
+  (CDP oracle, không keystroke): recovery folder của ONLYOFFICE.app chỉ chứa bản COPY
+  file gốc (`f.pdf` 1003 B) + `changes/` + `media/`, KHÔNG Editor.bin → pdf editor nhận
+  bytes GỐC qua cùng `DesktopOfflineAppDocumentEndLoad`, render GREEN (5 canvases
+  2772×1364). Khớp fallback `folder+"/"+GetFileName(sFileSrc)` khi Editor.bin thiếu trong
+  `client_renderer_wrapper.cpp` "onlocaldocument_loadend" (~6410-6416). lib.rs implement
+  nhánh pdf đúng hành vi này.
+- **Oracle CDP kỹ thuật:** frames của CEF không truy cập được từ frame cha
+  (`SecurityError` cross-origin kể cả file://) — eval trong từng frame phải qua
+  `Runtime.enable` + `Runtime.executionContextCreated` (mỗi frame = 1 execution context,
+  evaluate với `contextId`). /json chỉ list page targets; iframe không hiện riêng.
+- **Bẫy tên minified theo build (root cause tiềm tàng nếu không généralise):** font
+  loader + glyph manager có tên khác nhau trong mỗi sdkjs build (word `sje.BSa`/`Wg.vue`,
+  cell `mye.cZa`/`hj.RIe`, slide `K8d.VMa`/`mi.Zie` — bảng đầy đủ trong reference.map).
+  Shim cũ hardcode tên word build → cell/slide sẽ treo font. Đã generalise:
+  `detectFontVariant()` chọn biến thể theo build (publish qua `__nanooffice_shim`);
+  `engineReadiness()` union 3 tên wasm; font-oracle probe build-aware. pdfeditor dùng
+  build word nên kế thừa names word.
+- **Oracle format code cho save (quan sát cho T-049, không implement):**
+  `<m_nFormatTo>` 257 = XLSX (real xlsx out); 513 = EXPORT PDF từ editor binary bất kỳ
+  (cả PPTY lẫn XLSY đều ra %PDF — KHÔNG phải code PPTX); PPTX chưa định danh; PPTY→PPTX
+  cần font params (thiếu → `DoctRenderer error code=open`, exit 80 — cùng signature
+  T-010); không truyền m_nFormatTo mà dựa extension output = hoạt động (PK hợp lệ).
+  Ghi trong reference.map § multi-format; task T-049 sinh trong TODO (← T-048).
+- **Design docs:** màn mới đăng ký theo QĐ6 — E01/P01 (bảng cấp mã có sẵn) + **F01**
+  (chữ F mới cấp cho PDF — thay đề xuất "PD01" 2 chữ trong handoff vì rule mã là
+  `[Chữ][2 số]`); DD + TEST tối giản cho cả 3; registry + docs/README index cập nhật.
+- **Fixtures:** `make_xlsx.py` (inlineStr, stdlib) · `make_pptx.py` (bộ part tối giản
+  master+layout+theme) · `make_pdf.py` (ISO 32000 viết tay, tiếng Việt ở Title metadata
+  UTF-16BE vì font base-14 WinAnsi không encode dấu — OQ-F01-2). KHÔNG copy fixture từ
+  upstream.
+- **Code chạm:** `src/main.ts` (FILE_FORMATS map 1 nhà + isForm pdf) ·
+  `src/shim/desktopEditor.js` (FONT_VARIANTS + detectFontVariant + patch đại số) ·
+  `src/shim/delivery.js` (engineReadiness union + font-oracle build-aware; log contract
+  gate 9 giữ nguyên verbatim) · `src-tauri/src/lib.rs` (nhánh pdf trong
+  get_document_for_delivery) · `src-tauri/src/bridge/save.rs` (message guard trỏ T-049) ·
+  `harness/scripts/smoke-render.sh` (fixture param + generator theo extension) ·
+  `harness/scripts/verify.sh` (3 gates mới).
+- **Bổ sung vòng review (code-review 2 trục):** (1) UNIMPL sweep — 0 UNIMPL trong cả 3
+  log boot mới (`/tmp/nanooffice-smoke-9BpaBf` xlsx · `-xkpaC4` pptx · `-NgB0ST` pdf):
+  bridge surface cho cell/slide/pdf boot = các method DONE-PH0/PH1 có sẵn, không cần
+  method mới (reference.map không đổi STUB→DONE). (2) Screenshot DoD: một lần chụp
+  `screencapture -x` bắt NHẦM màn hình user đang dùng (bài học T-003 lặp lại) — file đã
+  XOÁ ngay, bỏ yêu cầu screenshot, bằng chứng render = 3 tín hiệu log của gate
+  (contentReady + canvas + fonts) — khuyến cáo phiên sau: KHÔNG chụp màn hình khi user
+  đang hoạt động. (3) Mở từ UI path input: form submit và `NANO_OFFICE_OPEN` đi chung
+  command `open_document` + `mountEditor` (code-identical, `src/main.ts`); form listener
+  không đổi từ PH-0; không có cách tự động hoá gõ path không-keystroke (ràng buộc
+  T-003) — chấp nhận bằng equivalence + negative test đã đi cùng đường open_document.
+  (4) verify.sh: gate fmt từng nuốt output lỗi (`>/dev/null`) khiến CHECKS FAILED im
+  lặng không chỉ ra gate nào — đã bỏ redirect; rerun exit 0.
+- **Font-oracle build-aware xác nhận:** boot xlsx in `font-oracle: variant=mye mgr=yes
+  streams=9` (biến thể cell được detect đúng) + 8 canvas `ws-canvas` 2340×926;
+  `viewer=none` ở cell app (không có `id_viewer`) → signal ② gate khớp qua nhánh
+  `canvas probe` generic — thiết kế signal đã phòng đúng.
+
+---
+
 ## 2026-09-29 · QĐ9: roadmap tự chủ mã nguồn 100% — Track A thay engine theo thang clean-room
 
 - **Bối cảnh:** user nâng mục tiêu sản phẩm lên "tự chủ hoàn toàn mã nguồn, cạnh tranh được
