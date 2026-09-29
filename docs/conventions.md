@@ -6,6 +6,9 @@ type: convention
 ## Kiến trúc mục tiêu (đã chốt theo feasibility study 21.09.2026)
 
 Lộ trình A: **Tauri shell + engine gốc + x2t sidecar.**
+(QĐ9 29.09.2026: "Lộ trình A" = kiến trúc shell ban đầu, giữ nguyên; **Track A** trong
+`docs/TODO.md` = thang tự chủ mã nguồn — thay từng module engine bằng clean-room
+(`harness/rules/clean-room.md`), shell/bridge không đổi. Hai khái niệm khác nhau.)
 
 ```
 src-tauri/ (Rust — mã nguồn chính)

@@ -21,7 +21,8 @@ type: queue
 |---|---|---|---|---|---|
 | PH-0 — ĐÃ ĐÓNG 27.09  |  6  | 6  | 0  | 0  | 0  |
 | PH-1  |  6  | 3  | 0  | 0  | 3  |
-| PH-4  |  2  | 0  | 0  | 0  | 2  |
+| PH-4  |  2  | 0  | 0  | 0  | 0  |
+| Track A (QĐ9) |  4  | 0  | 0  | 0  | 4  |
 | META  | 11  | 6  | 0  | 0  | 5  |
 
 ## PH-0 — Spike editor + render DOCX (go/no-go) — ĐÃ ĐÓNG 27.09 · verdict GO WITH CAVEAT
@@ -41,8 +42,20 @@ type: queue
 
 ## PH-4 — Đóng gói + updater (trigger: PH-2 xong)
 
-- [ ] ⬜ T-040 · Trim engines payload 313 MB → ≤100 MB budget (per-app-type build, strip loginpage/cloud) · vision QĐ2
-- [ ] ⬜ T-041 · Quyết bundle vs download-first cho engine AGPL (OQ — vision Câu hỏi mở) · ← T-040
+- [ ] 🚫 T-040 · ~~Trim engines payload 313 MB → ≤100 MB~~ gộp vào Track A **T-A12** theo QĐ9 (29.09) — nằm trong rung A1
+- [ ] 🚫 T-041 · ~~Quyết bundle vs download-first~~ gộp vào **T-A10** (A1 buộc bundle x2t) + PH-4 packaging (câu hỏi download-first còn lại áp cho toàn engine) theo QĐ9
+
+## Track A — Tự chủ mã nguồn 100% (QĐ9, chốt 29.09 — thang A1→A6)
+
+> **Ghi nhớ D1 (user 29.09):** engine AGPL giữ vai trò reference + "chế độ nâng cao"
+> **tới tận A6 — KHÔNG hard-cut**; phân phối giai đoạn này chịu nghĩa vụ AGPL component (QĐ1).
+> Rung hiện tại: **A1 — tự chủ phân phối** (H1). Task Track A bắt buộc đọc
+> `harness/rules/clean-room.md` trước khi làm; roadmap đầy đủ: `docs/vision.md` QĐ9.
+
+- [ ] ⬜ T-A10 · A1: Bundle x2t per-platform vào `engines/converter/` (rút tham chiếu runtime đầu tiên khỏi ONLYOFFICE.app — còn fonts/AllFonts) · ← T-048 · QĐ9
+- [ ] ⬜ T-A11 · A1: Tự sinh `AllFonts.js` bằng Rust (enumerate font hệ thống; format theo oracle-obs — không đọc data dir của app thật) · ← T-A10
+- [ ] ⬜ T-A12 · A1: Font subset theo locale + trim engines 313 MB → ≤100 MB (nuốt T-040) · ← T-A11
+- [ ] ⬜ T-A13 · A1: **Gate 11 "sạch ONLYOFFICE"** — round-trip open→edit→save trên máy KHÔNG cài ONLYOFFICE.app (x2t bundled + AllFonts tự sinh + fonts subset) · ← T-A12 · đích rung A1 trong vision QĐ9
 
 ## META — harness / docs / skills
 

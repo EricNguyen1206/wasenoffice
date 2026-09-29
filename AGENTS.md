@@ -8,7 +8,10 @@
 - **Tên dự án:** NanoOffice
 - **Mục tiêu:** app desktop office suite (DOCX/XLSX/PPTX/PDF) — shell Rust + Tauri,
   giữ engine editing JS gốc của ONLYOFFICE (sdkjs + web-apps), x2t chạy sidecar.
-- **Không bao giờ port/rewrite engine editing sang Rust** trong scope hiện tại (xem `docs/conventions.md` § engine).
+- **Thay engine chỉ bằng clean-room, không port/translate** (QĐ9, 29.09.2026): cấm mang code
+  AGPL sang code mình dưới mọi hình thức; thay thế từng module theo Track A chỉ từ
+  **spec mở + oracle quan sát** — đọc `harness/rules/clean-room.md` trước khi đụng task Track A.
+  Engine AGPL giữ vai trò reference + "chế độ nâng cao" đến tận rung A6 (user chốt 29.09).
 
 ## Layout (nguồn chân lý về cấu trúc)
 
@@ -19,7 +22,7 @@ nanooffice/
 │   ├── design/          ← DD + TEST theo màn hình (source of truth UI, public — QĐ6)
 │   └── handoff/         ← prompt bàn giao phiên agent (viết/ghi tiếp/xoá theo README ở đó)
 ├── harness/
-│   ├── rules/           ← quy tắc bắt buộc (upstream-read-only, licensing, mit-purity, evidence-discipline; migration/release sinh theo phase)
+│   ├── rules/           ← quy tắc bắt buộc (upstream-read-only, licensing, mit-purity, clean-room, evidence-discipline; migration/release sinh theo phase)
 │   └── skills/          ← quy trình từng việc cụ thể (open-docx, bridge-shim, ...)
 ├── upstream/            ← MẢNG CHỈ ĐỌC — chỉ để tra cứu bằng git/submodule, không sửa, không commit vào
 │   ├── sdkjs/           (gitlink → ONLYOFFICE/sdkjs)

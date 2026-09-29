@@ -29,19 +29,12 @@ Rebuild/repackage engine không biến AGPL thành MIT. Chỉ **clean-room rewri
 spec chuẩn mở, không nhìn code AGPL) mới tạo ra code engine MIT được — đó là dự án multi
 người-năm, tách riêng khỏi roadmap hiện tại.
 
-### Con đường "full MIT" (ngôi sao phương nam — KHÔNG phải scope hiện tại)
+### Con đường "full MIT" → đã được nâng lên lộ trình chính, xem Quyết định 9 (Track A)
 
-Vẫn giữ nguyên cấm port/rewrite engine sang Rust trong scope hiện tại (AGENTS.md § identity,
-`docs/conventions.md`). Nhưng kiến trúc phải giữ cửa này mở mãi:
-
-1. Engine chỉ chạm shell qua bridge + `nanooffice-file://` (đã là rule gốc #4) — shell không
-   import/link gì từ `upstream/`.
-2. Không copy-paste AGPL source vào file MIT (rule `licensing.md`) — cây code sạch, rewrite
-   sau này không "nhiễm DNA".
-3. Nếu một ngày làm thật, theo thứ tự staged:
-   - Bước 1 — thay x2t bằng Rust (parse/serialize DOCX/XLSX/PPTX từ spec ECMA-376/ISO 29500):
-     nhỏ nhất, tách biên sạch nhất (đã là process riêng).
-   - Bước 2 — render/edit engine (sdkjs ~2,1M dòng): chỉ làm khi có team + nguồn lực riêng.
+Nguyên tắc giữ nguyên: **cấm port/translate code AGPL** (license gắn vào code gốc — dịch
+ngôn ngữ vẫn là derivative). Thay thế engine chỉ theo clean-room: từ spec chuẩn mở + quan sát
+black-box (oracle), theo đúng `harness/rules/clean-room.md`. Trật tự staged giữ nguyên
+x2t trước → viewer → editor → UI (chi tiết rung A1–A6 ở QĐ9).
 
 ## Quyết định 2 — Ultra lightweight: budget đo được (định hướng — chốt số sau PH-0 baseline)
 
@@ -147,15 +140,49 @@ Chốt 27.09.2026 (user, sau điều tra chuẩn OKF — Open Knowledge Format, 
 - **Trigger nâng cấp full OKF:** repo public + có external agent đọc docs theo OKF, hoặc chuẩn
   đạt v1.0 ổn định. Lúc đó chỉ bọc thêm YAML — cây/luật giữ nguyên.
 
+## Quyết định 9 — Tự chủ mã nguồn 100%: Track A thay engine theo thang clean-room (CHỐT)
+
+Chốt 29.09.2026 (user phê D1–D3). Mục tiêu sản phẩm nâng cấp: **cạnh tranh được với
+ONLYOFFICE / MS Office** — tự chủ hoàn toàn mã nguồn qua thay thế từng module phía sau
+các contract đã reverse (bridge ~130 method, params-XML x2t, Editor.bin, font contract),
+pattern "strangler fig". Sản phẩm xuất xưởng được ở **mọi rung**.
+
+**Thang tự chủ (đơn nhiệm vẫn ≤1 🟨 toàn file TODO):**
+
+| Rung | Nội dung | XONG khi |
+|---|---|---|
+| A0 ✅ | shell + bridge + save chain của mình | gates 9+10 GREEN (28.09) |
+| A1 | Tự chủ phân phối: bundle x2t + tự sinh AllFonts.js + font subset | máy không cài ONLYOFFICE chạy trọn open→edit→save; payload ≤100 MB |
+| A2 | Converter Rust thay x2t (DOCX → XLSX → PPTX) | round-trip parity vs x2t trên corpus+fuzz; x2t rút khỏi runtime |
+| A3 | Viewer Rust đọc-only ("quick view" không boot sdkjs) | mở <500 ms, RAM <150 MB; parity render vs oracle |
+| A4 | Editor core riêng cho DOCX subset hằng ngày ("Nano Light" mặc định, engine ONLYOFFICE = "chế độ nâng cao") | parity matrix theo lớp tính năng |
+| A5 | UI editor riêng thay web-apps | web-apps rút khỏi phân phối mặc định |
+| A6 | sdkjs rút khỏi installer — repo thuần MIT | `upstream/` chỉ còn tham khảo |
+
+**Ba quyết định con (user phê 29.09):**
+- **D1 — không hard-cut:** engine AGPL giữ vai trò reference + chế độ nâng cao tới tận A6;
+  phân phối trong giai đoạn này vẫn chịu nghĩa vụ AGPL component (QĐ1 + `licensing.md`).
+- **D2 — TODO hai track song song** (P = sản phẩm trên engine AGPL, A = tự chủ) — user theo
+  dõi tiến trình qua dashboard; track P không bị giết: nó là sản phẩm thật + nuôi kiến thức seam.
+- **D3 — clean-room rule ràng buộc** mọi agent: `harness/rules/clean-room.md` (cấm ĐỌC code
+  module đang thay — chỉ spec `spec-ref:` + oracle `oracle-obs:`; siết kịch bản S9 mit-purity).
+
+**Định nghĩa "cạnh tranh được" (thẳng thắn):** không đấu feature-parity trực diện với MS
+(sdkjs 2.1M dòng / ~15 năm; MS ~35 năm). Đấu ở 3 mũi vision sẵn có: **nhẹ** (≤100 MB vs
+1.1–3 GB), **MIT cho phép nhúng** (đối thủ không cho — moat cộng đồng từ A2), **AI-native
+local-first** trên bridge-as-agent-API (QĐ3, chạy trên seam — không phụ thuộc rung nào).
+Sản phẩm có chỗ đứng từ A2–A3 (~tháng 3–6); A4+ là cuộc chiến dài, cần repo public kéo
+cộng đồng — đúng lý do chốt open-source ngày đầu.
+
 ## Horizons
 
-| Horizon | Phạm vi |
-|---|---|
-| H1 | PH-0 go/no-go → PH-1 vòng đời file → PH-2 trải nghiệm desktop |
-| H2 | PH-4 packaging + updater + CI + size/RAM/startup gates; tự build engine (clone `build_tools`); PH-3 mặc định cắt khỏi roadmap |
-| H3 | AI lớp 1 → 2 → 3 |
-| H4 | Mobile + ecosystem (MCP server, plugins) |
-| ★ | Full-MIT engine rewrite — chỉ khi nguồn lực cho phép, theo staged order ở trên |
+| Horizon | Track P — sản phẩm (engine AGPL) | Track A — tự chủ mã nguồn (QĐ9) |
+|---|---|---|
+| H1 | PH-1 phần còn lại (T-048 multi-format, T-047) + PH-2 trải nghiệm desktop | **A1** (nuốt T-040/T-041) |
+| H2 | PH-4 packaging + updater + CI + size/RAM/startup gates | **A2** converter Rust |
+| H3 | AI lớp 1 → 2 (QĐ3, trên bridge — không đổi) | **A3** viewer + khởi động A4 |
+| H4 | Mobile + ecosystem (MCP, plugins) | **A4** mở rộng + **A5** |
+| ★ | — | **A6** thoát sdkjs — giữ điều kiện nguồn lực/cộng đồng |
 
 ## Câu hỏi mở
 

@@ -8,6 +8,30 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-09-29 · QĐ9: roadmap tự chủ mã nguồn 100% — Track A thay engine theo thang clean-room
+
+- **Bối cảnh:** user nâng mục tiêu sản phẩm lên "tự chủ hoàn toàn mã nguồn, cạnh tranh được
+  với ONLYOFFICE/MS Office" — ★ trong Horizons được promoting thành lộ trình chính.
+- **Chiến lược (chốt):** strangler fig trên seam sẵn có — thay từng dependency bằng module
+  clean-room phía sau contract đã reverse (bridge, params-XML x2t, Editor.bin, fonts), ship
+  sản phẩm ở mọi rung A1→A6 (A1 phân phối · A2 converter Rust · A3 viewer · A4 editor
+  "Nano Light" + engine AGPL làm "chế độ nâng cao" · A5 UI riêng · A6 thoát sdkjs).
+- **3 quyết định con user phê 29.09:** D1 không hard-cut (engine AGPL giữ đến A6 — note trong
+  TODO Track A để nhớ) · D2 TODO hai track song song (P sản phẩm + A tự chủ, dashboard theo
+  dõi) · D3 rule clean-room ràng buộc mọi agent.
+- **Rule mới có hiệu lực 29.09:** `harness/rules/clean-room.md` — task Track A cấm ĐỌC code
+  upstream của module đang thay (siết hơn mit-purity vốn cho đọc để hiểu); nguồn vào hợp lệ
+  chỉ spec mở (`spec-ref:`) + quan sát black-box (`oracle-obs:`); knowledge các phiên reverse
+  22–28.09 dùng được qua `reference.map.md` (hợp đồng hành vi = bản ghi clean-room an toàn).
+  mit-purity S9 sửa tương ứng; AGENTS.md identity đổi "không bao giờ port" → "cấm port,
+  chỉ thay clean-room"; conventions phân biệt "Lộ trình A" (kiến trúc shell) ≠ "Track A" (tự chủ).
+- **TODO:** section Track A sinh 4 task rung A1 (T-A10 bundle x2t → T-A11 AllFonts tự sinh →
+  T-A12 font subset + trim ≤100 MB → T-A13 gate "sạch ONLYOFFICE"); T-040/T-041 🚫 gộp vào.
+- **Trạng thái:** quyết định ghi vision QĐ9 + Horizons 2 track; thang + ước lượng effort
+  (A1 1–2 tuần · A2 1–2 tháng · A3 2–4 tháng · A4 6–18 tháng subset) trong vision.
+
+---
+
 ## 2026-09-28 · T-011: gate 10 — save round-trip tự động
 
 - **Cái gì:** `harness/scripts/smoke-save.sh` (verify.sh gate 10, commit `7ba9150`) tự động hoá
