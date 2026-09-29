@@ -115,10 +115,17 @@ fn payload_to_short(payload: &serde_json::Value) -> String {
 }
 
 /// Deliver the most recently registered document to the engine frame via the
-/// desktop open contract (LocalStartOpen → x2t convert →
+/// desktop open contract (LocalStartOpen → convert →
 /// DesktopOfflineAppDocumentEndLoad). The engine's offline loader consumes the
-/// x2t-converted `Editor.bin`, not the source OOXML (observed: sdk-all `brb`
-/// has no plain-docx branch; the real shell always converts first).
+/// x2t-converted `Editor.bin` for OOXML sources; PDF is a cross-platform
+/// format — the real shell does NOT convert it, it copies the ORIGINAL file
+/// into the recovery folder and delivers those bytes (observed: recovery dir
+/// contains `<name>.pdf`, no Editor.bin; client_renderer_wrapper.cpp
+/// "onlocaldocument_loadend" falls back to `folder + "/" + file_name(src)`
+/// when Editor.bin is missing — the pdf editor's own loader parses raw PDF).
+/// Boot params per format live across the boundary in `src/main.ts`
+/// (FILE_FORMATS) — touch both when adding a format (xps/djvu are
+/// CROSSPLATFORM too, same no-x2t rule).
 /// PH-0: synchronous one-shot x2t call; PH-1 replaces this with the sidecar.
 #[tauri::command]
 fn get_document_for_delivery(
@@ -133,36 +140,54 @@ fn get_document_for_delivery(
     let work = bridge::save::workdir_for(id);
     let _ = std::fs::remove_dir_all(&work);
     std::fs::create_dir_all(&work).map_err(|e| format!("mkdir {}: {e}", work.display()))?;
-    let out = work.join("Editor.bin");
 
-    let x2t = bridge::save::x2t_path();
-    let started = std::time::Instant::now();
-    let status = std::process::Command::new(&x2t)
-        .arg(&disk)
-        .arg(&out)
-        .output()
-        .map_err(|e| format!("spawn x2t: {e}"))?;
-    if !out.is_file() {
-        return Err(format!(
-            "x2t produced no Editor.bin (exit {:?}, stderr: {})",
-            status.status.code(),
-            String::from_utf8_lossy(&status.stderr)
-                .chars()
-                .take(200)
-                .collect::<String>()
-        ));
-    }
-    let bytes = std::fs::read(&out).map_err(|e| format!("read Editor.bin: {e}"))?;
-    log::info!(
-        "x2t converted {} bytes → Editor.bin ({} bytes) in {:?}",
-        disk.display(),
-        bytes.len(),
-        started.elapsed()
-    );
+    let is_pdf = disk
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("pdf"));
+
+    let (delivered_path, name) = if is_pdf {
+        let file_name = disk
+            .file_name()
+            .ok_or_else(|| "document path has no file name".to_string())?;
+        let target = work.join(file_name);
+        std::fs::copy(&disk, &target).map_err(|e| format!("copy original into workdir: {e}"))?;
+        (target, file_name.to_string_lossy().into_owned())
+    } else {
+        let out = work.join("Editor.bin");
+        let x2t = bridge::save::x2t_path();
+        let started = std::time::Instant::now();
+        let status = std::process::Command::new(&x2t)
+            .arg(&disk)
+            .arg(&out)
+            .output()
+            .map_err(|e| format!("spawn x2t: {e}"))?;
+        if !out.is_file() {
+            return Err(format!(
+                "x2t produced no Editor.bin (exit {:?}, stderr: {})",
+                status.status.code(),
+                String::from_utf8_lossy(&status.stderr)
+                    .chars()
+                    .take(200)
+                    .collect::<String>()
+            ));
+        }
+        log::info!(
+            "x2t converted {} bytes → Editor.bin ({} bytes) in {:?}",
+            disk.display(),
+            std::fs::metadata(&out).map(|m| m.len()).unwrap_or(0),
+            started.elapsed()
+        );
+        (out.clone(), "Editor.bin".into())
+    };
+
+    let bytes = std::fs::read(&delivered_path)
+        .map_err(|e| format!("read {}: {e}", delivered_path.display()))?;
+    log::info!("delivering {} ({} bytes) to engine", name, bytes.len());
 
     Ok(DeliverableDocument {
         folder: work.to_string_lossy().into_owned(),
-        name: "Editor.bin".into(),
+        name,
         // the engine's save-end contract derives the document name from the
         // source path — it must be the ORIGINAL file, not the workdir artifact
         src: disk.to_string_lossy().into_owned(),

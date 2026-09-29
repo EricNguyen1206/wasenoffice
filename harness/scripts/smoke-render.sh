@@ -18,7 +18,9 @@
 # 27.09 render blocker was invisible to every compile/lint gate (see
 # docs/diagnostics.md 27.09 + docs/design/D01-editor/TEST.md TC-D01-06).
 #
-# Usage: smoke-render.sh [fixture.docx]   (default: generated via make_docx.py)
+# Usage: smoke-render.sh [fixture]   (default: DOCX via make_docx.py; for
+#        xlsx/pptx/pdf pass the fixture path — the matching make_<ext>.py
+#        generates it when the file does not exist. T-048.)
 # Env:   SMOKE_TIMEOUT=240  total seconds before giving up (first cold build
 #        needs more; warm runs settle in ~30–60s).
 set -u
@@ -37,7 +39,10 @@ if lsof -nP -iTCP:1420 -sTCP:LISTEN >/dev/null 2>&1; then
 fi
 
 if [ ! -f "$FIXTURE" ]; then
-  python3 "$ROOT/harness/fixtures/make_docx.py" "$FIXTURE" || { echo "smoke: cannot generate fixture"; exit 1; }
+  EXT="${FIXTURE##*.}"
+  GEN="$ROOT/harness/fixtures/make_${EXT}.py"
+  [ -f "$GEN" ] || { echo "smoke: no fixture generator for .${EXT}"; exit 1; }
+  python3 "$GEN" "$FIXTURE" || { echo "smoke: cannot generate fixture"; exit 1; }
 fi
 
 echo "smoke: fixture=$FIXTURE log=$LOG timeout=${TIMEOUT}s"

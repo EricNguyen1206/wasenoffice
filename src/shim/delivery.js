@@ -92,28 +92,21 @@
    * stdout alone. Runs once, 8s after the document reaches the engine.
    * gate 9 signal ②: the `viewer=WxH` substring matches the smoke-render.sh
    * pattern `viewer=[0-9]+x[1-9]…` — keep verbatim.
+   * T-048: build-aware — variant/glyph/registry come from the FONT_VARIANTS
+   * row detected by desktopEditor.js (single home).
    */
   function logFontOracleState() {
     try {
-      var Wg = window.AscFonts && window.AscFonts.Wg;
-      var jM = window.AscCommon && window.AscCommon.jM;
-      var iEc = window.AscFonts && window.AscFonts.iEc;
-      var Hcc = window.AscFonts && window.AscFonts.Hcc;
-      var loaded = [];
-      if (iEc) {
-        for (var i = 0; i < iEc.length; i++) {
-          if (iEc[i].UB !== -1) loaded.push(iEc[i].Va.slice(-40) + ' UB=' + iEc[i].UB);
-        }
-      }
+      var v = core.detectFontVariant ? core.detectFontVariant() : null;
+      var fm = window.AscFonts;
+      var reg = v ? fm[v.registry] : null;
+      var mgr = v && fm ? fm[v.glyph] : null;
       var root = document.getElementById('editor_sdk') || document.body;
       var viewer = document.getElementById('id_viewer');
       var sdkBox = root.getBoundingClientRect();
-      forwardLog('info', 'font-oracle: Wg.Of=' + (Wg ? Wg.Of.length : '?')
-        + ' aVc=' + (Wg ? Object.keys(Wg.aVc || {}).length : '?')
-        + ' jM.SIa=' + (jM && jM.SIa ? jM.SIa.length : 'undef')
-        + ' jM.PVd=' + (jM && jM.PVd ? jM.PVd.length : 'undef')
-        + ' Hcc=' + (Hcc ? Hcc.length : 'undef')
-        + ' loadedFonts=' + loaded.length + (loaded.length ? ' [' + loaded.slice(0, 6).join(' | ') + ']' : '')
+      forwardLog('info', 'font-oracle: variant=' + (v ? v.loader : 'unknown')
+        + ' mgr=' + (mgr ? 'yes' : 'undef')
+        + ' streams=' + (reg ? reg.length : 'undef')
         + ' viewer=' + (viewer ? viewer.clientWidth + 'x' + viewer.clientHeight : 'none')
         + ' geom[inner=' + window.innerWidth + 'x' + window.innerHeight
         + ' editor_sdk=' + Math.round(sdkBox.width) + 'x' + Math.round(sdkBox.height) + ']');
@@ -153,14 +146,19 @@
   /**
    * Readiness predicate for the offline open (named — review C3; was inline).
    * The engine api object must exist, the wasm font engine must be fully
-   * initialized (the glyph manager, AscFonts.Wg.II, silently no-ops while its
-   * wasm handle `vue` is absent, so a font queued too early is never loaded),
-   * and the EndLoad entry must be a function. The individual fields are
-   * returned for the waiting/abort logs (kept byte-identical).
+   * initialized (the build's glyph manager silently no-ops while its wasm
+   * handle is absent, so a font queued too early is never loaded), and the
+   * EndLoad entry must be a function. T-048: the glyph-manager global + wasm
+   * handle are minified per build — taken from the detected FONT_VARIANTS
+   * row (single home in desktopEditor.js; word=Wg.vue, cell=hj.RIe,
+   * slide=mi.Zie — pdf editor reuses the word build). The individual fields
+   * are returned for the waiting/abort logs (kept byte-identical).
    */
   function engineReadiness() {
     var editorApi = window.Asc && (window.Asc.editor || window.editor);
-    var wasmReady = window.AscFonts && window.AscFonts.Wg && !!window.AscFonts.Wg.vue;
+    var v = core.detectFontVariant ? core.detectFontVariant() : null;
+    var fm = window.AscFonts;
+    var wasmReady = !!(fm && v && fm[v.glyph] && fm[v.glyph][v.wasm]);
     var endloadType = typeof window.DesktopOfflineAppDocumentEndLoad;
     return {
       ready: !!editorApi && !!wasmReady && endloadType === 'function',

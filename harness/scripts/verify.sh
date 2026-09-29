@@ -8,7 +8,7 @@ echo "▸ cargo check (src-tauri)"
 (cd src-tauri && cargo check --quiet) || fail=1
 
 echo "▸ cargo fmt --check (src-tauri)"
-(cd src-tauri && cargo fmt --check >/dev/null) || fail=1
+(cd src-tauri && cargo fmt --check) || fail=1
 
 echo "▸ cargo clippy -D warnings (src-tauri)"
 (cd src-tauri && cargo clippy --quiet -- -D warnings) || fail=1
@@ -24,6 +24,15 @@ node harness/scripts/check-docs.mjs || fail=1
 
 echo "▸ smoke render behavioral (TC-D01-06: boot app, render fixture DOCX)"
 harness/scripts/smoke-render.sh || fail=1
+
+echo "▸ smoke render xlsx (TC-E01-01: boot app, render fixture XLSX — T-048)"
+harness/scripts/smoke-render.sh /tmp/nanooffice-smoke-fixture.xlsx || fail=1
+
+echo "▸ smoke render pptx (TC-P01-01: boot app, render fixture PPTX — T-048)"
+harness/scripts/smoke-render.sh /tmp/nanooffice-smoke-fixture.pptx || fail=1
+
+echo "▸ smoke render pdf (TC-F01-01: boot app, render fixture PDF — T-048)"
+harness/scripts/smoke-render.sh /tmp/nanooffice-smoke-fixture.pdf || fail=1
 
 echo "▸ smoke save round-trip behavioral (TC-D01-10: edit → save → disk)"
 harness/scripts/smoke-save.sh || fail=1

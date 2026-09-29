@@ -248,16 +248,29 @@
   }
 
   /**
-   * Font-file loader adaptation for the FULL desktop build (PH-0).
+   * Font-file loader adaptation for the FULL desktop builds (PH-0 word, T-048
+   * cell/slide — the pdf editor reuses the word build).
    *
-   * Observed engine behavior (pinned word build): near the END of sdk-all.js
-   * the font-file loader entry (`AscFonts.sje.prototype.BSa` / LoadFontAsync)
-   * is rerouted to an async XHR of `ascdesktop://fonts/<font path>` — a scheme
-   * the CEF desktop shell intercepts natively and answers with the font bytes.
+   * Observed engine behavior (each sdkjs build, T-048): near the END of
+   * sdk-all.js the font-file loader entry (`AscFonts.<loader>.prototype.<fn>`
+   * aliased as LoadFontAsync) is rerouted to an async XHR of
+   * `ascdesktop://fonts/<font path>` — a scheme the CEF desktop shell
+   * intercepts natively and answers with the font bytes. The three builds
+   * implement the IDENTICAL contract under different minified names:
+   *
+   *   build  loader proto + fn      status  path  cb   idx-set  stream  registry  glyph.wasm
+   *   word   sje.prototype.BSa      UB      Va    sV   wOb      G2b     Hcc       Wg.vue
+   *   cell   mye.prototype.cZa      GE      Wa    TR   iXb      uac     Nmc       hj.RIe
+   *   slide  K8d.prototype.VMa      Pz      Na    gY   wFb      FTb     D3b       mi.Zie
+   *
+   * (glyph.wasm = the build's glyph-manager global + its wasm-ready handle —
+   * the readiness predicate in delivery.js consumes these fields; adding a
+   * build means one new row here and nowhere else.)
+   *
    * Observed real-shell runtime: fonts land in the engine stream registry
-   * (`AscFonts.Hcc` entries of `AscFonts.G2b`) with loader status `UB` 2 →
-   * 0 (loaded) / 1 (failed), stream index assigned via the loader's `wOb`,
-   * and the loader's callbacks fired when the bytes are in.
+   * (the build's registry array of stream objects) with loader status
+   * 2 → 0 (loaded) / 1 (failed), stream index assigned via the loader's
+   * idx-setter, and the loader's callbacks fired when the bytes are in.
    *
    * A Tauri WKWebView has no `ascdesktop://` scheme handler, so every font
    * XHR would die (CORS/unknown scheme) and the document open would wait on
@@ -267,43 +280,72 @@
    * registry/status/callback contract described above. Behavior is
    * re-implemented from runtime observation; no upstream code is copied.
    */
+  var FONT_VARIANTS = [
+    { loader: 'sje', fn: 'BSa', status: 'UB', path: 'Va', cb: 'sV', index: 'wOb', stream: 'G2b', registry: 'Hcc', glyph: 'Wg', wasm: 'vue' },
+    { loader: 'mye', fn: 'cZa', status: 'GE', path: 'Wa', cb: 'TR', index: 'iXb', stream: 'uac', registry: 'Nmc', glyph: 'hj', wasm: 'RIe' },
+    { loader: 'K8d', fn: 'VMa', status: 'Pz', path: 'Na', cb: 'gY', index: 'wFb', stream: 'FTb', registry: 'D3b', glyph: 'mi', wasm: 'Zie' },
+  ];
+
+  /** Detect the current sdkjs build's font-loader variant (null = unknown).
+   *  Published on the shared shim surface for sibling modules (delivery.js). */
+  function detectFontVariant() {
+    var fm = window.AscFonts;
+    if (!fm) return null;
+    for (var i = 0; i < FONT_VARIANTS.length; i++) {
+      var v = FONT_VARIANTS[i];
+      if (fm[v.loader] && fm[v.loader].prototype && fm[v.registry]) return v;
+    }
+    return null;
+  }
+
   function patchDesktopFontLoader() {
-    if (!(window.AscFonts && window.AscFonts.sje && window.AscFonts.Hcc
-          && window.AscFonts.sje.prototype)) {
+    if (!window.AscFonts) {
       forwardLog('warn', 'font loader patch: sdkjs font registry not found');
       return;
     }
-    var proto = window.AscFonts.sje.prototype;
+    var variant = detectFontVariant();
+    if (!variant) {
+      forwardLog('warn', 'font loader patch: no known font-loader variant in this build');
+      return;
+    }
+    var proto = window.AscFonts[variant.loader].prototype;
     if (proto.__nanooffice_patched) return;
     proto.__nanooffice_patched = true;
-    proto.BSa = function (_baseUrl, onDone) {
+    proto[variant.fn] = function (_baseUrl, onDone) {
       var self = this;
-      if (self.UB !== -1) return true; // loading (2) / loaded (0) / failed (1)
-      self.UB = 2;
-      self.sV = onDone || null;
+      if (self[variant.status] !== -1) return true; // loading (2) / loaded (0) / failed (1)
+      self[variant.status] = 2;
+      self[variant.cb] = onDone || null;
       var xhr = new XMLHttpRequest();
-      xhr.open('GET', self.Va, true); // same-origin loopback font URL
+      xhr.open('GET', self[variant.path], true); // same-origin loopback font URL
       xhr.responseType = 'arraybuffer';
       xhr.onload = function () {
         if (xhr.status !== 200 || !xhr.response) {
-          self.UB = 1; // failed (final state — the engine treats 1 as done)
+          self[variant.status] = 1; // failed (final state — the engine treats 1 as done)
           return;
         }
         var bytes = new Uint8Array(xhr.response);
-        window.AscFonts.Hcc.push(new window.AscFonts.G2b(bytes, bytes.length));
-        self.wOb(window.AscFonts.Hcc.length - 1);
-        self.UB = 0;
-        if (self.sV) { var cb = self.sV; self.sV = null; cb(); }
+        var registry = window.AscFonts[variant.registry];
+        registry.push(new window.AscFonts[variant.stream](bytes, bytes.length));
+        self[variant.index](registry.length - 1);
+        self[variant.status] = 0;
+        if (self[variant.cb]) { var cb = self[variant.cb]; self[variant.cb] = null; cb(); }
         if (self.externalCallback) self.externalCallback();
       };
       xhr.onerror = function () {
-        self.UB = 1;
-        forwardLog('warn', 'font fetch failed: ' + String(self.Va).slice(0, 110));
+        self[variant.status] = 1;
+        forwardLog('warn', 'font fetch failed: ' + String(self[variant.path]).slice(0, 110));
       };
       xhr.send();
       return false; // async load in flight
     };
-    forwardLog('info', 'desktop font loader patched for loopback delivery');
+    // sdk-all.js aliases the final loader fn onto LoadFontAsync by reference —
+    // repoint the alias so both entry names reach the patched implementation.
+    if (typeof proto.LoadFontAsync !== 'undefined') {
+      proto.LoadFontAsync = proto[variant.fn];
+    }
+    forwardLog('info', 'desktop font loader patched for loopback delivery ('
+      + variant.loader + '.' + variant.fn + ')');
   }
 
   function install() {
@@ -422,7 +464,11 @@
     // Shared plumbing for sibling shim modules: delivery.js loads AFTER this
     // file in every frame (init-script order in src-tauri/src/lib.rs, import
     // order in src/main.ts) and consumes exactly this surface. Keep minimal.
-    window.__nanooffice_shim = { tauriInvoke: tauriInvoke, forwardLog: forwardLog };
+    window.__nanooffice_shim = {
+      tauriInvoke: tauriInvoke,
+      forwardLog: forwardLog,
+      detectFontVariant: detectFontVariant,
+    };
     forwardLog('info', 'frame ready: ' + window.location.href.slice(0, 120));
   }
 

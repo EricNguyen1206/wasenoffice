@@ -26,6 +26,21 @@ const ENGINE_BOOT = {
   offlineUrlMarker: '_offline_',
 } as const;
 
+/**
+ * FILE_FORMATS — extension → engine boot params, single home (T-048).
+ * `doctype` picks the editor app on the shared boot page (api.js appMap:
+ * word→documenteditor, cell→spreadsheeteditor, slide→presentationeditor,
+ * pdf→pdfeditor); `filetype` mirrors the source extension. `isForm=false`
+ * accompanies pdf exactly like the real desktop shell's boot params.
+ * Values are the engine's public api contract, not our invention.
+ */
+const FILE_FORMATS: Record<string, { filetype: string; doctype: string; isForm?: string }> = {
+  docx: { filetype: 'docx', doctype: 'word' },
+  xlsx: { filetype: 'xlsx', doctype: 'cell' },
+  pptx: { filetype: 'pptx', doctype: 'slide' },
+  pdf: { filetype: 'pdf', doctype: 'pdf', isForm: 'false' },
+};
+
 const { invoke } = window.__TAURI__.core;
 
 // Loopback origin serving the engine + documents (Rust command).
@@ -46,24 +61,31 @@ interface OpenedDoc {
 
 async function mountEditor(doc: OpenedDoc): Promise<void> {
   const boot = await getBootPage();
+  const ext = doc.name.includes('.') ? doc.name.split('.').pop()!.toLowerCase() : '';
+  const format = FILE_FORMATS[ext];
+  if (!format) {
+    logLine(`ERROR: unsupported file extension ".${ext}" (known: ${Object.keys(FILE_FORMATS).join(' ')})`);
+    return;
+  }
   // `url` = ENGINE_BOOT.offlineUrlMarker — see ENGINE_BOOT above for why the
   // document itself never travels in this URL.
   const params = new URLSearchParams({
     url: ENGINE_BOOT.offlineUrlMarker,
     title: doc.name,
-    filetype: 'docx',
-    doctype: 'word',
+    filetype: format.filetype,
+    doctype: format.doctype,
     mode: 'edit',
     lang: navigator.language.slice(0, 2) || 'en',
     username: 'NanoOffice User',
     type: 'desktop',
   });
+  if (format.isForm) params.set('isForm', format.isForm);
   const frame = document.createElement('iframe');
   frame.id = 'editor-frame';
   frame.src = `${boot}?${params.toString()}`;
   frame.allow = 'clipboard-read; clipboard-write';
   document.getElementById('editor-root')!.replaceChildren(frame);
-  logLine(`editor booting (delivery via bridge): ${doc.name}`);
+  logLine(`editor booting (${format.doctype}): ${doc.name}`);
 }
 
 async function openPath(path: string): Promise<void> {
@@ -90,7 +112,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <header>
     <h1>NanoOffice <small>PH-0 spike</small></h1>
     <form id="open-form">
-      <input id="doc-path" type="text" placeholder="/absolute/path/to/document.docx" />
+      <input id="doc-path" type="text" placeholder="/absolute/path/to/document (.docx .xlsx .pptx .pdf)" />
       <button type="submit">Open</button>
     </form>
   </header>

@@ -49,7 +49,7 @@ fn states() -> &'static Mutex<HashMap<u32, SaveState>> {
 }
 
 /// `AVS_OFFICESTUDIO_FILE_DOCUMENT_DOCX` (value from the ONLYOFFICE core
-/// format enum; PH-1 ships docx — T-048 wires the other editor types).
+/// format enum; multi-format save = separate task — T-049, TODO.md).
 const FORMAT_DOCX: i64 = 65;
 
 /// One-shot x2t work directory for a document (shared with the open-delivery
@@ -226,7 +226,7 @@ pub fn save_document(app: &tauri::AppHandle, registry: &FileRegistry, payload: &
             Some(&disk),
             false,
             2,
-            &format!("unsupported save format {ext:?} (PH-1 ships docx — T-048 wires the rest)"),
+            &format!("unsupported save format {ext:?} (multi-format save = T-049)"),
         );
     }
 
