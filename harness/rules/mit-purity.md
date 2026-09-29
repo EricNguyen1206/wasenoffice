@@ -42,7 +42,7 @@ Rule này ràng buộc MỌI agent làm việc trong repo — agent chính lẫn
 | S6 | Đóng gói font/dictionary đi kèm upstream | license riêng từng file | `licensing.md` checklist — kiểm từng thư mục fonts lúc PH-4 |
 | S7 | Sửa trực tiếp upstream vì shim không đủ | vi phạm read-only + mất provenance | `upstream-read-only.md` — chỉ approval user mới mở đường patch |
 | S8 | Phát hành binary có nhúng engine AGPL | nghĩa vụ AGPL của component đó | `licensing.md` § phát hành: NOTICE + source offer + logo §7 |
-| S9 | Agent "giúp đỡ" viết lại engine sang Rust cho nhẹ/bịn license | scope creep, phá định hướng ★ trong vision.md | AGENTS.md § identity: cấm trong scope hiện tại; đổi scope chỉ bằng sửa `docs/vision.md` |
+| S9 | Agent "giúp đỡ" viết lại engine sang Rust cho nhẹ/bịn license | derivative AGPL nếu port/translate; scope creep nếu tự ý | Từ 29.09 QĐ9 cho phép thay thế engine **theo Track A** — nhưng chỉ clean-room: `clean-room.md` (cấm đọc code module đang thay, chỉ spec + oracle); agent không được tự mở Track A task ngoài TODO |
 
 ## Enforcement tự động (trong `harness/scripts/verify.sh`)
 
