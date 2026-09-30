@@ -169,9 +169,11 @@
    * same strings every tick (the gate greps patterns — extra occurrences are
    * harmless); each probe stops once its own signal is proven and the loop
    * ends when all three are done or PROBE_MAX_TICKS ticks have run.
+   * A second EndLoad (document reopened inside a still-running loop) restarts
+   * the loop instead of being swallowed by the guard — code-review 30.09.
    */
   function startRenderProbes() {
-    if (renderProbeTimer) return; // already running
+    if (renderProbeTimer) clearInterval(renderProbeTimer);
     var ticks = 0;
     var doneCanvas = false, doneOracle = false, doneDetail = false;
     renderProbeTimer = setInterval(function () {
