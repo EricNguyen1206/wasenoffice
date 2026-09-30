@@ -23,12 +23,17 @@ use tauri::Manager;
 
 pub mod filesrv;
 
+pub(crate) mod allfonts;
+
 pub const ENGINE_SCHEME: &str = "nanooffice-engine";
 pub const FILE_SCHEME: &str = "nanooffice-file";
 
 /// Font roots reachable through `nanooffice-engine://localhost/fonts/<root>/<enc>`.
 /// (path-prefix on disk, URL namespace segment) — mirrors the roots listed in the
 /// installed app's generated AllFonts.js (observed 22.09.2026: only these two).
+/// Since T-A11 these two roots are also what `protocol::allfonts` enumerates to
+/// GENERATE the AllFonts.js that both consumers (filesrv + `bridge::save`'s
+/// `<m_sAllFontsPath>`/`<m_sFontDir>`) read.
 const FONT_ROOTS: [(&str, &str); 2] = [
     (
         "/Applications/ONLYOFFICE.app/Contents/Resources/login/fonts/",
@@ -94,22 +99,9 @@ fn engines_root() -> Option<PathBuf> {
     None
 }
 
-/// Source of the generated font index: the installed ONLYOFFICE app enumerates
-/// system + bundled fonts on first run. We reuse the enumeration (not the files)
-/// and rewrite paths to our protocol URLs. Also the x2t save-back font dir
-/// (`bridge::save` passes it as `<m_sFontDir>`/`<m_sAllFontsPath>`).
-pub(crate) fn all_fonts_source() -> Option<PathBuf> {
-    let home = std::env::var("HOME").ok()?;
-    Some(
-        PathBuf::from(home)
-            .join("Library/Application Support/asc.onlyoffice.ONLYOFFICE/data/fonts/AllFonts.js"),
-    )
-}
-
 // ---------------------------------------------------------------------------
 // request handling helpers
 // ---------------------------------------------------------------------------
-
 struct RangeSpec {
     start: u64,
     end: u64, // inclusive
@@ -324,7 +316,7 @@ fn percent_decode(s: &str) -> String {
 // AllFonts.js generation + index.html injection
 // ---------------------------------------------------------------------------
 
-/// Rewrite absolute font paths in the app-generated AllFonts.js to
+/// Rewrite absolute font paths in an AllFonts.js text to
 /// `nanooffice-engine://localhost/fonts/<root>/<enc>` URLs.
 fn rewrite_font_paths(js: &str) -> Result<String, String> {
     let mut out = js.to_string();
@@ -356,10 +348,10 @@ fn rewrite_font_paths(js: &str) -> Result<String, String> {
 }
 
 fn generate_all_fonts_js() -> Result<Vec<u8>, String> {
-    let src = all_fonts_source().ok_or("no HOME")?;
-    let js =
-        std::fs::read_to_string(&src).map_err(|e| format!("cannot read {}: {e}", src.display()))?;
-    rewrite_font_paths(&js).map(String::into_bytes)
+    let fonts = allfonts::generated()
+        .as_ref()
+        .ok_or_else(|| "no fonts enumerated from the font roots".to_string())?;
+    rewrite_font_paths(&fonts.js_raw()).map(String::into_bytes)
 }
 
 // ---------------------------------------------------------------------------
