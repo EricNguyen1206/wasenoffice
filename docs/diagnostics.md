@@ -43,6 +43,19 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 - **Licensing:** bundle x2t = phân phối binary AGPL → khi phát hành (PH-4) theo
   `harness/rules/licensing.md` (NOTICE + source offer + logo §7); nhắc đã thêm vào TODO
   PH-4. Fonts đi kèm app KHÔNG được bundle theo (T-A11/A12 tự sinh/subset từ hệ thống).
+- **Bằng chứng subset temp-dir (bước 1 discovery):** copy subset ra `/tmp/nanooffice-ta10-subset`
+  (x2t + config + 17 fw, không templates/empty) → x2t trực tiếp convert fixture DOCX →
+  Editor.bin exit 0 (1586 B) → save from-changes bằng params XML (copy format save.rs:
+  `<m_nFormatTo>65` + fromChanges + AllFonts/font-dir từ font cache app) exit 0, output
+  25619 B, marker `T011-18961` ×1 trong `word/document.xml` — TRƯỚC khi đụng app.
+- **Code review 2 trục (30.09, sau commits):** không hard violation (MIT purity PASS —
+  engines/ không commit, không dep mới, log contract nguyên vẹn); 1 bug thật đã fix:
+  `startRenderProbes()` early-return khi timer còn chạy ⇒ EndLoad thứ 2 (reopen trong
+  vòng 120s) có 0 dòng probe — đúng bệnh T-050 ở scenario multi-open → đổi thành
+  restart (clear + chạy lại). Judgement calls ghi nhận: naming `<target>` 2 nhà
+  (Rust/script) → chi tiết test đối chiếu đã nhét vào dòng T-046; fallback path
+  app cài sẵn hardcode → T-046; env stale giờ WARN+rơi xuống bundled thay vì fail loudly
+  (điều kiện cần cho counterfactual của chính T-A10).
 - **Trạng thái:** T-A10 ✅; kế tiếp T-A11 (AllFonts tự sinh bằng Rust) — sau đó save
   params không còn phụ thuộc font cache của ONLYOFFICE.app nữa, T-A13 gate "sạch
   ONLYOFFICE" mới đủ điều kiện.
