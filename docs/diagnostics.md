@@ -8,6 +8,28 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-09-30 · Review T-048 (session chính) — công việc GREEN, nhưng bắt được gate pptx FLAKY + facts x2t cho T-A10
+
+- **Review T-048 (verified):** code diff sạch (FILE_FORMATS 1 nhà `src/main.ts:37`; PDF deliver
+  raw không x2t; FONT_VARIANTS 3 build; evidence reference.map § MULTI-FORMAT). verify.sh
+  chạy độc lập **exit 1 duy nhất vì gate pptx** — standalone rerun PASSED exit 0 (canvas
+  490x1010) → **flake, không phải regression**.
+- **Root cause flake (observed):** run fail có `contentReady=1` + `fonts=18` nhưng **0 dòng
+  probe** nào (canvas probe 6s/8s/15s + font-oracle đều im) trong 3,5 phút còn lại —
+  probe one-shot setTimeout không chạy, nghi WKWebView throttle timer khi cửa sổ bị
+  che/lost-focus giữa chuỗi 5 boot liên tiếp của verify.sh. Gate đang trông cậy vào
+  one-shot timer → thi thoảng mất tín hiệu `viewer>0`. → **T-050**: probe lặp interval
+  đến height>0, format log giữ nguyên (log contract gate 9 không đổi).
+- **Facts x2t cho T-A10 (observed 30.09, `ls` converter dir):** x2t KHÔNG phải binary đơn
+  lẻ — Mach-O arm64 + **17 framework** (kernel, graphics, doctrenderer, UnicodeConverter,
+  PdfFile, DjVuFile…) + templates + empty, tổng **323 MB**. Hệ quả: "bundle x2t" = bundle
+  cả converter dir; payload ≤100 MB của A1 không thể giữ nguyên nếu bundle trọn — T-A10
+  phải khám phá subset framework (`otool -L` hard-link vs dlopen on-demand), và nếu vẫn
+  vượt budget thì ghi thẳng + điều chỉnh scope T-A12, không fake số.
+- **Trạng thái:** T-048 giữ ✅ (4 format mở thật); T-050 sinh ra làm trước/kèm T-A10.
+
+---
+
 ## 2026-09-29 · T-048: mở XLSX/PPTX/PDF — shell wire multi-format + smoke gates 9b/9c/9d
 
 - **Kết quả (confirmed):** mở được cả 4 định dạng từ path input + `NANO_OFFICE_OPEN`.

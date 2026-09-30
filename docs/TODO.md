@@ -15,12 +15,12 @@ type: queue
 
 ## Tình hình nhanh
 
-▶ Kế tiếp: ⬜ T-A10 — A1: Bundle x2t per-platform (T-048 vừa đóng 29.09: mở được cả 4 định dạng DOCX/XLSX/PPTX/PDF + smoke gates — diagnostics 29.09)
+▶ Kế tiếp: ⬜ T-A10 — A1: Bundle x2t per-platform (T-048 đóng 29.09: mở được cả 4 định dạng + smoke gates; review 30.09 bắt gate pptx flaky → **T-050 làm trước/kèm T-A10** — chi tiết diagnostics 30.09)
 
 | Phase | Tổng | ✅ | 🟨 | ⏸ | ⬜ |
 |---|---|---|---|---|---|
 | PH-0 — ĐÃ ĐÓNG 27.09  |  6  | 6  | 0  | 0  | 0  |
-| PH-1  |  7  | 4  | 0  | 0  | 3  |
+| PH-1  |  8  | 4  | 0  | 0  | 4  |
 | PH-4  |  2  | 0  | 0  | 0  | 0  |
 | Track A (QĐ9) |  4  | 0  | 0  | 0  | 4  |
 | META  | 11  | 6  | 0  | 0  | 5  |
@@ -33,6 +33,7 @@ type: queue
 
 ## PH-1 — Vòng đời file (open/save/convert qua x2t sidecar)
 
+- [ ] ⬜ T-050 · Fix gate pptx flaky (bắt 30.09 khi review T-048): probe one-shot 6/8/15s sau EndLoad đôi khi KHÔNG chạy (0 dòng probe, nghi WKWebView timer-throttle khi boot liên tiếp) → đổi canvas/font-oracle probe thành interval lặp đến height>0 (giữ nguyên format log contract gate 9) + re-verify đủ 5 gates render · ← T-048 · evidence: diagnostics 30.09
 - [ ] ⬜ T-049 · Save multi-format (XLSX/PPTX) qua x2t from-changes: định danh format code PPTX (spec-ref `AVS_OFFICESTUDIO_FILE_*` — core chưa clone, hoặc oracle tiếp) · XLSX = **257 đã oracle-confirmed** (29.09) · 513 = export PDF (đã obs, không phải PPTX) · PPTY→PPTX cần `<m_sFontDir>`+`<m_sAllFontsPath>` (exit 80 nếu thiếu) · không truyền m_nFormatTo thì extension output quyết định (PK hợp lệ) · save PDF = pipeline khác (`localSaveToDrawingFormat`) cần điều tra riêng (OQ-F01-1) · bằng chứng: reference.map § multi-format · ← T-048
 - [ ] ⬜ T-046 · Module config `env.rs` gom `NANO_OFFICE_*` + 2 quy tắc khám phá artifact (review C5 — Speculative) · trigger: T-010 chạm sidecar config · diagnostics 27.09
 - [ ] ⬜ T-047 · Điều tra dialog lỗi "An error has occurred…" thỉnh thoảng hiện sau khi open thành công (emitter `iLa` ở viewer api riêng) · ← T-010 · diagnostics 27.09 (T-002)
