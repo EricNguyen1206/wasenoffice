@@ -152,6 +152,47 @@ black-box trên binary đã build (`otool -L`, chạy thật) — không đọc 
   (`aarch64-apple-darwin`), bảng compose từ `std::env::consts::ARCH/OS` ở
   `save.rs::target_dir_name()` — đồng bộ bảng với bundle script (rustc -vV host).
 
+## AllFonts generator — Rust thay việc app sinh (mới 30.09, T-A11, rung A1 — clean-room ĐẦU TIÊN)
+
+- **Nhà duy nhất:** `src-tauri/src/protocol/allfonts.rs` — enumerate FONT_ROOTS (2 root như app)
+  + parse sfnt std-thuần (seek-read từng table, không đọc nguyên file — TTC lớn) → 1 chuỗi
+  AllFonts.js (`js_raw`). 2 consumer: filesrv serve `rewrite_font_paths(js_raw)` (URL loopback)
+  + `bridge/save.rs` ghi `js_raw` (disk path) ra `$TMPDIR/nanooffice-allfonts/AllFonts.js` cho
+  `<m_sAllFontsPath>`/`<m_sFontDir>`. Cùng 1 chuỗi nguồn → index filesrv và x2t khớp nhau
+  **by construction** (không cần khớp thứ tự của app). `all_fonts_source()` (đọc data-dir app) ĐÃ XÓA.
+- **Format file (oracle-obs — decode byte-exact artifact của app: 557 record sạch 91283/91283
+  byte):** 5 global — `__all_fonts_js_version__=2`; `__fonts_files` (path đĩa, BOM ở đầu file);
+  `__fonts_infos` `[family, rFile, rFace, iFile, iFace, bFile, bFace, biFile, biFace]` (cặp
+  số = FILE index + FACE index trong TTC — không phải style code); `__fonts_ranges` (triplet
+  `start,end,infoIdx` vào RAW infos — optional: consumer `common/libfont/character.js:74`
+  early-return khi thiếu; phục vụ FontPickerByCharacter fallback glyph thiếu lúc render);
+  `g_fonts_selection_bin` (base64: `count` + record `[recordLen(tính cả 4 byte của chính nó),
+  nameLen+name, altCount+alts, pathLen+path, faceIdx, it, bo, fixed, panoseLen(10)+panose,
+  ur1..4, cp1..2, weight, width, famClass, fmt(1=glyf,2=CFF), avg, asc, desc, gap, xh, cap,
+  fsType]` — LE; consumer `common/libfont/map.js:722 CFontSelect::fromStream` v2 + `:1434
+  CFontsSelection.Init`). File:line sdkjs ở đây HỢP LỆ — sdkjs là consumer, không phải module
+  đang thay (rule clean-room § ngoại lệ).
+- **Đặc điểm consumer (Externals.js:636-694 `checkAllFonts`):** files → `CFontFileLoader`;
+  infos → `CFontInfo(name, infoIdx, …)`; entry `"ASCW3"` bị consumer tự skip + thay bằng font
+  symbol inline base64 (generator KHÔNG cần special-case — ASC.ttf có nameID1 = "ASCW3" như
+  font thường); style slot trỏ face index thật trong file.
+- **Rules sinh (xác nhận từ artifact, 557/557):** primary family = nameID1 pid3-e1-l0x409 →
+  pid1-e0 → pid3-e1 → first; skip primary `.`-prefixed (hidden); alt = nameID1 pid3-e1 đầu
+  tiên khác primary; slot = OS/2 fsSelection 0x20 (bold) / 0x01 (italic), thiếu OS/2 →
+  head.macStyle 0x01/0x02 (Courier.ttc: metrics = 0, weight = 0); winner (family, slot) =
+  |weight−400| min, tie → face sau. Files list chỉ chứa file có ≥1 face thắng slot.
+- **spec-ref:** OpenType spec — `name` (NameRecord: platformID, encodingID, languageID, nameID,
+  length, offset; UTF-16BE cho pid 0/3), `OS/2` (xAvgCharWidth@2, usWeightClass@4, usWidthClass@6,
+  fsType@8, sFamilyClass@30, panose@32, ulUnicodeRange@42-57, sTypoAsc/Desc/Gap@68-73,
+  ulCodePageRange@78/82, sxHeight@86, sCapHeight@88 — v1 = 86B, v2+ = 96B), `head`
+  (unitsPerEm@18, macStyle@44), `post` (isFixedPitch@12), `cmap` (format 4 segments / 12 groups).
+- **Deviations so với file app (behavior-tolerant, chi tiết diagnostics 30.09):** tie-break
+  winner lệch 27/387 family (app không chọn theo weight — nghi CoreText trait float; VD
+  `Sukhumvit Set` R = 'Semi Bold' w600 thay vì 'Text' w400); alt-name 2 face `.SF NS`;
+  superset +1 family Apple Color Emoji (bitmap-only, app skip); `__fonts_ranges` tự sinh từ
+  cmap coverage (widest-span-wins; 4370 vs 4686 triplet); Mac-Roman high-byte decode Latin-1;
+  thứ tự file walk không replica app (index self-consistent là đủ).
+
 ## Font contract FULL desktop build (mới 27.09 — quyết định cho PH-0)
 
 - **Engine (word build 9.4):** CUỐI `engines/editors/sdkjs/word/sdk-all.js` (~offset 9.9 MB)

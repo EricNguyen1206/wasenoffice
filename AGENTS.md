@@ -65,15 +65,16 @@ nanooffice/
 ## Việc còn treo
 
 Hàng đợi công việc sống ở **`docs/TODO.md`** (QĐ7 — quy tắc + dashboard ở đầu file đó).
-Điểm nổi bật hiện tại: **T-A10 đóng 30.09 — x2t bundled vào `engines/converter/<triple>/`**
-(113 MB subset: x2t + 17 framework, bỏ templates/empty/dictionaries — proven bằng chạy
-thật; script `harness/scripts/bundle-x2t.sh` committed, engines/ không commit; resolution
-env→bundled→app-WARN 1 nhà ở `save.rs::x2t_path`) — **mở + save DOCX chạy không cần env
-trỏ app cài sẵn**; còn fonts/AllFonts (T-A11/A12) trước gate "sạch ONLYOFFICE" T-A13.
-Trước đó: T-048 29.09 mở được cả 4 định dạng + T-050 30.09 fix gate pptx flaky
-(probe lặp 2s). Kế tiếp: **T-A11** (AllFonts tự sinh bằng Rust — mở màn clean-room thật
-từ rung A1, đọc `harness/rules/clean-room.md` trước) hoặc PH-1 còn lại
-(T-046/T-047/T-049 save multi-format).
+Điểm nổi bật hiện tại: **T-A11 đóng 30.09 — AllFonts.js tự sinh bằng Rust** (`src-tauri/src/protocol/allfonts.rs`:
+enumerate 2 font root + parse sfnt std-thuần, 5 global đúng format oracle-obs; 2 consumer
+filesrv + `save.rs` cùng 1 nhà; xoá `all_fonts_source()` — **runtime hết đọc data-dir của
+app cài sẵn**, counterfactual mv data-dir: render + save vẫn GREEN) — task clean-room ĐẦU
+TIÊN của Track A, phương pháp + deviations ghi `docs/reference.map.md` § AllFonts generator.
+Trước đó: T-A10 đóng 30.09 — x2t bundled vào `engines/converter/<triple>/` (113 MB,
+resolution env→bundled→app-WARN 1 nhà ở `save.rs::x2t_path`); T-048 29.09 mở được cả 4
+định dạng + T-050 30.09 fix gate pptx flaky. Kế tiếp: **T-A12** (font subset theo locale —
+best-effort sau khi user chấp nhận phình size 30.09) hoặc PH-1 còn lại
+(T-046/T-047/T-049 save multi-format); gate "sạch ONLYOFFICE" = T-A13 sau T-A12.
 - Stack đã chốt: **giữ Rust + Tauri** (re-validate 26.09 — `docs/techstack-analysis.md`).
 
 ## Khi bắt đầu một phiên làm việc

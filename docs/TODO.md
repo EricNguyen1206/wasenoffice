@@ -15,14 +15,14 @@ type: queue
 
 ## Tình hình nhanh
 
-▶ Đang làm: 🟨 T-A11 — A1: Tự sinh `AllFonts.js` bằng Rust (claim 30.09)
+▶ Kế tiếp: ⬜ T-A12 — A1: Font subset theo locale + trim engines (T-A11 đóng 30.09: AllFonts tự sinh bằng Rust, runtime hết đọc data-dir app — chi tiết diagnostics 30.09)
 
 | Phase | Tổng | ✅ | 🟨 | ⏸ | ⬜ |
 |---|---|---|---|---|---|
 | PH-0 — ĐÃ ĐÓNG 27.09  |  6  | 6  | 0  | 0  | 0  |
 | PH-1  |  8  | 5  | 0  | 0  | 3  |
 | PH-4  |  3  | 0  | 0  | 0  | 3  |
-| Track A (QĐ9) |  4  | 1  | 1  | 0  | 2  |
+| Track A (QĐ9) |  4  | 2  | 0  | 0  | 2  |
 | META  | 11  | 6  | 0  | 0  | 5  |
 
 ## PH-0 — Spike editor + render DOCX (go/no-go) — ĐÃ ĐÓNG 27.09 · verdict GO WITH CAVEAT
@@ -55,9 +55,9 @@ type: queue
 > Rung hiện tại: **A1 — tự chủ phân phối** (H1). Task Track A bắt buộc đọc
 > `harness/rules/clean-room.md` trước khi làm; roadmap đầy đủ: `docs/vision.md` QĐ9.
 
-- [ ] 🟨 T-A11 · A1: Tự sinh `AllFonts.js` bằng Rust (enumerate font hệ thống; format theo oracle-obs — không đọc data dir của app thật) · ← T-A10 · claim 30.09 · handoff `docs/handoff/ta11.md`
 - [ ] ⬜ T-A12 · A1: Font subset theo locale + trim engines (best-effort — user 30.09 **chấp nhận phình size, tự chủ ưu tiên, tối ưu sau**: budget ≤100 MB chuyển soft target, xem vision QĐ2 note; số liệu luôn ghi thẳng diagnostics) · ← T-A11
 - [ ] ⬜ T-A13 · A1: **Gate 11 "sạch ONLYOFFICE"** — round-trip open→edit→save trên máy KHÔNG cài ONLYOFFICE.app (x2t bundled + AllFonts tự sinh + fonts subset) · ← T-A12 · đích rung A1 trong vision QĐ9
+- [x] ✅ T-A11 · A1: Tự sinh `AllFonts.js` bằng Rust — clean-room ĐẦU TIÊN của Track A: `protocol/allfonts.rs` enumerate FONT_ROOTS + parse sfnt std-thuần (không thêm crate), 5 global đúng format oracle-obs (selection bin v2 decode sạch 91283/91283B); 2 consumer (filesrv + save.rs `m_sAllFontsPath`) cùng 1 nhà → index khớp by construction; xoá `all_fonts_source()` — runtime hết đọc data-dir app (counterfactual mv: render + save vẫn GREEN) · verify.sh exit 0; parity 528/528 face giao tập khớp 100% field; deviations (tie-break 27/387 family, ranges tự sinh, superset) ghi reference.map · 30.09 · fc714e0 · reference.map § AllFonts generator + diagnostics 30.09
 - [x] ✅ T-A10 · A1: Bundle x2t per-platform vào `engines/converter/<triple>/` — x2t + config + 17 framework (otool: strong-link hết, 0 weak) = **113 MB**; bỏ templates/empty/dictionaries proven bằng chạy thật; symlink `editors` fix DoctRenderer `InitNativeEditors` (exit 86); resolution 3 nhánh env→bundled→app-WARN (1 nhà `save.rs::x2t_path`) · gate 10 PASSED env-unset + counterfactual env-sai + fallback proven · script committed, engines/ không commit · 30.09 · 4f58a32 + 5dd2fdf · reference.map § Converter bundle + diagnostics 30.09
 
 ## META — harness / docs / skills

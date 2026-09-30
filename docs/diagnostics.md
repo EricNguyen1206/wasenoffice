@@ -8,6 +8,68 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-09-30 · T-A11: tự sinh AllFonts.js bằng Rust — clean-room ĐẦU TIÊN của Track A — GREEN (verify.sh exit 0 + counterfactual data-dir)
+
+- **Kết quả (confirmed):** verify.sh full **exit 0** (5 render gates + save gate) với AllFonts.js do
+  generator Rust sinh. Log save run (`/tmp/nanooffice-smoke-save-FCGB40`):
+  `[x2t] using bundled converter: …/engines/converter/aarch64-apple-darwin/x2t` +
+  `AllFonts: generated 356 files / 558 faces / 388 families / 4370 ranges → …/T/nanooffice-allfonts/AllFonts.js`;
+  params XML thực tế của x2t: `<m_sAllFontsPath>…/T/nanooffice-allfonts/AllFonts.js</m_sAllFontsPath>`
+  + `<m_sFontDir>…/nanooffice-allfonts</m_sFontDir>` (workdir `$TMPDIR/nanooffice-doc-1/params_to.xml`).
+  Save round-trip marker ×1 → changes áp dụng thật bằng file tự sinh.
+- **Counterfactual data-dir (confirmed):** `mv "$HOME/Library/Application Support/asc.onlyoffice.ONLYOFFICE/data/fonts"`
+  → `.ta11-counterfactual` (AllFonts.js của app KHÔNG tồn tại) → `smoke-render.sh` **PASSED exit 0**
+  (`/tmp/nanooffice-smoke-ZDwkP8`) + `smoke-save.sh` **PASSED exit 0** marker ×1 (`…-XTYDQx`,
+  1962→25569 B) → khôi phục nguyên trạng. Runtime không còn đọc data-dir app cho font index.
+- **Khảo artifact (oracle-obs, trước khi code):** AllFonts.js của app = 5 global:
+  `__all_fonts_js_version__=2` · `__fonts_files` (355 path) · `__fonts_infos` (387 dòng
+  `[family, rFile, rFace, iFile, iFace, bFile, bFace, biFile, biFace]` — field cặp = FILE index
+  + FACE index trong file TTC, KHÔNG phải style code; xác nhận qua `Externals.js:264 CFontInfo`
+  + `fontManager.LoadFont(fontfile, info.faceIndex, …)`) · `__fonts_ranges` (4686 triplet
+  `start,end,infoIdx`, index vào RAW infos — consumer `character.js:74`, optional: `if (!fonts) return`)
+  · `g_fonts_selection_bin` (base64; **decode sạch 91283/91283 byte, 557 record**). Schema record v2:
+  `[recordLen (tính cả 4 byte của chính nó), nameLen+name(UTF-8), altCount+alts, pathLen+path,
+  faceIdx, italic, bold, fixed, panoseLen(10)+panose, ur1..4, cp1..2, weight, width, famClass,
+  fmt, avg, asc, desc, gap, xh, cap, fsType]` — i32/i16 LE. Đối chéo: mọi record.name ∈ infos,
+  mọi record.path ∈ files, `utype == fsType` 551/551, metrics = OS/2 scale ×1000/upm trunc
+  (TNR: typo 1420/2048→693, −442→−215, gap 307→149, sxHeight 916→447, sCapHeight 1356→662,
+  xAvgCharWidth 821→400; offset sxHeight@86, sCapHeight@88 — v2+ = 96 byte, KHÔNG phải @84 như ghi nhầm spec).
+- **Rules sinh xác nhận từ data (không đọc source generator — core C++ chưa clone):**
+  (1) primary family = nameID1: pid3-e1-l0x409 → pid1-e0 → pid3-e1 → first (**557/557**);
+  (2) alt name = nameID1 pid3-e1 đầu tiên khác primary (**555/557** — lệch 2 face .SF NS);
+  (3) slot R/I/B/BI = fsSelection bits 0x20/0x01; thiếu OS/2 → head.macStyle 0x01/0x02
+  (Courier.ttc: 4 face macStyle 0-3 → đủ 4 slot, mọi metric = 0, weight = 0);
+  (4) primary bắt đầu `.` → skip (hidden — `.Apple SD Gothic NeoI`);
+  (5) file chỉ vào list khi ≥1 face thắng slot; (6) winner per (family, slot) = |weight−400| min.
+- **So sánh font cũ (app) vs mới (generator):** 528/528 face GIAO TẬP khớp **100% mọi field**
+  (name, alt, it, bo, weight, format); files 355→356, faces 557→558, families 387→388.
+  Deviations ghi nhận: (a) tie-break lệch 27/387 family — app chọn face cùng-slot KHÔNG theo
+  weight (nghi CoreText weight-trait float; VD `Sukhumvit Set` R = 'Semi Bold' w600 thay vì
+  'Text' w400) — của tôi chọn face gần 400 nhất (đúng typographic hơn), behavior-tolerant vì
+  slot vẫn trỏ face hợp lệ của family; (b) alt 2 face `.SF NS`; (c) superset +1: Apple Color
+  Emoji (bitmap-only, app skip); (d) `__fonts_ranges` tự sinh từ cmap f4/f12 của font mình
+  (widest-span-wins; 4370 vs 4686 triplet — mechanism tương đương); (e) 31 file đĩa không có
+  trong artifact app (enumerate 21.09 + skip rule riêng của app — không replica được, superset vô hại).
+- **Index filesrv vs x2t (câu hỏi handoff):** 2 consumer không cần khớp thứ tự với app — cần
+  khớp NHAU. Resolve **by construction**: filesrv serve `rewrite_font_paths(js_raw)` (URL
+  loopback), save.rs nhận chính `js_raw` (disk path) từ CÙNG chuỗi nguồn → index trùng khớp.
+  Behavioral proof: gate 10 marker ×1 bằng file tự sinh (x2t parse được — kể cả selection bin).
+- **Code chạm:** `src-tauri/src/protocol/allfonts.rs` (MỚI — generator 1 nhà: walk FONT_ROOTS,
+  parse sfnt std-thuần name/OS2/head/post/cmap bằng seek-read từng table (không đọc nguyên
+  file — TTC lớn), OnceLock 1 lần/run, `ensure_written()` ghi 1 file temp; 8 unit test gồm
+  synthetic sfnt in-memory + selection-bin round-trip + base64 RFC vectors) ·
+  `protocol/mod.rs` (`all_fonts_source()` XÓA — hết đọc data-dir app; `generate_all_fonts_js()`
+  từ generator + `rewrite_font_paths` giữ nguyên) · `bridge/save.rs` (`m_sAllFontsPath`/
+  `m_sFontDir` trỏ `ensure_written()`). KHÔNG thêm crate (base64 + UTF-16BE tự viết;
+  Mac-Roman high-byte decode Latin-1 — deviation nhỏ, tên primary thực tế đều ASCII).
+  Log contract gate 9/10 không đổi.
+- **Trạng thái:** T-A11 ✅; kế tiếp T-A12 (font subset + trim ≤100 MB) rồi T-A13 (gate "sạch
+  ONLYOFFICE" trên máy không cài app). Tham chiếu runtime tới ONLYOFFICE.app còn lại: (1) FILE
+  fonts trong `login/fonts` (T-A12), (2) fallback path x2t + hằng số khác (T-046), (3) upstream
+  submodule (D1 — giữ tới A6).
+
+---
+
 ## 2026-09-30 · User quyết budget A1: chấp nhận phình size — tự chủ ưu tiên, tối ưu sau
 
 - **Quyết định (user, 30.09):** sau khi T-A10 ghi thẳng x2t subset 113 MB (17 framework
