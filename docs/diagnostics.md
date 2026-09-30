@@ -27,6 +27,14 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   phải khám phá subset framework (`otool -L` hard-link vs dlopen on-demand), và nếu vẫn
   vượt budget thì ghi thẳng + điều chỉnh scope T-A12, không fake số.
 - **Trạng thái:** T-048 giữ ✅ (4 format mở thật); T-050 sinh ra làm trước/kèm T-A10.
+- **Fix landed (T-050, 30.09, commit eec769d):** canvas probe + font-oracle + canvas
+  probe-2 chuyển từ one-shot 6/8/15s sang **interval lặp 2s (tối đa 60 tick ≈ 120s —
+  nằm trong timeout gate 240s), dừng sớm khi canvas/viewer height>0** (`startRenderProbes`
+  trong `src/shim/delivery.js`); interval bị throttle chỉ chậm lại, không bị drop như
+  one-shot. Chuỗi log giữ nguyên verbatim (pattern grep gate 9 không đụng — thêm
+  occurrence vô hại). Chứng minh: `smoke-render.sh` pptx **×3 liên tiếp PASSED exit 0**
+  (11:24–11:25 UTC, logs `/tmp/nanooffice-smoke-WD2VtQ`/`-vdIDVm`/`-tMKgxE`, canvas
+  490×1010) + docx regression PASSED (`-R8K1lL`, 2302×958).
 
 ---
 

@@ -15,14 +15,14 @@ type: queue
 
 ## Tình hình nhanh
 
-▶ Kế tiếp: ⬜ T-A10 — A1: Bundle x2t per-platform (T-048 đóng 29.09: mở được cả 4 định dạng + smoke gates; review 30.09 bắt gate pptx flaky → **T-050 làm trước/kèm T-A10** — chi tiết diagnostics 30.09)
+▶ Đang làm: 🟨 T-A10 (30.09) — A1: Bundle x2t per-platform vào `engines/converter/` (T-050 đóng 30.09: probe lặp, pptx ×3 GREEN — chi tiết diagnostics 30.09; handoff `docs/handoff/ta10.md`)
 
 | Phase | Tổng | ✅ | 🟨 | ⏸ | ⬜ |
 |---|---|---|---|---|---|
 | PH-0 — ĐÃ ĐÓNG 27.09  |  6  | 6  | 0  | 0  | 0  |
-| PH-1  |  8  | 4  | 0  | 0  | 4  |
+| PH-1  |  8  | 5  | 0  | 0  | 3  |
 | PH-4  |  2  | 0  | 0  | 0  | 0  |
-| Track A (QĐ9) |  4  | 0  | 0  | 0  | 4  |
+| Track A (QĐ9) |  4  | 0  | 1  | 0  | 3  |
 | META  | 11  | 6  | 0  | 0  | 5  |
 
 ## PH-0 — Spike editor + render DOCX (go/no-go) — ĐÃ ĐÓNG 27.09 · verdict GO WITH CAVEAT
@@ -33,7 +33,6 @@ type: queue
 
 ## PH-1 — Vòng đời file (open/save/convert qua x2t sidecar)
 
-- [ ] ⬜ T-050 · Fix gate pptx flaky (bắt 30.09 khi review T-048): probe one-shot 6/8/15s sau EndLoad đôi khi KHÔNG chạy (0 dòng probe, nghi WKWebView timer-throttle khi boot liên tiếp) → đổi canvas/font-oracle probe thành interval lặp đến height>0 (giữ nguyên format log contract gate 9) + re-verify đủ 5 gates render · ← T-048 · evidence: diagnostics 30.09
 - [ ] ⬜ T-049 · Save multi-format (XLSX/PPTX) qua x2t from-changes: định danh format code PPTX (spec-ref `AVS_OFFICESTUDIO_FILE_*` — core chưa clone, hoặc oracle tiếp) · XLSX = **257 đã oracle-confirmed** (29.09) · 513 = export PDF (đã obs, không phải PPTX) · PPTY→PPTX cần `<m_sFontDir>`+`<m_sAllFontsPath>` (exit 80 nếu thiếu) · không truyền m_nFormatTo thì extension output quyết định (PK hợp lệ) · save PDF = pipeline khác (`localSaveToDrawingFormat`) cần điều tra riêng (OQ-F01-1) · bằng chứng: reference.map § multi-format · ← T-048
 - [ ] ⬜ T-046 · Module config `env.rs` gom `NANO_OFFICE_*` + 2 quy tắc khám phá artifact (review C5 — Speculative) · trigger: T-010 chạm sidecar config · diagnostics 27.09
 - [ ] ⬜ T-047 · Điều tra dialog lỗi "An error has occurred…" thỉnh thoảng hiện sau khi open thành công (emitter `iLa` ở viewer api riêng) · ← T-010 · diagnostics 27.09 (T-002)
@@ -41,6 +40,7 @@ type: queue
 - [x] ✅ T-010 · Open/save/convert end-to-end qua x2t sidecar — **SAVE DOCX round-trip GREEN** (mở → `asc_AddText`+`asc_Save` probe → file gốc 1962→25613 B chứa text trong `word/document.xml` → reopen render GREEN; verify.sh exit 0) · 28.09 · a9e69d7 · contract: reference.map § Desktop save contract, diagnostics 28.09
 - [x] ✅ T-011 · Round-trip test tự động trong verify.sh — gate 10 `smoke-save.sh` edit→save→disk (fixture fresh + marker random `NANO_OFFICE_SAVE_PROBE`; TC-D01-11 GREEN: standalone ×2 exit 0 + counterfactual probe-tắt exit 1 đúng kỳ vọng) · 28.09 · 7ba9150 · diagnostics 28.09
 - [x] ✅ T-048 · Wire entry XLSX/PPTX/PDF — **mở được cả 4 định dạng** (map `FILE_FORMATS` 1 nhà trong main.ts: xlsx→cell/pptx→slide/pdf→pdf+isForm=false; PDF không qua x2t — deliver file gốc, oracle CDP app thật; shim font-loader generalise 3 build) · smoke gates xlsx/pptx/pdf trong verify.sh exit 0 + negative proven + gates docx/save regression GREEN · màn E01/P01/F01 đăng ký + DD/TEST · 29.09 · 7725690 · diagnostics 29.09
+- [x] ✅ T-050 · Fix gate pptx flaky — probe one-shot 6/8/15s → **interval lặp 2s ×60 (dừng sớm khi canvas height>0)**, chuỗi log contract gate 9 giữ nguyên verbatim · chứng minh pptx ×3 liên tiếp PASSED exit 0 + docx regression GREEN · 30.09 · eec769d · diagnostics 30.09 ("fix landed")
 
 ## PH-4 — Đóng gói + updater (trigger: PH-2 xong)
 
@@ -54,7 +54,7 @@ type: queue
 > Rung hiện tại: **A1 — tự chủ phân phối** (H1). Task Track A bắt buộc đọc
 > `harness/rules/clean-room.md` trước khi làm; roadmap đầy đủ: `docs/vision.md` QĐ9.
 
-- [ ] ⬜ T-A10 · A1: Bundle x2t per-platform vào `engines/converter/` (rút tham chiếu runtime đầu tiên khỏi ONLYOFFICE.app — còn fonts/AllFonts) · ← T-048 · QĐ9
+- [ ] 🟨 T-A10 (30.09) · A1: Bundle x2t per-platform vào `engines/converter/` (rút tham chiếu runtime đầu tiên khỏi ONLYOFFICE.app — còn fonts/AllFonts) · ← T-048 · QĐ9 · handoff: `docs/handoff/ta10.md`
 - [ ] ⬜ T-A11 · A1: Tự sinh `AllFonts.js` bằng Rust (enumerate font hệ thống; format theo oracle-obs — không đọc data dir của app thật) · ← T-A10
 - [ ] ⬜ T-A12 · A1: Font subset theo locale + trim engines 313 MB → ≤100 MB (nuốt T-040) · ← T-A11
 - [ ] ⬜ T-A13 · A1: **Gate 11 "sạch ONLYOFFICE"** — round-trip open→edit→save trên máy KHÔNG cài ONLYOFFICE.app (x2t bundled + AllFonts tự sinh + fonts subset) · ← T-A12 · đích rung A1 trong vision QĐ9
