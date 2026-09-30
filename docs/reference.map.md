@@ -111,6 +111,47 @@ Bản đồ format cho shell (bằng chứng từng dòng ở cột 3). Map ở 
   cần `<m_sAllFontsPath>`/`<m_sFontDir>` như DOCX (thiếu → `DoctRenderer error code=open`,
   exit 80 — cùng signature bài học T-010).
 
+## Converter bundle (x2t) — layout + runtime deps (mới 30.09, T-A10, rung A1)
+
+Mục tiêu: rút tham chiếu runtime ĐẦU TIÊN khỏi ONLYOFFICE.app cài sẵn — bundle converter
+vào `engines/converter/<target>/` (script: `harness/scripts/bundle-x2t.sh`, committed;
+nội dung engines/ KHÔNG commit — mit-purity điều 4). Mọi nhận định dưới đây là quan sát
+black-box trên binary đã build (`otool -L`, chạy thật) — không đọc source core.
+
+- **x2t strong-link cả 17 framework** (otool -L `…/converter/x2t` 30.09): mọi
+  `@rpath/<fw>.framework` là LC_LOAD_DYLIB thường, **0 LC_LOAD_WEAK_DYLIB** → dyld cần đủ
+  17 lúc load; graph deps khép kín trong 17 (không framework nào trỏ ra ngoài hệ) →
+  hypothesis "framework on-demand qua dlopen" bị PHỦ ĐỊNH ở mức dylib. Danh sách pin
+  trong bundle-x2t.sh (thiếu 1 → script thoát lỗi, không bundle nửa vời).
+- **Subset đã bỏ được (chạy thật 30.09, exit 0):** `templates/` (207 MB — templates
+  tạo-file-mới per-locale, không cần cho open→edit→save file có sẵn) + `empty/` (2.9 MB)
+  + `dictionaries/` (spell only). Không có cả 3 trong app cài sẵn thì không so sánh được —
+  bằng chứng là bundle thiếu cả 3 vẫn convert + save from-changes GREEN.
+- **DoctRenderer layout contract (root cause fix):** save from-changes chạy DoctRenderer
+  trong x2t, load script theo `DoctRenderer.config` cạnh binary: `../editors/sdkjs/common/
+  Native/native.js` (định nghĩa `window.InitNativeEditors` — thiếu → exit 86 `TypeError:
+  window.InitNativeEditors is not a function`), `jquery_native.js`, xregexp. Trong app
+  cài sẵn `../editors` = `Resources/editors`; trong engines/ thì editors build nằm ở
+  `engines/editors` (sibling của converter/, không phải của `<target>/`) → bundle script
+  tạo symlink `engines/converter/editors → ../editors` để giữ nguyên relative layout.
+  `<allfonts>` trong config trỏ `../../editors/sdkjs/common/AllFonts.js` — file chưa
+  tồn tại ở engines (T-A11 tự sinh); save params XML vẫn truyền
+  `<m_sAllFontsPath>`/`<m_sFontDir>` từ font cache app (all_fonts_source) nên save GREEN.
+- **Đo size (oracle-obs `du`, 30.09):** converter dir app = 323 MB (templates 207 ·
+  x2t 42 · UnicodeConverter 31 · graphics 14 · PdfFile 7.2 · IWorkFile 5.3 · empty 2.9 ·
+  HWPFile 2.7 · HtmlFile2 2.2 · ooxmlsignature 2.1 · kernel 1.4 · DjVuFile 1.2 ·
+  doctrenderer 1.0 · Fb2File 1.0 · DocxRenderer 0.66 · StarMathConverter 0.42 ·
+  XpsFile 0.26 · OFDFile 0.23 · kernel_network 0.22 · EpubFile 0.17). Bundle subset
+  (x2t + config + 17 fw) = **113 MB** — VƯỢT budget ≤100 MB của rung A1 (QĐ9/vision §2);
+  trim còn lại thuộc T-A12 (UnicodeConverter 31 MB + x2t 42 MB là 2 mục tiêu lớn nhất;
+  đề xuất re-baseline budget ở diagnostics — không tự sửa vision).
+- **Resolution x2t path (1 nhà: `save.rs::x2t_path()`, cả open-delivery lẫn save đều
+  gọi):** env `NANO_OFFICE_X2T` (chỉ nhận khi file tồn tại — env sai → WARN + rơi xuống
+  nhánh sau) → bundled `engines/converter/<target>/x2t` (walk ancestors từ exe dir + cwd)
+  → app cài sẵn (log WARN — dependency đang rút). `<target>` = triple rustc host
+  (`aarch64-apple-darwin`), bảng compose từ `std::env::consts::ARCH/OS` ở
+  `save.rs::target_dir_name()` — đồng bộ bảng với bundle script (rustc -vV host).
+
 ## Font contract FULL desktop build (mới 27.09 — quyết định cho PH-0)
 
 - **Engine (word build 9.4):** CUỐI `engines/editors/sdkjs/word/sdk-all.js` (~offset 9.9 MB)

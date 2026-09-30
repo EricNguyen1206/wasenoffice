@@ -8,6 +8,47 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-09-30 · T-A10: bundle x2t vào engines/converter/ — GREEN, 113 MB vượt budget 100 MB (ghi thẳng)
+
+- **Kết quả (confirmed):** mở + save DOCX chạy bằng x2t BUNDLED không cần env — gate 10
+  PASSED exit 0 (`/tmp/nanooffice-smoke-save-TnT1Ki`, marker `T011-30194`, 1962→25619 B,
+  marker ×1), log `[x2t] using bundled converter: …/engines/converter/aarch64-apple-darwin/x2t`
+  ×2 (open convert + save). Counterfactual: `NANO_OFFICE_X2T=/nonexistent/bogus-x2t` →
+  WARN "points to a missing file — ignoring" → vẫn PASSED bằng bundled
+  (`-Z1vBWr`). Nhánh fallback: dời `engines/converter` tạm → gate 9 docx vẫn GREEN với
+  WARN "falling back to the installed ONLYOFFICE.app" (`/tmp/nanooffice-smoke-11YLqW`).
+- **Discovery framework (otool -L, 30.09):** x2t strong-link CẢ 17 framework
+  (LC_LOAD_DYLIB, 0 weak); graph khép kín → không có on-demand ở mức dylib (phủ định
+  hypothesis handoff). Subset bỏ được bằng chạy thật: `templates/` 207 MB + `empty/`
+  2.9 MB + `dictionaries/` — **bundle = x2t + DoctRenderer.config + 17 fw = 113 MB**
+  (bảng size từng phần: reference.map § Converter bundle). Vượt budget ≤100 MB của
+  A1 — **không fake số**: trim thuộc T-A12 (UnicodeConverter 31 MB + x2t 42 MB là mục
+  tiêu lớn); nếu subset tối tiểu mà vẫn >100 MB thì budget A1 cần RE-BASELINE ở vision
+  QĐ2 — ĐỀ XUẤT để user quyết, không tự sửa.
+- **Root cause save fail đầu tiên (reproduced → fixed):** bundled x2t save from-changes
+  exit 86 `TypeError: window.InitNativeEditors is not a function` — DoctRenderer trong
+  x2t load script theo `DoctRenderer.config` cạnh binary với relative `../editors/…`
+  (`native.js` định nghĩa `InitNativeEditors`); app cài sẵn resolve → `Resources/editors`,
+  engines/ thì editors build ở `engines/editors` (sibling của converter/, không phải
+  `<target>/`) → bundle script tạo symlink `engines/converter/editors → ../editors`
+  (guard: thiếu `engines/editors/sdkjs` → script thoát lỗi). Sau symlink: save trực tiếp
+  exit 0, output 25619 B hợp lệ, marker ×1 trong `word/document.xml` (changes áp dụng
+  thật, không drop).
+- **Code chạm:** `harness/scripts/bundle-x2t.sh` (MỚI — script committed, nội dung
+  engines/ không commit) · `src-tauri/src/bridge/save.rs` (resolution 3 nhánh: env→
+  bundled→app WARN; env chỉ nhận khi file tồn tại; `target_dir_name()` compose từ
+  `std::env::consts::ARCH/OS` — đồng bộ với `rustc -vV host` của script). 2 điểm dùng
+  x2t (lib.rs open-delivery + save.rs LocalFileSave) đều đi qua `x2t_path()` — 1 nhà
+  duy nhất, T-046 env.rs không bị mở scope.
+- **Licensing:** bundle x2t = phân phối binary AGPL → khi phát hành (PH-4) theo
+  `harness/rules/licensing.md` (NOTICE + source offer + logo §7); nhắc đã thêm vào TODO
+  PH-4. Fonts đi kèm app KHÔNG được bundle theo (T-A11/A12 tự sinh/subset từ hệ thống).
+- **Trạng thái:** T-A10 ✅; kế tiếp T-A11 (AllFonts tự sinh bằng Rust) — sau đó save
+  params không còn phụ thuộc font cache của ONLYOFFICE.app nữa, T-A13 gate "sạch
+  ONLYOFFICE" mới đủ điều kiện.
+
+---
+
 ## 2026-09-30 · Review T-048 (session chính) — công việc GREEN, nhưng bắt được gate pptx FLAKY + facts x2t cho T-A10
 
 - **Review T-048 (verified):** code diff sạch (FILE_FORMATS 1 nhà `src/main.ts:37`; PDF deliver

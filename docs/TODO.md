@@ -15,14 +15,14 @@ type: queue
 
 ## Tình hình nhanh
 
-▶ Đang làm: 🟨 T-A10 (30.09) — A1: Bundle x2t per-platform vào `engines/converter/` (T-050 đóng 30.09: probe lặp, pptx ×3 GREEN — chi tiết diagnostics 30.09; handoff `docs/handoff/ta10.md`)
+▶ Kế tiếp: ⬜ T-A11 — A1: Tự sinh `AllFonts.js` bằng Rust (T-A10 đóng 30.09: x2t bundled 113 MB, save GREEN không cần app cài sẵn — chi tiết diagnostics 30.09)
 
 | Phase | Tổng | ✅ | 🟨 | ⏸ | ⬜ |
 |---|---|---|---|---|---|
 | PH-0 — ĐÃ ĐÓNG 27.09  |  6  | 6  | 0  | 0  | 0  |
 | PH-1  |  8  | 5  | 0  | 0  | 3  |
-| PH-4  |  2  | 0  | 0  | 0  | 0  |
-| Track A (QĐ9) |  4  | 0  | 1  | 0  | 3  |
+| PH-4  |  3  | 0  | 0  | 0  | 3  |
+| Track A (QĐ9) |  4  | 1  | 0  | 0  | 3  |
 | META  | 11  | 6  | 0  | 0  | 5  |
 
 ## PH-0 — Spike editor + render DOCX (go/no-go) — ĐÃ ĐÓNG 27.09 · verdict GO WITH CAVEAT
@@ -44,6 +44,7 @@ type: queue
 
 ## PH-4 — Đóng gói + updater (trigger: PH-2 xong)
 
+- [ ] ⬜ T-051 · Nhắc licensing khi bundle AGPL trong installer (mở từ T-A10 30.09): bundle x2t = phân phối binary AGPL → NOTICE + source offer + logo §7 theo `harness/rules/licensing.md` § phát hành; fonts đi kèm app KHÔNG bundle theo (T-A11/A12 tự sinh/subset) · ← T-A10
 - [ ] 🚫 T-040 · ~~Trim engines payload 313 MB → ≤100 MB~~ gộp vào Track A **T-A12** theo QĐ9 (29.09) — nằm trong rung A1
 - [ ] 🚫 T-041 · ~~Quyết bundle vs download-first~~ gộp vào **T-A10** (A1 buộc bundle x2t) + PH-4 packaging (câu hỏi download-first còn lại áp cho toàn engine) theo QĐ9
 
@@ -54,10 +55,10 @@ type: queue
 > Rung hiện tại: **A1 — tự chủ phân phối** (H1). Task Track A bắt buộc đọc
 > `harness/rules/clean-room.md` trước khi làm; roadmap đầy đủ: `docs/vision.md` QĐ9.
 
-- [ ] 🟨 T-A10 (30.09) · A1: Bundle x2t per-platform vào `engines/converter/` (rút tham chiếu runtime đầu tiên khỏi ONLYOFFICE.app — còn fonts/AllFonts) · ← T-048 · QĐ9 · handoff: `docs/handoff/ta10.md`
 - [ ] ⬜ T-A11 · A1: Tự sinh `AllFonts.js` bằng Rust (enumerate font hệ thống; format theo oracle-obs — không đọc data dir của app thật) · ← T-A10
-- [ ] ⬜ T-A12 · A1: Font subset theo locale + trim engines 313 MB → ≤100 MB (nuốt T-040) · ← T-A11
+- [ ] ⬜ T-A12 · A1: Font subset theo locale + trim engines 313 MB → ≤100 MB (nuốt T-040) — bundle x2t tối tiểu đã 113 MB (30.09) → budget A1 cần re-baseline nếu subset đã tối tiểu: đề xuất ở diagnostics, chờ user · ← T-A11
 - [ ] ⬜ T-A13 · A1: **Gate 11 "sạch ONLYOFFICE"** — round-trip open→edit→save trên máy KHÔNG cài ONLYOFFICE.app (x2t bundled + AllFonts tự sinh + fonts subset) · ← T-A12 · đích rung A1 trong vision QĐ9
+- [x] ✅ T-A10 · A1: Bundle x2t per-platform vào `engines/converter/<triple>/` — x2t + config + 17 framework (otool: strong-link hết, 0 weak) = **113 MB**; bỏ templates/empty/dictionaries proven bằng chạy thật; symlink `editors` fix DoctRenderer `InitNativeEditors` (exit 86); resolution 3 nhánh env→bundled→app-WARN (1 nhà `save.rs::x2t_path`) · gate 10 PASSED env-unset + counterfactual env-sai + fallback proven · script committed, engines/ không commit · 30.09 · 4f58a32 + 5dd2fdf · reference.map § Converter bundle + diagnostics 30.09
 
 ## META — harness / docs / skills
 
