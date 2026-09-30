@@ -59,11 +59,68 @@ pub fn workdir_for(id: u32) -> PathBuf {
     std::env::temp_dir().join(format!("nanooffice-doc-{id}"))
 }
 
-/// x2t sidecar binary (env override for tests / custom builds).
+/// x2t sidecar binary — resolution order (T-A10, Track A rung A1):
+/// 1. env `NANO_OFFICE_X2T` (tests / custom builds) — honored only when the
+///    file exists, so a bogus value falls through to the bundled converter
+///    (the T-A10 counterfactual relies on that)
+/// 2. bundled converter: `engines/converter/<target>/x2t` (created by
+///    `harness/scripts/bundle-x2t.sh`), found by walking up from the exe dir
+///    and the cwd — dev trees have the repo root 3 levels above target/debug
+/// 3. installed ONLYOFFICE.app fallback — logged as WARN: this is the exact
+///    runtime dependency rung A1 is pulling out
 pub fn x2t_path() -> String {
-    std::env::var("NANO_OFFICE_X2T").unwrap_or_else(|_| {
-        "/Applications/ONLYOFFICE.app/Contents/Resources/converter/x2t".to_string()
-    })
+    if let Ok(p) = std::env::var("NANO_OFFICE_X2T") {
+        if !p.is_empty() {
+            if Path::new(&p).is_file() {
+                return p;
+            }
+            log::warn!("x2t: NANO_OFFICE_X2T points to a missing file ({p}) — ignoring");
+        }
+    }
+    if let Some(p) = find_bundled_x2t() {
+        return p;
+    }
+    log::warn!(
+        "x2t: bundled converter engines/converter/{}/x2t not found — falling back to the installed ONLYOFFICE.app (A1 runtime dependency to remove)",
+        target_dir_name()
+    );
+    "/Applications/ONLYOFFICE.app/Contents/Resources/converter/x2t".to_string()
+}
+
+/// `engines/converter/<target>` dir name — composed from std::env::consts.
+/// Single home for the naming rule: `harness/scripts/bundle-x2t.sh` derives
+/// the same name from `rustc -vV` host at bundle time — keep the two in sync.
+fn target_dir_name() -> String {
+    let arch = std::env::consts::ARCH;
+    match std::env::consts::OS {
+        "macos" => format!("{arch}-apple-darwin"),
+        "linux" => format!("{arch}-unknown-linux-gnu"),
+        "windows" => format!("{arch}-pc-windows-msvc"),
+        os => format!("{arch}-{os}"),
+    }
+}
+
+/// Walk up from the exe dir and the cwd looking for
+/// `engines/converter/<target>/x2t`. Returns the path and logs it — gate 10
+/// evidence that the save used the bundled converter (smoke-save.sh keeps the
+/// full log).
+fn find_bundled_x2t() -> Option<String> {
+    let rel = format!("engines/converter/{}/x2t", target_dir_name());
+    let mut roots: Vec<PathBuf> = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        roots.extend(exe.ancestors().skip(1).map(Path::to_path_buf));
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        roots.extend(cwd.ancestors().map(Path::to_path_buf));
+    }
+    for root in roots {
+        let cand = root.join(&rel);
+        if cand.is_file() {
+            log::info!("[x2t] using bundled converter: {}", cand.display());
+            return Some(cand.to_string_lossy().into_owned());
+        }
+    }
+    None
 }
 
 fn changes_path(work: &Path) -> PathBuf {
