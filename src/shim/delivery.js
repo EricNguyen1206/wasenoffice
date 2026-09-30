@@ -74,6 +74,13 @@
   var RETRY_INTERVAL_MS = 500;  // consume-retry poll
   var RETRY_MAX = 120;          // ×500ms ⇒ the 60s ceiling named in the abort log
   var HOP_GUARD = 6;            // DOWN hops ceiling before a payload is dropped
+  // Render-probe cadence (T-050): the one-shot timers (6/8/15s) were swallowed
+  // whole by WKWebView timer throttling on back-to-back boots — diagnostics
+  // 30.09 saw a failed gate run with 0 probe lines. An interval is at worst
+  // slowed down, never dropped; 60 × 2s stays inside the 240s gate timeout.
+  var PROBE_INTERVAL_MS = 2000;
+  var PROBE_MAX_TICKS = 60;
+  var renderProbeTimer = null;  // T-050 repeating render-probe interval (engine frame)
 
   var DOWN_TYPE = '__nanooffice_down'; // main frame → engine frame (document delivery)
 
@@ -89,11 +96,13 @@
   /**
    * PH-0 oracle probe: dump the same font-pipeline fields observed in the real
    * app via CDP (docs/diagnostics.md) so the two runtimes can be diffed from
-   * stdout alone. Runs once, 8s after the document reaches the engine.
+   * stdout alone. T-050: no longer one-shot — called every tick of
+   * startRenderProbes until the viewer has real height.
    * gate 9 signal ②: the `viewer=WxH` substring matches the smoke-render.sh
    * pattern `viewer=[0-9]+x[1-9]…` — keep verbatim.
    * T-048: build-aware — variant/glyph/registry come from the FONT_VARIANTS
    * row detected by desktopEditor.js (single home).
+   * Returns true once the viewer has height>0 (signal ② proven).
    */
   function logFontOracleState() {
     try {
@@ -110,9 +119,71 @@
         + ' viewer=' + (viewer ? viewer.clientWidth + 'x' + viewer.clientHeight : 'none')
         + ' geom[inner=' + window.innerWidth + 'x' + window.innerHeight
         + ' editor_sdk=' + Math.round(sdkBox.width) + 'x' + Math.round(sdkBox.height) + ']');
+      return !!viewer && viewer.clientHeight > 0;
     } catch (e) {
       forwardLog('error', 'font-oracle probe failed: ' + e);
+      return false;
     }
+  }
+
+  /**
+   * One canvas-probe tick. gate 9 signal ② fallback: the `canvas probe` prefix
+   * matches the smoke-render.sh pattern `canvas probe.*[0-9]+x[1-9]…` — keep
+   * verbatim. `detailed` is the canvas probe-2 variant (per-canvas ids + editor
+   * state, same string as the pre-T-050 one-shot). Returns true once some
+   * canvas has real height (render proven).
+   */
+  function logCanvasProbe(prefix, detailed) {
+    try {
+      var root = document.getElementById('editor_sdk') || document.body;
+      var canvases = root.querySelectorAll('canvas');
+      var info = [];
+      var anyTall = false;
+      for (var i = 0; i < canvases.length; i++) {
+        if (canvases[i].height > 0) anyTall = true;
+        if (detailed) {
+          info.push('#' + i + ':' + canvases[i].id + ' ' + canvases[i].width + 'x' + canvases[i].height);
+        } else if (i < 4) {
+          info.push(canvases[i].width + 'x' + canvases[i].height);
+        }
+      }
+      if (detailed) {
+        var ed = window.Asc && (window.Asc.editor || window.editor);
+        forwardLog('info', prefix + ' (' + root.id + '): ' + canvases.length + ' canvas(es) ' + info.join(' ')
+          + ' | editor state: isDocumentContentReady=' + (ed && ed.isDocumentContentReady ? ed.isDocumentContentReady() : '?'));
+      } else {
+        forwardLog('info', prefix + ' (' + root.id + '): ' + canvases.length + ' canvas(es) ' + info.join(' '));
+      }
+      return anyTall;
+    } catch (e) {
+      forwardLog('error', prefix + ' failed: ' + e);
+      return false;
+    }
+  }
+
+  /**
+   * T-050 render-probe loop: the three probes (canvas probe, font-oracle,
+   * canvas probe-2) used to fire once at 6/8/15s after EndLoad and WKWebView
+   * sometimes dropped them whole (0 probe lines in a failed gate run —
+   * diagnostics 30.09). Now they repeat on a 2s interval, logging the EXACT
+   * same strings every tick (the gate greps patterns — extra occurrences are
+   * harmless); each probe stops once its own signal is proven and the loop
+   * ends when all three are done or PROBE_MAX_TICKS ticks have run.
+   */
+  function startRenderProbes() {
+    if (renderProbeTimer) return; // already running
+    var ticks = 0;
+    var doneCanvas = false, doneOracle = false, doneDetail = false;
+    renderProbeTimer = setInterval(function () {
+      ticks++;
+      doneCanvas = doneCanvas || logCanvasProbe('canvas probe', false);
+      doneOracle = doneOracle || logFontOracleState();
+      doneDetail = doneDetail || logCanvasProbe('canvas probe-2', true);
+      if ((doneCanvas && doneOracle && doneDetail) || ticks >= PROBE_MAX_TICKS) {
+        clearInterval(renderProbeTimer);
+        renderProbeTimer = null;
+      }
+    }, PROBE_INTERVAL_MS);
   }
 
   /** Main frame only: fetch the registered document and send it DOWN to the
@@ -273,30 +344,10 @@
         window.DesktopOfflineAppDocumentSignatures('');
       }
       if (probesEnabled()) {
-        // PH-0 render evidence: canvas count/size a few seconds after open.
-        // gate 9 signal ② fallback: the `canvas probe` prefixes below match the
-        // smoke-render.sh pattern `canvas probe.*[0-9]+x[1-9]…` — keep verbatim.
-        setTimeout(function () {
-          var root = document.getElementById('editor_sdk') || document.body;
-          var canvases = root.querySelectorAll('canvas');
-          var info = [];
-          for (var i = 0; i < canvases.length && i < 4; i++) {
-            info.push(canvases[i].width + 'x' + canvases[i].height);
-          }
-          forwardLog('info', 'canvas probe (' + root.id + '): ' + canvases.length + ' canvas(es) ' + info.join(' '));
-        }, 6000);
-        setTimeout(logFontOracleState, 8000);
-        setTimeout(function () {
-          var root = document.getElementById('editor_sdk') || document.body;
-          var canvases = root.querySelectorAll('canvas');
-          var info = [];
-          for (var i = 0; i < canvases.length; i++) {
-            info.push('#' + i + ':' + canvases[i].id + ' ' + canvases[i].width + 'x' + canvases[i].height);
-          }
-          var ed = window.Asc && (window.Asc.editor || window.editor);
-          forwardLog('info', 'canvas probe-2 (' + root.id + '): ' + canvases.length + ' canvas(es) ' + info.join(' ')
-            + ' | editor state: isDocumentContentReady=' + (ed && ed.isDocumentContentReady ? ed.isDocumentContentReady() : '?'));
-        }, 15000);
+        // PH-0 render evidence — T-050: repeating probes instead of the
+        // one-shot 6/8/15s timers (dropped whole under WKWebView timer
+        // throttling, diagnostics 30.09). Same log strings every tick.
+        startRenderProbes();
       }
     } catch (e) {
       forwardLog('error', 'DesktopOfflineAppDocumentEndLoad failed: ' + e);
