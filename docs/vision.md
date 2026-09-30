@@ -41,7 +41,7 @@ x2t trước → viewer → editor → UI (chi tiết rung A1–A6 ở QĐ9).
 | Chỉ số | Target đề xuất | Ghi chú |
 |---|---|---|
 | Installer shell | < 30 MB | chưa tính engine payload |
-| Tổng payload có engine | ≤ 100 MB | hoặc engine tải riêng lần đầu (xem Câu hỏi mở) |
+| Tổng payload có engine | ≤ 100 MB (**soft target** — user 30.09: chấp nhận phình, ưu tiên tự chủ, tối ưu sau) | số liệu thực ghi thẳng diagnostics; tối ưu size = việc T-A12, không chặn rung Track A; chốt lại số khi PH-4 |
 | RAM idle + 1 doc mở | < 250 MB | ONLYOFFICE gốc ~1,07 GB / 7 processes (đo 21.09.2026, `diagnostics.md`) |
 | Cold start → gõ được chữ | < 2 s | đo bằng script, đưa vào CI gate từ PH-4 |
 
@@ -152,7 +152,7 @@ pattern "strangler fig". Sản phẩm xuất xưởng được ở **mọi rung*
 | Rung | Nội dung | XONG khi |
 |---|---|---|
 | A0 ✅ | shell + bridge + save chain của mình | gates 9+10 GREEN (28.09) |
-| A1 | Tự chủ phân phối: bundle x2t + tự sinh AllFonts.js + font subset | máy không cài ONLYOFFICE chạy trọn open→edit→save; payload ≤100 MB |
+| A1 | Tự chủ phân phối: bundle x2t + tự sinh AllFonts.js + font subset | máy không cài ONLYOFFICE chạy trọn open→edit→save (payload: soft target — user 30.09 chấp nhận phình vì x2t cần 17 framework/113 MB; tối ưu sau ở T-A12) |
 | A2 | Converter Rust thay x2t (DOCX → XLSX → PPTX) | round-trip parity vs x2t trên corpus+fuzz; x2t rút khỏi runtime |
 | A3 | Viewer Rust đọc-only ("quick view" không boot sdkjs) | mở <500 ms, RAM <150 MB; parity render vs oracle |
 | A4 | Editor core riêng cho DOCX subset hằng ngày ("Nano Light" mặc định, engine ONLYOFFICE = "chế độ nâng cao") | parity matrix theo lớp tính năng |

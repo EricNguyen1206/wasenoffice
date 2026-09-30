@@ -8,6 +8,20 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-09-30 · User quyết budget A1: chấp nhận phình size — tự chủ ưu tiên, tối ưu sau
+
+- **Quyết định (user, 30.09):** sau khi T-A10 ghi thẳng x2t subset 113 MB (17 framework
+  strong-link, không cắt thêm được), user chốt: **quan trọng nhất là tính độc lập và tự chủ
+  của dự án; phình size chấp nhận; tối ưu tính sau.**
+- **Land:** vision QĐ2 — "Tổng payload có engine" chuyển **soft target** (≤100 MB giữ làm
+  hướng tối ưu, không phải gate; chốt lại số khi PH-4) · vision QĐ9 rung A1 — điều kiện
+  XONG bỏ "payload ≤100 MB", giữ điều kiện tự chủ (máy sạch chạy trọn open→edit→save) ·
+  TODO T-A12 — trim/font subset = best-effort, số liệu ghi thẳng.
+- **Hệ quả:** T-A13 (gate "sạch ONLYOFFICE") không còn bị chặn bởi con số — chỉ chặn bởi
+  độc lập runtime thực tế. Download-first (T-041 phần còn lại) vẫn là câu hỏi PH-4.
+
+---
+
 ## 2026-09-30 · T-A10: bundle x2t vào engines/converter/ — GREEN, 113 MB vượt budget 100 MB (ghi thẳng)
 
 - **Kết quả (confirmed):** mở + save DOCX chạy bằng x2t BUNDLED không cần env — gate 10
