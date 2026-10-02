@@ -89,7 +89,7 @@ fn handle(mut stream: TcpStream, registry: Arc<FileRegistry>) {
     // engine assets + fonts: same routes as the nanooffice-engine:// handler
     let engine_path = path.trim_start_matches('/').to_string();
     if engine_path == "editors/sdkjs/common/AllFonts.js" {
-        match super::generate_all_fonts_js() {
+        match super::allfonts::engine_flavor_js(bound_port()) {
             Ok(bytes) => {
                 respond_bytes(&mut stream, "application/javascript", bytes, false);
             }
@@ -118,8 +118,8 @@ fn handle(mut stream: TcpStream, registry: Arc<FileRegistry>) {
         return;
     }
     if let Some(rest) = engine_path.strip_prefix("editors/") {
-        let mut full =
-            super::engines_root().and_then(|root| super::safe_join(&root.join("editors"), rest));
+        let mut full = super::allfonts::engines_root()
+            .and_then(|root| super::safe_join(&root.join("editors"), rest));
         // Emscripten glue loaded via LoadJS eval loses scriptDirectory and
         // resolves wasm payloads relative to the editor page; when the
         // requested location does not exist, redirect to the canonical
@@ -177,36 +177,20 @@ fn serve(stream: &mut TcpStream, disk: &PathBuf, range: Option<&str>, head_only:
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| "document".into());
 
-    // bytes=start-end | bytes=-suffix | none
-    let (start, end, partial) = range
-        .and_then(|r| r.strip_prefix("bytes="))
-        .and_then(|spec| {
-            let (a, b) = spec.split_once('-')?;
-            if a.is_empty() {
-                let n: u64 = b.parse().ok()?;
-                (n < total).then_some((total - n, total - 1))
-            } else {
-                let s: u64 = a.parse().ok()?;
-                let e: u64 = if b.is_empty() {
-                    total.saturating_sub(1)
-                } else {
-                    b.parse::<u64>().unwrap_or(total - 1).min(total - 1)
-                };
-                (s <= e).then_some((s, e))
-            }
-        })
-        .map(|(s, e)| (s, e, true))
-        .unwrap_or((0, total.saturating_sub(1), false));
+    // bytes=start-end | bytes=-suffix | none — parsed by the ONE tested
+    // parser (mod.rs::parse_range_header, T-054; the inline re-implementation
+    // that used to live here had no tests and mishandled 0-byte bodies).
+    let range = super::parse_range_header(range, total);
 
     let length = if total == 0 {
         0
     } else {
-        (end - start + 1) as usize
+        (range.end - range.start + 1) as usize
     };
     let mut body = vec![0u8; length];
     if length > 0 {
         use std::io::Seek;
-        if file.seek(std::io::SeekFrom::Start(start)).is_ok() {
+        if file.seek(std::io::SeekFrom::Start(range.start)).is_ok() {
             let _ = file.read_exact(&mut body);
         }
     }
@@ -215,12 +199,19 @@ fn serve(stream: &mut TcpStream, disk: &PathBuf, range: Option<&str>, head_only:
         "HTTP/1.1 {} {}\r\nContent-Type: {mime}\r\nAccept-Ranges: bytes\r\n\
          Access-Control-Allow-Origin: *\r\n\
          Content-Disposition: inline; filename*=UTF-8''{}\r\n",
-        if partial { 206 } else { 200 },
-        if partial { "Partial Content" } else { "OK" },
-        super::encode_uri_component(&fname),
+        if range.partial { 206 } else { 200 },
+        if range.partial {
+            "Partial Content"
+        } else {
+            "OK"
+        },
+        super::allfonts::encode_uri_component(&fname),
     );
-    if partial {
-        headers.push_str(&format!("Content-Range: bytes {start}-{end}/{total}\r\n"));
+    if range.partial {
+        headers.push_str(&format!(
+            "Content-Range: bytes {}-{}/{}\r\n",
+            range.start, range.end, total
+        ));
     }
     headers.push_str(&format!("Content-Length: {}\r\n\r\n", body.len()));
 
@@ -253,14 +244,15 @@ fn resolve_engine_payload(rest: &str) -> Option<PathBuf> {
         "spell.wasm" => "sdkjs/common/spell/spell/",
         _ => return None,
     };
-    let engines = super::engines_root()?;
+    let engines = super::allfonts::engines_root()?;
     super::safe_join(&engines.join("editors"), &format!("{dir}{basename}"))
 }
 
 /// `app/<enc>` | `sys/<enc>` → whitelisted absolute font path.
+/// Root table: `protocol::allfonts::font_root_disk` (the producer, T-054).
 fn resolve_font_path(rest: &str) -> Option<PathBuf> {
     let (root, rel) = rest.split_once('/')?;
-    let disk_root = super::font_root_disk(root)?;
+    let disk_root = super::allfonts::font_root_disk(root)?;
     super::safe_join(&disk_root, rel)
 }
 

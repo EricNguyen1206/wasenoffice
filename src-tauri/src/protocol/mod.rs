@@ -28,28 +28,10 @@ pub(crate) mod allfonts;
 pub const ENGINE_SCHEME: &str = "nanooffice-engine";
 pub const FILE_SCHEME: &str = "nanooffice-file";
 
-/// Font URL namespaces reachable through `nanooffice-engine://localhost/fonts/<root>/<enc>`
-/// (and the loopback mirror `/fonts/<root>/…`) — mirrors the roots listed in the
-/// installed app's generated AllFonts.js (observed 22.09.2026: only these two).
-/// Since T-A11 these roots are what `protocol::allfonts` enumerates to GENERATE
-/// the AllFonts.js that both consumers (filesrv + `bridge::save`'s
-/// `<m_sAllFontsPath>`/`<m_sFontDir>`) read; since T-A12 the `app` namespace
-/// resolves to `engines/fonts/` (`bundle-fonts.sh`) — the installed app's font
-/// files are no longer read at runtime. Order matters: it fixes the enumeration
-/// order of the generated AllFonts.js.
-const FONT_URL_ROOTS: [&str; 2] = ["app", "sys"];
-
-/// Disk root behind a font URL namespace. `app` = the bundled font set
-/// (`engines/fonts/`, `harness/scripts/bundle-fonts.sh`); `sys` = macOS system
-/// fonts. Keeping the `app` name preserves the AllFonts.js URL namespace
-/// (`/fonts/app/…`) so the engine-facing contract does not change.
-fn font_root_disk(url_root: &str) -> Option<PathBuf> {
-    match url_root {
-        "app" => engines_root().map(|e| e.join("fonts")),
-        "sys" => Some(PathBuf::from("/System/Library/Fonts")),
-        _ => None,
-    }
-}
+// T-054: the font-root table (`FONT_URL_ROOTS`/`font_root_disk`), engines
+// discovery (`engines_root`), URI-component encoding and BOTH AllFonts.js
+// flavors (disk `js_raw` / loopback-URL `engine_flavor_js`) live in
+// `protocol::allfonts` — the producer. This module and filesrv are consumers.
 
 /// fileId → absolute path registry. Kept in Rust state; JS only ever sees
 /// `…/file/<id>/<name>` URLs (custom scheme + loopback HTTP mirror).
@@ -87,37 +69,22 @@ impl FileRegistry {
     }
 }
 
-/// Locate `engines/` without hardcoding disk layout: `$NANO_OFFICE_ENGINES`,
-/// else walk up from the current dir looking for `engines/editors/sdkjs`.
-fn engines_root() -> Option<PathBuf> {
-    if let Ok(dir) = std::env::var("NANO_OFFICE_ENGINES") {
-        let p = PathBuf::from(dir);
-        if p.join("editors/sdkjs").is_dir() {
-            return Some(p);
-        }
-    }
-    let mut cwd = std::env::current_dir().ok()?;
-    for _ in 0..6 {
-        if cwd.join("engines/editors/sdkjs").is_dir() {
-            return Some(cwd.join("engines"));
-        }
-        if !cwd.pop() {
-            break;
-        }
-    }
-    None
-}
-
 // ---------------------------------------------------------------------------
 // request handling helpers
 // ---------------------------------------------------------------------------
-struct RangeSpec {
-    start: u64,
-    end: u64, // inclusive
-    partial: bool,
+
+/// Resolved byte range of a response body (inclusive end).
+pub(crate) struct RangeSpec {
+    pub(crate) start: u64,
+    pub(crate) end: u64, // inclusive
+    pub(crate) partial: bool,
 }
 
-fn parse_range(headers: &tauri::http::HeaderMap, len: u64) -> RangeSpec {
+/// Parse a `Range` header VALUE (`bytes=…` or None) against a body length.
+/// Shared by the custom-scheme handler and the loopback filesrv (T-054:
+/// filesrv used to carry an untested re-implementation — both now go through
+/// this one, which has the tests below).
+pub(crate) fn parse_range_header(spec: Option<&str>, len: u64) -> RangeSpec {
     let full = RangeSpec {
         start: 0,
         end: len.saturating_sub(1),
@@ -126,11 +93,7 @@ fn parse_range(headers: &tauri::http::HeaderMap, len: u64) -> RangeSpec {
     if len == 0 {
         return full;
     }
-    let Some(spec) = headers
-        .get(header::RANGE)
-        .and_then(|v| v.to_str().ok())
-        .map(str::trim)
-    else {
+    let Some(spec) = spec.map(str::trim) else {
         return full;
     };
     let Some(spec) = spec.strip_prefix("bytes=") else {
@@ -167,6 +130,13 @@ fn parse_range(headers: &tauri::http::HeaderMap, len: u64) -> RangeSpec {
         end,
         partial: true,
     }
+}
+
+fn parse_range(headers: &tauri::http::HeaderMap, len: u64) -> RangeSpec {
+    parse_range_header(
+        headers.get(header::RANGE).and_then(|v| v.to_str().ok()),
+        len,
+    )
 }
 
 fn mime_for(path: &str) -> &'static str {
@@ -283,25 +253,10 @@ fn safe_join(root: &Path, rel: &str) -> Option<PathBuf> {
 }
 
 // ---------------------------------------------------------------------------
-// percent-encoding (URI component semantics, JS-compatible)
+// percent-encoding — request path DECODING only; the ENCODER
+// (`encode_uri_component`) lives in protocol::allfonts since T-054, next to
+// the URL producer that needs it (one home, no drift between the two).
 // ---------------------------------------------------------------------------
-
-fn encode_uri_component(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for byte in s.bytes() {
-        let keep = byte.is_ascii_alphanumeric()
-            || matches!(
-                byte,
-                b'-' | b'_' | b'.' | b'!' | b'~' | b'*' | b'\'' | b'(' | b')'
-            );
-        if keep {
-            out.push(byte as char);
-        } else {
-            out.push_str(&format!("%{byte:02X}"));
-        }
-    }
-    out
-}
 
 fn percent_decode(s: &str) -> String {
     let bytes = s.as_bytes();
@@ -322,52 +277,6 @@ fn percent_decode(s: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// AllFonts.js generation + index.html injection
-// ---------------------------------------------------------------------------
-
-/// Rewrite absolute font paths in an AllFonts.js text to
-/// `nanooffice-engine://localhost/fonts/<root>/<enc>` URLs.
-fn rewrite_font_paths(js: &str) -> Result<String, String> {
-    let mut out = js.to_string();
-    for url_root in FONT_URL_ROOTS {
-        let Some(disk) = font_root_disk(url_root) else {
-            continue;
-        };
-        // trailing slash so the needle never matches a sibling directory
-        let needle = format!("\"{}/", disk.display());
-        let base = format!(
-            "http://127.0.0.1:{}/fonts/{url_root}/",
-            filesrv::bound_port()
-        );
-        let mut rebuilt = String::with_capacity(out.len());
-        let mut rest: &str = &out;
-        loop {
-            let Some(pos) = rest.find(&needle) else {
-                rebuilt.push_str(rest);
-                break;
-            };
-            rebuilt.push_str(&rest[..pos + 1]); // keep the opening quote
-            let tail = &rest[pos + needle.len()..];
-            let Some(end) = tail.find('"') else {
-                return Err("unterminated path literal in AllFonts.js".into());
-            };
-            rebuilt.push_str(&base);
-            rebuilt.push_str(&encode_uri_component(&tail[..end]));
-            rest = &tail[end..]; // continues at the closing quote
-        }
-        out = rebuilt;
-    }
-    Ok(out)
-}
-
-fn generate_all_fonts_js() -> Result<Vec<u8>, String> {
-    let fonts = allfonts::generated()
-        .as_ref()
-        .ok_or_else(|| "no fonts enumerated from the font roots".to_string())?;
-    rewrite_font_paths(&fonts.js_raw()).map(String::into_bytes)
-}
-
-// ---------------------------------------------------------------------------
 // protocol handlers (tauri entry points)
 // ---------------------------------------------------------------------------
 
@@ -375,7 +284,7 @@ pub fn handle_engine<R: tauri::Runtime>(
     _ctx: tauri::UriSchemeContext<'_, R>,
     request: Request<Vec<u8>>,
 ) -> tauri::http::Response<Vec<u8>> {
-    let Some(engines) = engines_root() else {
+    let Some(engines) = allfonts::engines_root() else {
         log::error!("engines/ root not found — set NANO_OFFICE_ENGINES or run from the repo");
         return empty(StatusCode::NOT_FOUND);
     };
@@ -389,7 +298,7 @@ pub fn handle_engine<R: tauri::Runtime>(
     // sdkjs tree (the desktop app serves this path from its native side; we
     // have no on-disk file, only the generator).
     if path == "editors/sdkjs/common/AllFonts.js" {
-        return match generate_all_fonts_js() {
+        return match allfonts::engine_flavor_js(filesrv::bound_port()) {
             Ok(bytes) => {
                 let len = bytes.len() as u64;
                 let range = parse_range(request.headers(), len);
@@ -412,7 +321,7 @@ pub fn handle_engine<R: tauri::Runtime>(
         let Some((root, rel)) = rest.split_once('/') else {
             return empty(StatusCode::NOT_FOUND);
         };
-        let Some(disk_root) = font_root_disk(root) else {
+        let Some(disk_root) = allfonts::font_root_disk(root) else {
             return empty(StatusCode::FORBIDDEN);
         };
         let Some(full) = safe_join(&disk_root, rel) else {
@@ -456,7 +365,7 @@ pub fn handle_file<R: tauri::Runtime>(
     let disposition = disk.file_name().map(|n| {
         format!(
             "inline; filename*=UTF-8''{}",
-            encode_uri_component(&n.to_string_lossy())
+            allfonts::encode_uri_component(&n.to_string_lossy())
         )
     });
     serve_file(&disk, &request, disposition)
@@ -467,44 +376,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn rewrite_replaces_only_known_prefixes() {
-        // sys root is static; app root resolves to <engines>/fonts (T-A12) —
-        // compute it the same way the rewriter does instead of hardcoding.
-        let sys = font_root_disk("sys").expect("sys root");
-        let app = font_root_disk("app").expect("engines root (engines/editors/sdkjs missing?)");
-        let js = format!(
-            r#"window["__fonts_files"] = [
-"{}/OpenSans-Bold.ttf",
-"{}/Avenir Next Condensed.ttc",
-"/Unknown/Place/x.ttf"
-];"#,
-            app.display(),
-            sys.display()
-        );
-        let out = rewrite_font_paths(&js).expect("rewrite ok");
-        // PH-0 deviation (reference.map.md): fonts are served through the
-        // loopback filesrv (`http://127.0.0.1:<port>/fonts/…`) — assert the
-        // rewritten namespaces, not the port-dependent base. The `app`
-        // namespace keeps its name since T-A12 although it now serves from
-        // engines/fonts (URL contract frozen).
-        assert!(out.contains("/fonts/app/OpenSans-Bold.ttf"));
-        assert!(out.contains("/fonts/sys/Avenir%20Next%20Condensed.ttc"));
-        assert!(out.contains("\"/Unknown/Place/x.ttf\""));
-        assert!(!out.contains("ONLYOFFICE.app"), "no app path may remain");
-    }
-
-    #[test]
-    fn app_font_root_is_bundled_not_installed_app() {
-        // T-A12: the `app` namespace must resolve under engines/ — the last
-        // runtime reference to the installed ONLYOFFICE.app's font files.
-        let app = font_root_disk("app").expect("engines root (engines/editors/sdkjs missing?)");
-        assert!(app.to_string_lossy().contains("engines"));
-        assert!(!app.to_string_lossy().contains("ONLYOFFICE"));
-    }
-
-    #[test]
     fn decode_roundtrip() {
-        let enc = encode_uri_component("Avenir Next Condensed.ttc");
+        // cross-module contract (T-054): the encoder lives in
+        // protocol::allfonts, the decoder here — they must roundtrip.
+        let enc = allfonts::encode_uri_component("Avenir Next Condensed.ttc");
         assert_eq!(enc, "Avenir%20Next%20Condensed.ttc");
         assert_eq!(percent_decode(&enc), "Avenir Next Condensed.ttc");
     }

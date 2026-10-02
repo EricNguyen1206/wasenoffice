@@ -15,15 +15,133 @@
 //!   consumer, not the module being replaced;
 //! - font metadata: OpenType spec (name / OS/2 / head / post / cmap tables).
 //!
-//! One home for both consumers: filesrv serves the engine a path-rewritten
-//! copy of the same string `bridge::save` writes to disk for x2t
-//! (`<m_sAllFontsPath>`), so engine indexes and x2t indexes are identical by
-//! construction.
+//! One home for both flavors (T-054): `js_raw` (disk paths, the x2t flavor
+//! written for `<m_sAllFontsPath>`/`<m_sFontDir>`) and the loopback-URL flavor
+//! the engine fetches (`engine_flavor_js`/`rewrite_font_paths` below) —
+//! filesrv and the `nanooffice-engine://` handler are consumers importing
+//! from here. Same source string → engine indexes and x2t indexes are
+//! identical by construction.
 
 use std::collections::{BTreeMap, HashMap};
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
+
+// ---------------------------------------------------------------------------
+// font-root table + engines discovery (T-054: moved here from protocol/mod.rs
+// so the producer owns its table — consumers import, no upstream `super::`)
+// ---------------------------------------------------------------------------
+
+/// Font URL namespaces reachable through `nanooffice-engine://localhost/fonts/<root>/<enc>`
+/// (and the loopback mirror `/fonts/<root>/…`) — mirrors the roots listed in the
+/// installed app's generated AllFonts.js (observed 22.09.2026: only these two).
+/// Since T-A11 these roots are what this module enumerates to GENERATE the
+/// AllFonts.js that both consumers (filesrv + `bridge::save`'s
+/// `<m_sAllFontsPath>`/`<m_sFontDir>`) read; since T-A12 the `app` namespace
+/// resolves to `engines/fonts/` (`bundle-fonts.sh`) — the installed app's font
+/// files are no longer read at runtime. Order matters: it fixes the enumeration
+/// order of the generated AllFonts.js.
+pub(crate) const FONT_URL_ROOTS: [&str; 2] = ["app", "sys"];
+
+/// Disk root behind a font URL namespace. `app` = the bundled font set
+/// (`engines/fonts/`, `harness/scripts/bundle-fonts.sh`); `sys` = macOS system
+/// fonts. Keeping the `app` name preserves the AllFonts.js URL namespace
+/// (`/fonts/app/…`) so the engine-facing contract does not change.
+pub(crate) fn font_root_disk(url_root: &str) -> Option<PathBuf> {
+    match url_root {
+        "app" => engines_root().map(|e| e.join("fonts")),
+        "sys" => Some(PathBuf::from("/System/Library/Fonts")),
+        _ => None,
+    }
+}
+
+/// Locate `engines/` without hardcoding disk layout: `$NANO_OFFICE_ENGINES`,
+/// else walk up from the current dir looking for `engines/editors/sdkjs`.
+/// (T-054: moved from protocol/mod.rs — the font bundle root and the engine
+/// assets share this discovery; mod.rs/filesrv now import it from here.)
+pub(crate) fn engines_root() -> Option<PathBuf> {
+    if let Ok(dir) = std::env::var("NANO_OFFICE_ENGINES") {
+        let p = PathBuf::from(dir);
+        if p.join("editors/sdkjs").is_dir() {
+            return Some(p);
+        }
+    }
+    let mut cwd = std::env::current_dir().ok()?;
+    for _ in 0..6 {
+        if cwd.join("engines/editors/sdkjs").is_dir() {
+            return Some(cwd.join("engines"));
+        }
+        if !cwd.pop() {
+            break;
+        }
+    }
+    None
+}
+
+/// percent-encoding (URI component semantics, JS-compatible) — one home for
+/// the URL flavor below and the protocol handlers' filename headers (T-054:
+/// moved from protocol/mod.rs together with the URL producer that needs it).
+pub(crate) fn encode_uri_component(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for byte in s.bytes() {
+        let keep = byte.is_ascii_alphanumeric()
+            || matches!(
+                byte,
+                b'-' | b'_' | b'.' | b'!' | b'~' | b'*' | b'\'' | b'(' | b')'
+            );
+        if keep {
+            out.push(byte as char);
+        } else {
+            out.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    out
+}
+
+/// Rewrite absolute font paths in an AllFonts.js text to
+/// `http://127.0.0.1:<port>/fonts/<root>/<enc>` URLs. The port is a parameter
+/// (the loopback server's `bound_port()`) — this module produces URLs, it does
+/// not depend on the server that serves them.
+fn rewrite_font_paths(js: &str, port: u16) -> Result<String, String> {
+    let mut out = js.to_string();
+    for url_root in FONT_URL_ROOTS {
+        let Some(disk) = font_root_disk(url_root) else {
+            continue;
+        };
+        // trailing slash so the needle never matches a sibling directory
+        let needle = format!("\"{}/", disk.display());
+        let base = format!("http://127.0.0.1:{port}/fonts/{url_root}/");
+        let mut rebuilt = String::with_capacity(out.len());
+        let mut rest: &str = &out;
+        loop {
+            let Some(pos) = rest.find(&needle) else {
+                rebuilt.push_str(rest);
+                break;
+            };
+            rebuilt.push_str(&rest[..pos + 1]); // keep the opening quote
+            let tail = &rest[pos + needle.len()..];
+            let Some(end) = tail.find('"') else {
+                return Err("unterminated path literal in AllFonts.js".into());
+            };
+            rebuilt.push_str(&base);
+            rebuilt.push_str(&encode_uri_component(&tail[..end]));
+            rest = &tail[end..]; // continues at the closing quote
+        }
+        out = rebuilt;
+    }
+    Ok(out)
+}
+
+/// The engine flavor of AllFonts.js — what the protocol handlers serve at
+/// `editors/sdkjs/common/AllFonts.js`: the enumeration's `js_raw` (disk
+/// paths) with quoted file paths rewritten to loopback URLs (the base64
+/// selection-bin paths are left alone — same as the app-generated file).
+pub(crate) fn engine_flavor_js(port: u16) -> Result<Vec<u8>, String> {
+    let fonts = generated()
+        .as_ref()
+        .ok_or_else(|| "no fonts enumerated from the font roots".to_string())?;
+    rewrite_font_paths(&fonts.js_raw(), port).map(String::into_bytes)
+}
 
 /// A font face parsed from disk (before the per-(family, slot) selection).
 struct Face {
@@ -119,10 +237,10 @@ impl AllFonts {
     }
 
     /// The AllFonts.js text with RAW disk paths (the x2t flavor). The engine
-    /// flavor is produced by `rewrite_font_paths` in protocol/mod.rs, which
-    /// rewrites the quoted file paths to loopback URLs and leaves the
-    /// base64-embedded selection-bin paths alone — same as with the
-    /// app-generated file before this task.
+    /// flavor is `engine_flavor_js` in this module (T-054), which rewrites
+    /// the quoted file paths to loopback URLs and leaves the base64-embedded
+    /// selection-bin paths alone — same as with the app-generated file
+    /// before this task.
     pub(crate) fn js_raw(&self) -> String {
         let mut js = String::with_capacity(512 * 1024);
         js.push('\u{feff}');
@@ -225,8 +343,8 @@ impl AllFonts {
     fn enumerate() -> AllFonts {
         let mut all_files: Vec<PathBuf> = Vec::new();
         let mut all_faces: Vec<Face> = Vec::new();
-        for url_root in super::FONT_URL_ROOTS {
-            let Some(root) = super::font_root_disk(url_root) else {
+        for url_root in FONT_URL_ROOTS {
+            let Some(root) = font_root_disk(url_root) else {
                 log::warn!("AllFonts: font root {url_root} unavailable — skipped");
                 continue;
             };
@@ -1068,5 +1186,119 @@ mod tests {
         assert!(js.contains("65,90,0"));
         assert!(js.contains("window[\"g_fonts_selection_bin\"] = \""));
         assert!(js.ends_with(";\n"));
+    }
+
+    // ── moved from protocol/mod.rs (T-054): table + rewrite live here now ──
+
+    #[test]
+    fn rewrite_replaces_only_known_prefixes() {
+        // sys root is static; app root resolves to <engines>/fonts (T-A12) —
+        // compute it the same way the rewriter does instead of hardcoding.
+        let sys = font_root_disk("sys").expect("sys root");
+        let app = font_root_disk("app").expect("engines root (engines/editors/sdkjs missing?)");
+        let js = format!(
+            r#"window["__fonts_files"] = [
+"{}/OpenSans-Bold.ttf",
+"{}/Avenir Next Condensed.ttc",
+"/Unknown/Place/x.ttf"
+];"#,
+            app.display(),
+            sys.display()
+        );
+        let out = rewrite_font_paths(&js, 14321).expect("rewrite ok");
+        // PH-0 deviation (reference.map.md): fonts are served through the
+        // loopback filesrv (`http://127.0.0.1:<port>/fonts/…`) — assert the
+        // rewritten namespaces, not the port-dependent base. The `app`
+        // namespace keeps its name since T-A12 although it now serves from
+        // engines/fonts (URL contract frozen).
+        assert!(out.contains("http://127.0.0.1:14321/fonts/app/OpenSans-Bold.ttf"));
+        assert!(out.contains("/fonts/sys/Avenir%20Next%20Condensed.ttc"));
+        assert!(out.contains("\"/Unknown/Place/x.ttf\""));
+        assert!(!out.contains("ONLYOFFICE.app"), "no app path may remain");
+    }
+
+    #[test]
+    fn app_font_root_is_bundled_not_installed_app() {
+        // T-A12: the `app` namespace must resolve under engines/ — the last
+        // runtime reference to the installed ONLYOFFICE.app's font files.
+        let app = font_root_disk("app").expect("engines root (engines/editors/sdkjs missing?)");
+        assert!(app.to_string_lossy().contains("engines"));
+        assert!(!app.to_string_lossy().contains("ONLYOFFICE"));
+    }
+
+    /// Enumerate through the PUBLIC interface (`generated()`) against the
+    /// real bundled font set and render both flavors. LIMITATION (T-054):
+    /// the `sys` root is machine-dependent (system fonts vary), so this pins
+    /// only what the `app` root (engines/fonts — manifest pinned by
+    /// bundle-fonts.sh) contributes plus the structural contract of js_raw;
+    /// winner-selection tie-breaks against system fonts stay unpinned here
+    /// (deviations recorded in reference.map § AllFonts generator). Skips
+    /// (passes without asserting) when engines/ is absent.
+    #[test]
+    fn bundled_fonts_enumerate_via_interface() {
+        let Some(app_root) = font_root_disk("app") else {
+            eprintln!("skip: engines root not found (engines/editors/sdkjs missing)");
+            return;
+        };
+        if !app_root.is_dir() {
+            eprintln!(
+                "skip: bundled font set missing at {} — run bundle-fonts.sh",
+                app_root.display()
+            );
+            return;
+        }
+        let Some(fonts) = generated().as_ref() else {
+            panic!(
+                "app root {} present but enumeration is empty",
+                app_root.display()
+            );
+        };
+        let js = fonts.js_raw();
+
+        // structural contract of the disk flavor (js_raw)
+        assert!(js.starts_with('\u{feff}'));
+        assert!(js.contains("window[\"__all_fonts_js_version__\"] = 2;\n"));
+        assert!(js.contains("window[\"__fonts_files\"] = [\n"));
+        assert!(js.contains("window[\"__fonts_infos\"] = [\n"));
+        assert!(js.contains("window[\"__fonts_ranges\"] = [\n"));
+        assert!(js.contains("window[\"g_fonts_selection_bin\"] = \""));
+        assert!(js.ends_with(";\n"));
+
+        // the bundled set must actually contribute: some __fonts_files entry
+        // lives under the app root, every such entry exists on disk, and the
+        // bundled substitute families are present (Carlito: Calibri stand-in)
+        let mut bundled = 0;
+        for line in js.lines() {
+            let Some(trimmed) = line.strip_prefix('"') else {
+                continue;
+            };
+            let Some(path) = trimmed
+                .strip_suffix("\",")
+                .or_else(|| trimmed.strip_suffix('"'))
+            else {
+                continue;
+            };
+            if path.starts_with(app_root.to_string_lossy().as_ref()) {
+                bundled += 1;
+                assert!(
+                    Path::new(path).is_file(),
+                    "listed bundled font missing on disk: {path}"
+                );
+            }
+        }
+        assert!(
+            bundled > 0,
+            "no bundled (app-root) font won a slot — enumeration ignored engines/fonts?"
+        );
+        assert!(
+            fonts.fam_names.iter().any(|n| n == "Carlito"),
+            "Carlito (bundled Calibri substitute) not in families"
+        );
+
+        // URL flavor: rewritten loopback URLs, no disk path of either root survives
+        let url_js = rewrite_font_paths(&js, 14321).expect("rewrite ok");
+        assert!(url_js.contains("/fonts/app/"));
+        assert!(url_js.contains("/fonts/sys/"));
+        assert!(!url_js.contains(&format!("\"{}", app_root.display())));
     }
 }
