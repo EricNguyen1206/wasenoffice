@@ -8,6 +8,50 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-02 · T-A13: Gate 11 "sạch ONLYOFFICE" — ĐÓNG RUNG A1 (tự chủ phân phối) — GREEN (verify.sh FULL exit 0 với app ẨN + negative proven)
+
+- **Kết quả (confirmed) — 3 chiều bằng chứng:**
+  (1) *Gate 11 positive:* `harness/scripts/smoke-clean-machine.sh` **exit 0** — boot app strict
+  mode, save round-trip marker ×1 (1962→25570 B), `grep -cF "/Applications/ONLYOFFICE"` toàn
+  log = **0**, 0 dòng WARN fallback, strict mode không trip (`/tmp/nanooffice-smoke-clean-gFtBod`).
+  (2) *Negative proven:* `SMOKE_CLEAN_FORCE_APP_X2T=1` (point `NANO_OFFICE_X2T` vào
+  `/Applications/ONLYOFFICE.app/…/converter/x2t`) → gate **FAIL exit 1**, `app-path-hits=1` —
+  dòng `[x2t] using NANO_OFFICE_X2T override: /Applications/ONLYOFFICE.app/…` (log line 76)
+  bị grep bắt, fail-fast ngay khi override hiện mặt dù run "chạy được" — gate biết bắt vi phạm
+  (`/tmp/nanooffice-smoke-clean-XbynTY`).
+  (3) *Test tích thể (bằng chứng đóng rung):* `harness/scripts/clean-machine-proof.sh` —
+  preconditions `pgrep -x ONLYOFFICE` trống → `mv /Applications/ONLYOFFICE.app
+  /Applications/ONLYOFFICE.app.ta13-hidden` (same volume, atomic; KHÔNG rm; trap
+  EXIT/INT/TERM luôn restore) → `verify.sh` **FULL exit 0 khi app không tồn tại**
+  (`/tmp/verify-ta13-clean-machine.log`: cargo/fmt/clippy/pnpm/licenses/docs + 6 smoke gates
+  PASSED, gate 11 trong đó dùng bundled converter ×2 — open + save — `save delivered: …ta13.docx
+  (25569 bytes) in 526ms`) → restore xong `ls` xác nhận `/Applications/ONLYOFFICE.app` nguyên
+  trạng, 0 process sót.
+- **Code chạm:** `src-tauri/src/bridge/save.rs::x2t_path()` — env
+  `NANO_OFFICE_NO_APP_FALLBACK` (set ≠ "0"): nhánh 3 (fallback app cài sẵn) bị TẮT, thay WARN
+  bằng `log::error!` "clean-machine mode" + return rỗng → spawn fail rõ ràng (save →
+  EndSave(2); open → lỗi delivery) thay vì lặng lẽ dùng app; nhánh 1 (override
+  `NANO_OFFICE_X2T`) giờ **log info path** (ADDITIVE — chính cơ chế giúp gate bắt override
+  trỏ nhầm vào app). Log contract gate 9/10 nguyên vẹn.
+- **Gate 11 (thường trụ verify.sh, sau gate 10):** assertions = save evidence như gate 10
+  (log line + marker trong word/document.xml + fixture mutated) + `grep -cF
+  "/Applications/ONLYOFFICE"` toàn log == 0 + 0 dòng "falling back to the installed
+  ONLYOFFICE" + 0 dòng "clean-machine mode" (strict phải không trip trên máy khoẻ).
+  `SMOKE_CLEAN_FORCE_APP_X2T=1` = chế độ negative-proof manual (không chạy trong verify).
+- **Bài test mv-app re-runnable:** `clean-machine-proof.sh` committed — exit 3 khi app không
+  tồn tại hoặc mv không khả thi (SIP/perm) → phương án B (gate strict + bảng đối chiếu
+  runtime paths, ghi rõ giới hạn bằng chứng); exit 4 = trạng thái lạ cần can thiệp tay.
+  Hôm nay không cần phương án B — mv thành công ngay lần đầu.
+- **Runtime dependencies ONLYOFFICE còn lại: 0 bắt buộc** (fallback x2t = WARN dev-only, bị
+  strict mode chặn; hằng số format/khác = T-046; upstream submodule = reference theo D1 giữ
+  tới A6).
+- **Trạng thái:** T-A13 ✅ — **RUNG A1 ĐÓNG** (A0+A1; mốc: sản phẩm phân phối độc lập đầu
+  tiên). Seed **T-A20** mở màn A2 (converter Rust DOCX — clean-room ECMA-376, chỉ spec-ref +
+  oracle-obs; đích: parity round-trip vs x2t trên corpus + fuzz). KHÔNG implement A2 trong
+  phiên này.
+
+---
+
 ## 2026-10-02 · T-A12: font bundle vào engines/fonts — tham chiếu runtime cuối cùng tới ONLYOFFICE.app rút xong — GREEN (verify.sh exit 0, 5 gates)
 
 - **Kết quả (confirmed):** verify.sh full **exit 0** (`/tmp/verify-ta12.log`) — 4 render gates +

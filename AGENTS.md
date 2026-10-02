@@ -57,6 +57,7 @@ nanooffice/
 | Phase | Trạng thái | Ghi chú |
 |---|---|---|
 | PH-0 Spike (load editor + render DOCX trong WKWebView) | ✅ ĐÓNG 27.09 — verdict **GO WITH CAVEAT** | render GREEN tự động (verify.sh gate 9, TC-D01-06); baseline debug 27.09: RAM 1 doc ~561–579 MB vs ONLYOFFICE 570 MB (start page); caveat duy nhất: scroll/edit keyboard chờ user xác nhận thủ công ~30s — `docs/diagnostics.md` 27.09 T-003 |
+| Track A rung A0+A1 (QĐ9 — tự chủ shell + phân phối) | ✅ A1 ĐÓNG 02.10 | **NanoOffice phân phối độc lập**: chạy trọn open→edit→save KHÔNG cần ONLYOFFICE.app cài sẵn — x2t bundled (T-A10, 113 MB) + AllFonts tự sinh (T-A11) + fonts bundled có license (T-A12) + gate 11 "sạch ONLYOFFICE" thường trụ verify.sh (T-A13: strict clean-machine + negative proven + test tích thể mv app → verify FULL exit 0 khi app ẨN); kế tiếp A2 (T-A20 — converter Rust, clean-room ECMA-376) |
 | PH-1 Vòng đời file (open/save/convert qua x2t sidecar) | ⬜ | |
 | PH-2 Trải nghiệm desktop (print/clipboard/fonts/tabs) | ⬜ | |
 | PH-3 Tùy chọn (crypto/signature/cloud) | ⬜ | có thể cắt vĩnh viễn |
@@ -65,20 +66,19 @@ nanooffice/
 ## Việc còn treo
 
 Hàng đợi công việc sống ở **`docs/TODO.md`** (QĐ7 — quy tắc + dashboard ở đầu file đó).
-Điểm nổi bật hiện tại: **T-A12 đóng 02.10 — font bundle vào `engines/fonts/`** (`bundle-fonts.sh`
-manifest pinned + license text kèm từng set S6: OpenSans Apache 2.0, Carlito/Caladea/Asana
-OFL 1.1, OpenSymbol OFL 1.0; ASC.ttf loại — license không rõ + 0 fetch; root `app` →
-`engines/fonts` giữ namespace `/fonts/app/` qua `font_root_disk()` 1 nhà, log ADDITIVE
-"font serve") — **font pipeline hết đọc app cài sẵn** (verify.sh exit 0, 0 path ONLYOFFICE
-trong AllFonts.js + logs; trim: sdkjs-plugins 38 MB 0 fetch → loại khỏi bản copy sau) —
-bảng license + assembly: `docs/reference.map.md` § Font bundle.
-Trước đó: T-A11 đóng 30.09 — AllFonts.js tự sinh bằng Rust (`src-tauri/src/protocol/allfonts.rs`,
-parse sfnt std-thuần, 5 global đúng format oracle-obs; 2 consumer cùng 1 nhà — task clean-room
-ĐẦU TIÊN của Track A); T-A10 đóng 30.09 — x2t bundled vào `engines/converter/<triple>/` (113 MB,
-resolution env→bundled→app-WARN 1 nhà ở `save.rs::x2t_path`); T-048 29.09 mở được cả 4
-định dạng + T-050 30.09 fix gate pptx flaky. Kế tiếp: **T-A13** (gate 11 "sạch ONLYOFFICE" —
-đủ điều kiện sau T-A12) hoặc PH-1 còn lại
-(T-046/T-047/T-049 save multi-format).
+Điểm nổi bật hiện tại: **RUNG A1 ĐÓNG 02.10 (T-A10→T-A13) — NanoOffice phân phối độc lập**:
+chạy trọn open→edit→save KHÔNG cần ONLYOFFICE.app cài sẵn — x2t bundled (113 MB) +
+AllFonts.js tự sinh + fonts bundled có license + **gate 11 "sạch ONLYOFFICE" thường trụ**
+trong verify.sh (strict clean-machine mode `NANO_OFFICE_NO_APP_FALLBACK`; positive exit 0 +
+negative proven exit 1) — bằng chứng đóng rung: test tích thể mv app → verify.sh FULL exit 0
+khi app ẨN (`harness/scripts/clean-machine-proof.sh`, diagnostics 02.10). Runtime dependency
+bắt buộc lên app: **0** (fallback x2t = WARN dev-only, bị strict mode chặn; upstream submodule
+= reference theo D1 tới A6).
+Kế tiếp: **T-A20** (mở màn A2 — Converter Rust thay x2t, bắt đầu DOCX, clean-room
+ECMA-376 — chỉ spec-ref + oracle-obs) hoặc PH-1 còn lại (T-046/T-047/T-049 save multi-format).
+Trước đó: T-A12 02.10 — font bundle `engines/fonts` + trim sdkjs-plugins; T-A11 30.09 —
+AllFonts tự sinh Rust (clean-room đầu tiên); T-A10 30.09 — x2t bundled; T-048 29.09 mở cả 4
+định dạng + T-050 30.09 fix gate pptx flaky.
 - Stack đã chốt: **giữ Rust + Tauri** (re-validate 26.09 — `docs/techstack-analysis.md`).
 
 ## Khi bắt đầu một phiên làm việc

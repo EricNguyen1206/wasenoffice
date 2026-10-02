@@ -152,7 +152,7 @@ pattern "strangler fig". Sản phẩm xuất xưởng được ở **mọi rung*
 | Rung | Nội dung | XONG khi |
 |---|---|---|
 | A0 ✅ | shell + bridge + save chain của mình | gates 9+10 GREEN (28.09) |
-| A1 | Tự chủ phân phối: bundle x2t + tự sinh AllFonts.js + font subset | máy không cài ONLYOFFICE chạy trọn open→edit→save (payload: soft target — user 30.09 chấp nhận phình vì x2t cần 17 framework/113 MB; tối ưu sau ở T-A12) |
+| A1 ✅ | Tự chủ phân phối: bundle x2t + tự sinh AllFonts.js + font subset | ✅ **02.10.2026** — gate 11 "sạch ONLYOFFICE" thường trụ trong verify.sh (strict clean-machine: round-trip GREEN + 0 path app trong log; negative proven) + test tích thể mv `/Applications/ONLYOFFICE.app`: verify.sh FULL exit 0 khi app ẨN (`harness/scripts/clean-machine-proof.sh`, diagnostics 02.10). Payload: soft target (113 MB x2t — user 30.09 chấp nhận phình, tối ưu sau) |
 | A2 | Converter Rust thay x2t (DOCX → XLSX → PPTX) | round-trip parity vs x2t trên corpus+fuzz; x2t rút khỏi runtime |
 | A3 | Viewer Rust đọc-only ("quick view" không boot sdkjs) | mở <500 ms, RAM <150 MB; parity render vs oracle |
 | A4 | Editor core riêng cho DOCX subset hằng ngày ("Nano Light" mặc định, engine ONLYOFFICE = "chế độ nâng cao") | parity matrix theo lớp tính năng |
