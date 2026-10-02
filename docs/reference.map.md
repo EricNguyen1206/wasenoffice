@@ -156,6 +156,29 @@ black-box trên binary đã build (`otool -L`, chạy thật) — không đọc 
   (`aarch64-apple-darwin`), bảng compose từ `std::env::consts::ARCH/OS` ở
   `save.rs::target_dir_name()` — đồng bộ bảng với bundle script (rustc -vV host).
 
+## Editor.bin — container khảo sát (mới 02.10, T-A20 — probe design-first, oracle-obs)
+
+Định dạng binary NỘI BỘ của ONLYOFFICE, không spec công khai — mục này là baseline quan sát
+để ước lượng reverse (P1, DD `docs/design/converter-a2/DD.md` §2). Tái lập: `engines/converter/
+aarch64-apple-darwin/x2t <in.docx> <out.bin>` (positional 2-arg — seam `OpenBinary`).
+
+- **Kích thước + determinism (oracle-obs):** fixture `make_docx.py` 1962 B → Editor.bin 1586 B,
+  exit 0; 2 lần convert **byte-identical** → differential probing khả thi (mutate docx →
+  convert → diff bytes).
+- **Header 35 B (oracle-obs):** magic text `DOCY;v10;0;` (11 B) + nhị phân — 3 giá trị u32 LE
+  tại offset 0x0d/0x17/0x21 = 0x28b/0x5bf/0x62e khớp ranh giới vùng data (0x28c–0x62a): nghi
+  bảng (offset,size) section — **semantics CHƯA xác định**; 42 B đầu payload chưa decode.
+- **Payload (oracle-obs):** 926 B **không nén** (0 zlib stream); record stream
+  `[u8 tag][u32 LE byte-len][value]` — 2 chuỗi lồng verify byte-exact: 46→51→56→61 và
+  204→209→214→219→224 (**mỗi mức +5 B** = tag+len). Chuỗi UTF-16LE inline (u32 len + bytes,
+  ~20 chuỗi/5 đoạn văn) gồm cả styleId `Heading1` VÀ style name `heading 1` → converter
+  **resolve style trước khi serialize** (thay x2t = phải re-implement luật resolve).
+- **Hệ quả cho A2 (quyết định T-A20):** P1 = reverse 2 format nội bộ (Editor.bin + delta
+  records trong changes0.json — T-010: run-length, DoctRenderer áp) → ước lượng tháng, dead
+  code sau A4 → **chốt P2 "OOXML core trước"** (100% spec ECMA-376); trigger mở lại P1:
+  rút x2t trước A4 (khi đó chỉ cần writer OOXML→Editor.bin). Crate slice:
+  `src-tauri/crates/nanooffice-ooxml` (P2, clean-room).
+
 ## AllFonts generator — Rust thay việc app sinh (mới 30.09, T-A11, rung A1 — clean-room ĐẦU TIÊN)
 
 - **Nhà duy nhất:** `src-tauri/src/protocol/allfonts.rs` — enumerate FONT_URL_ROOTS qua

@@ -15,14 +15,14 @@ type: queue
 
 ## Tình hình nhanh
 
-▶ Kế tiếp: T-A20 (mở màn A2 — converter Rust DOCX clean-room, slot adapter sau sidecar seam T-A14; chuỗi review #2 subagent 2 T-053→T-054→T-044 đã xong 02.10 — diagnostics)
+▶ Kế tiếp: T-A21 (A2 S1 — docx read đầy đủ: OPC + styles + table + list + image; P2 "OOXML core trước" đã chốt bằng probe số liệu T-A20 — DD `docs/design/converter-a2/DD.md`)
 
 | Phase | Tổng | ✅ | 🟨 | ⏸ | ⬜ |
 |---|---|---|---|---|---|
 | PH-0 — ĐÃ ĐÓNG 27.09  |  6  | 6  | 0  | 0  | 0  |
 | PH-1  |  10 | 7  | 0  | 0  | 3  |
 | PH-4  |  3  | 0  | 0  | 0  | 3  |
-| Track A (QĐ9) |  6  | 5  | 0  | 0  | 1  |
+| Track A (QĐ9) |  10 | 6  | 0  | 0  | 4  |
 | META  | 12  | 8  | 0  | 0  | 4  |
 
 ## PH-0 — Spike editor + render DOCX (go/no-go) — ĐÃ ĐÓNG 27.09 · verdict GO WITH CAVEAT
@@ -57,7 +57,12 @@ type: queue
 > Rung hiện tại: **A2 — Converter Rust** (H2; A1 ĐÓNG 02.10). Task Track A bắt buộc đọc
 > `harness/rules/clean-room.md` trước khi làm; roadmap đầy đủ: `docs/vision.md` QĐ9.
 
-- [ ] ⬜ T-A20 · A2 mở màn: **Converter Rust thay x2t — bắt đầu DOCX** (parse/serialize OOXML từ spec ECMA-376/ISO 29500 — clean-room `harness/rules/clean-room.md`: chỉ `spec-ref:` + `oracle-obs:`, CẤM đọc upstream core) · đích đóng rung A2: round-trip parity vs x2t trên corpus + fuzz, x2t rút khỏi runtime · seed 02.10 khi đóng A1 — KHÔNG kèm thiết kế chi tiết (thiết kế sống lúc claim) · ← T-A14 (seam sẵn sàng cắm adapter)
+- [ ] ⬜ T-A21 · A2 **S1 — docx read đầy đủ**: OPC (Content_Types/rels) + styles.xml + tables (`w:tbl`) + lists (`numbering.xml` + `w:numPr`) + images (`wp:/a:/pic:`) + headers/footers → model; refuse-unknown thay parse-sai; model parity vs bảng construct (DD §2/§5) 100% trên corpus fixture · DD `docs/design/converter-a2/DD.md` §4 · ← T-A20
+- [ ] ⬜ T-A22 · A2 **S2 — docx write**: model → docx round-trip (so trên model, không kỳ vọng byte-stable với x2t); file ghi ra mở trong engine render GREEN (pattern gate 9) · ← T-A21
+- [ ] ⬜ T-A23 · A2 **S3 — parity harness**: docx→model→docx so vs x2t (**x2t = DEV-ORACLE**, không reverse Editor.bin) trên corpus + fuzz; tiêu chí parity đo được DD §5 · ← T-A22
+- [ ] ⬜ T-A24 · A2 **S4 — cắm adapter** `sidecar::convert` (open path trước, save path sau) — x2t rút khỏi runtime khi cả 2 path qua adapter; xlsx/pptx (S5) seed khi S4 xong · ← T-A23
+
+- [x] ✅ T-A20 · A2 mở màn DESIGN-FIRST (ponytail ULTRA): probe 2 phương án bằng số liệu — **P1** (Editor.bin): 1962 B docx → 1586 B Editor.bin **deterministic**, payload 926 B không nén, TLV `[u8 tag][u32 len]` 2 chuỗi lồng verify byte-exact (+5/mức), style resolve trong binary, preamble 42 B chưa decode, delta records = format thứ 2 (T-010) → ước lượng **tháng** + dead code sau A4 · **P2** (OOXML core): 100% spec ECMA-376, fixture 21 element types (5 parts, 2.5 KB), docx cơ bản ~85 element types → ước lượng **tuần** → **CHỐT P2** (không 50/50: P1 chỉ rút 113 MB x2t trong khi sdkjs 313 MB vẫn ship; P2 = nền bắt buộc A3/A4, ship mọi rung) · crate slice `src-tauri/crates/nanooffice-ooxml` (parse docx → model tối giản + CLI JSON; 3 test; deps quick-xml/zip qua license gate; workspace member + verify.sh cargo `--workspace`) · DD mã **K01** `docs/design/converter-a2/DD.md` · verify.sh 16 gates exit 0 · 02.10 · 0cc770a · diagnostics 02.10 + reference.map § Editor.bin
 
 - [x] ✅ T-A14 · Converter seam `sidecar::convert` che 3 hình dạng gọi (OpenBinary positional success=dst-tồn-tại · SaveFromChanges params-XML success=exit0+output · Passthrough pdf-copy không spawn) — spawn/output-capture 1 chỗ; `x2t_path`/`find_bundled_x2t`/`target_dir_name`/strict-mode DI CHUYỂN nguyên khối từ save.rs (log strings nguyên văn — gate 10/11 grep); lib.rs hết `bridge::save::x2t_path()`; test pin resolution order env-if-exists→bundled→strict-error (tmp roots + fake converter qua interface, không đụng /Applications) + xoá stub `window/` (T-043 hấp thụ) · refactor thuần hành vi không đổi · 02.10 · 2d3da4e · diagnostics 02.10
 

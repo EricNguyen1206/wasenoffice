@@ -8,6 +8,59 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-02 · T-A20: mở màn A2 — design-first chốt P2 "OOXML core trước" + crate slice nanooffice-ooxml — GREEN
+
+- **Phạm vi:** design-first theo handoff `ta20.md` (ponytail ULTRA — user chỉ thị): probe 2
+  phương án bằng số liệu → DD mã K01 (`docs/design/converter-a2/DD.md`) → crate slice tối
+  giản; KHÔNG implement converter đầy đủ. Clean-room tối đa: Editor.bin chỉ qua oracle-obs
+  (chạy x2t bundled), OOXML qua spec-ref ECMA-376.
+- **P1 probe (oracle-obs — `engines/converter/aarch64-apple-darwin/x2t fixture.docx out.bin`,
+  fixture `make_docx.py` 1962 B):** Editor.bin 1586 B, exit 0; 2 lần convert **byte-identical**
+  (differential probing khả thi). Header 35 B: magic text `DOCY;v10;0;` (11 B) + nhị phân —
+  3 giá trị u32 LE tại offset 0x0d/0x17/0x21 = 0x28b/0x5bf/0x62e khớp ranh giới vùng data
+  (0x28c–0x62a) — nghi bảng (offset,size) section, **semantics chưa xác định**; 42 B đầu
+  payload chưa decode sau 1 probe phiên. Payload 926 B (0x28c–0x62a) **KHÔNG nén** (0 zlib
+  stream), record stream `[u8 tag][u32 LE byte-len][value]`; 2 chuỗi lồng verify byte-exact
+  (46→51→56→61 và 204→209→214→219→224 — mỗi mức +5 B = tag+len); chuỗi UTF-16LE inline
+  (u32 len + bytes, ~20 chuỗi/5 đoạn) gồm styleId `Heading1` VÀ style name `heading 1` →
+  **converter resolve style TRƯỚC khi serialize**. Cộng gỡ: delta `changes0.json` = format
+  nội bộ thứ 2 (T-010: run-length, DoctRenderer áp) → P1 save phải re-implement cả
+  delta-application. Kết luận: round-trip docx cơ bản = ước lượng **tháng** (từ điển tag
+  hàng trăm nghĩa × ≥1 chu kỳ probe khác biệt mỗi nghĩa) + writer phải được parser engine
+  chấp nhận (tag thiếu = render hỏng im lặng) + **dead code sau A4** (Nano Light làm OOXML
+  trực tiếp; advanced mode dùng x2t thật — P1 hết consumer).
+- **P2 probe (spec-ref ECMA-376 Part 1 §17 WordprocessingML / §20 DrawingML, Part 2 OPC):**
+  fixture = 5 parts OPC, 2.5 KB XML, **21 element types + 15 attribute types**; docx cơ bản
+  (heading/bold/italic/table/list/image/hyperlink/hdr-ftr/section) ước **~85 element types**
+  trên ~7 parts, 4 namespace; **0% ngoài spec** → ước lượng **tuần** cho read+write cơ bản.
+- **Quyết định: P2** (không 50/50): P1 chỉ rút 113 MB x2t trong khi sdkjs+web-apps 313 MB
+  vẫn ship (engine vẫn cần cho edit); P2 = nền bắt buộc A3 viewer + A4 editor + tiện ích
+  ngay (metadata/text-extract cho AI QĐ3). P1 giữ làm phương án B, trigger: rút x2t trước
+  A4 → khi đó chỉ cần writer OOXML→Editor.bin (DD K01 §2).
+- **Crate slice `src-tauri/crates/nanooffice-ooxml`** (lib: lib.rs model + opc.rs zip-part +
+  document.rs XML→model; main.rs CLI in JSON): model `Document/Paragraph{style,runs}/
+  Run{text,bold,italic}`; root-check `xmlns:w` binding → refuse-unknown thay parse-sai;
+  OnOff `w:val` semantics (false/0/off tắt); rPr của pPr không áp lên runs; mọi lỗi zip/
+  utf-8/xml → `Err(ParseError)` không panic (trust boundary). **3 test** (fixture chuẩn
+  tiếng Việt exact; malformed zip/xml/part → Err; pStyle/w:val=false/w:i/entities).
+  Deps mới: `quick-xml` (MIT OR Apache-2.0) + `zip` deflate-only (MIT) — stdlib không có
+  XML/zip, tự viết vi phạm rule trust-boundary; `serde_json` đã có trong graph. Justification
+  trong commit `a2(crate)`.
+- **Wiring (bẫy mới ghi lại):** manifest src-tauri giờ là package + workspace root
+  (`[workspace] members = ["crates/nanooffice-ooxml"]` — 1 member chỉ để gates phủ crate).
+  Cargo ở manifest kiểu này mặc định **package-mode** → verify.sh phải thêm `--workspace`
+  (check/clippy) / `--all` (fmt) vào 3 lệnh cargo, không có flag = crate không được phủ
+  (im lặng!). `cargo test` vẫn chạy thủ công (`-p nanooffice-ooxml`) theo convention.
+- **Bằng chứng:** `cargo test -p nanooffice-ooxml` **3 passed**; tổng cargo test 23 shell
+  (+1 ignored) + 3 crate; `cargo clippy --workspace -D warnings` exit 0 (bắt 2
+  useless-conversion thật ngay lần đầu); `cargo fmt --check --all` clean; verify.sh FULL
+  exit 0 (`/tmp/verify-ta20.log`); CLI smoke: `target/debug/nanooffice-ooxml fixture.docx`
+  in JSON đúng (tiếng Việt nguyên vẹn) exit 0.
+- **Trạng thái:** T-A20 ✅ sink Track A. Seed T-A21 (S1 read) → T-A22 (S2 write) → T-A23
+  (S3 parity, x2t = DEV-ORACLE) → T-A24 (S4 adapter seam); ▶ = T-A21.
+
+---
+
 ## 2026-10-02 · T-053 + T-054 + T-044: smoke-lib 1 nhà · font-root 1 chủ · gate bridge-surface — GREEN (review #2 hygiene C3+C5+C4, 3 commit nhỏ theo thứ tự user duyệt)
 
 - **Phạm vi:** subagent 2 chuỗi 3 task review #2 (T-053→T-054→T-044); nguyên tắc
