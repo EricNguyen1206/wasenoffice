@@ -24,12 +24,13 @@
 //! (ConvertationSaveError) instead of failing silently.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
 use serde_json::Value;
 
 use super::BridgeError;
+use crate::formats::{DocWorkdir, CSV_DELIMITER, CSV_TXT_ENCODING, DOCT_PARAMS};
 use crate::protocol::FileRegistry;
 
 use tauri::Manager as _;
@@ -48,20 +49,10 @@ fn states() -> &'static Mutex<HashMap<u32, SaveState>> {
     STATES.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-/// `AVS_OFFICESTUDIO_FILE_DOCUMENT_DOCX` (value from the ONLYOFFICE core
-/// format enum; multi-format save = separate task — T-049, TODO.md).
-const FORMAT_DOCX: i64 = 65;
-
-/// One-shot x2t work directory for a document (shared with the open-delivery
-/// chain in lib.rs — Editor.bin and changes/ live together here, exactly like
-/// the real shell's recovery dir).
-pub fn workdir_for(id: u32) -> PathBuf {
-    std::env::temp_dir().join(format!("nanooffice-doc-{id}"))
-}
-
-fn changes_path(work: &Path) -> PathBuf {
-    work.join("changes").join("changes0.json")
-}
+// Format facts (x2t codes, save eligibility) + the workdir layout live in the
+// registry (`crate::formats` — T-052); converter spawn lives in the sidecar
+// seam (`crate::sidecar` — T-A14). This module keeps the changes journal and
+// the save orchestration.
 
 fn xml_escape(s: &str) -> String {
     s.replace('&', "&amp;")
@@ -96,10 +87,10 @@ pub fn append_changes(registry: &FileRegistry, payload: &Value) -> Result<Value,
     let count = args.get(2).and_then(Value::as_i64).unwrap_or(0);
     let delete_index = args.get(1).and_then(Value::as_i64);
 
-    let work = workdir_for(id);
-    std::fs::create_dir_all(work.join("changes"))
+    let work = DocWorkdir::new(id);
+    std::fs::create_dir_all(work.changes_dir())
         .map_err(|e| BridgeError::Runtime(format!("mkdir changes dir: {e}")))?;
-    let path = changes_path(&work);
+    let path = work.changes_file();
 
     let mut map = states()
         .lock()
@@ -213,7 +204,10 @@ pub fn save_document(app: &tauri::AppHandle, registry: &FileRegistry, payload: &
         .and_then(|e| e.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
-    if ext != "docx" {
+    // Save eligibility comes from the registry (T-052): today only docx is
+    // wired — xlsx 257 is known-but-unwired and pptx unidentified; T-049
+    // flips those in formats.rs, not here.
+    let Some(format_to) = crate::formats::by_ext(&ext).and_then(|f| f.wired_save_code()) else {
         return finish(
             app,
             Some(&disk),
@@ -221,10 +215,10 @@ pub fn save_document(app: &tauri::AppHandle, registry: &FileRegistry, payload: &
             2,
             &format!("unsupported save format {ext:?} (multi-format save = T-049)"),
         );
-    }
+    };
 
-    let work = workdir_for(id);
-    let editor_bin = work.join("Editor.bin");
+    let work = DocWorkdir::new(id);
+    let editor_bin = work.editor_bin();
     if !editor_bin.is_file() {
         return finish(
             app,
@@ -234,7 +228,7 @@ pub fn save_document(app: &tauri::AppHandle, registry: &FileRegistry, payload: &
             "Editor.bin missing — open the document before saving",
         );
     }
-    let changes = changes_path(&work);
+    let changes = work.changes_file();
     let from_changes = changes.metadata().map(|m| m.len() > 0).unwrap_or(false);
 
     // Atomic-ish write: x2t renders next to the target, rename over it after
@@ -252,7 +246,7 @@ pub fn save_document(app: &tauri::AppHandle, registry: &FileRegistry, payload: &
         "<m_sFileTo>{}</m_sFileTo>",
         xml_escape(&tmp_out.to_string_lossy())
     ));
-    xml.push_str(&format!("<m_nFormatTo>{FORMAT_DOCX}</m_nFormatTo>"));
+    xml.push_str(&format!("<m_nFormatTo>{format_to}</m_nFormatTo>"));
     if from_changes {
         xml.push_str("<m_bFromChanges>true</m_bFromChanges>");
     }
@@ -270,9 +264,13 @@ pub fn save_document(app: &tauri::AppHandle, registry: &FileRegistry, payload: &
             "<m_sAllFontsPath>{}</m_sAllFontsPath>",
             xml_escape(&allfonts_path.to_string_lossy())
         ));
-        xml.push_str("<m_nCsvTxtEncoding>46</m_nCsvTxtEncoding>");
-        xml.push_str("<m_nCsvDelimiter>4</m_nCsvDelimiter>");
-        xml.push_str("<m_nDoctParams>1</m_nDoctParams>");
+        xml.push_str(&format!(
+            "<m_nCsvTxtEncoding>{CSV_TXT_ENCODING}</m_nCsvTxtEncoding>"
+        ));
+        xml.push_str(&format!(
+            "<m_nCsvDelimiter>{CSV_DELIMITER}</m_nCsvDelimiter>"
+        ));
+        xml.push_str(&format!("<m_nDoctParams>{DOCT_PARAMS}</m_nDoctParams>"));
         if let Some(fonts_dir) = allfonts_path.parent() {
             xml.push_str(&format!(
                 "<m_sFontDir>{}</m_sFontDir>",
@@ -282,7 +280,7 @@ pub fn save_document(app: &tauri::AppHandle, registry: &FileRegistry, payload: &
     }
     xml.push_str("</TaskQueueDataConvert>");
 
-    let params = work.join("params_to.xml");
+    let params = work.params_xml();
     if let Err(e) = std::fs::write(&params, xml) {
         return finish(
             app,
@@ -359,7 +357,8 @@ mod tests {
         let dir = std::env::temp_dir().join("nanooffice-test-append");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("changes")).unwrap();
-        let path = changes_path(&dir);
+        // layout pinned by formats::DocWorkdir tests
+        let path = dir.join("changes").join("changes0.json");
         use std::io::Write as _;
         let mut f = std::fs::OpenOptions::new()
             .create(true)

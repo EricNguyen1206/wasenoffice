@@ -4,12 +4,14 @@
 //! - `bridge`   : shim of `window.AscDesktopEditor` (~130 methods, see docs/reference.map.md)
 //! - `protocol` : `nanooffice-engine://` assets + `nanooffice-file://` user documents
 //! - `sidecar`  : x2t converter seam — binary resolution + `convert()` (T-A14)
+//! - `formats`  : format registry + per-document workdir layout (T-052)
 //!
 //! Shim JS injected into every frame (in this order, see `run`): probe flag →
 //! `BRIDGE_JS` (desktopEditor.js — bridge + relay) → `DELIVERY_JS`
 //! (delivery.js — open-delivery chain); both also bundled by vite via src/main.ts.
 
 mod bridge;
+mod formats;
 mod protocol;
 mod sidecar;
 
@@ -121,9 +123,10 @@ fn payload_to_short(payload: &serde_json::Value) -> String {
 /// contains `<name>.pdf`, no Editor.bin; client_renderer_wrapper.cpp
 /// "onlocaldocument_loadend" falls back to `folder + "/" + file_name(src)`
 /// when Editor.bin is missing — the pdf editor's own loader parses raw PDF).
-/// Boot params per format live across the boundary in `src/main.ts`
-/// (FILE_FORMATS) — touch both when adding a format (xps/djvu are
-/// CROSSPLATFORM too, same no-x2t rule).
+/// Format facts live in the registry (`formats::FORMATS` — the Rust half),
+/// mirrored by `src/main.ts` FILE_FORMATS for the boot page (cross-checked
+/// by test; xps/djvu are CROSSPLATFORM too — same copy-original rule when
+/// they join the table).
 /// Conversions run through the sidecar seam (`sidecar::convert`, T-A14).
 #[tauri::command]
 fn get_document_for_delivery(
@@ -135,40 +138,49 @@ fn get_document_for_delivery(
         .latest()
         .ok_or_else(|| "no document registered yet".to_string())?;
 
-    let work = bridge::save::workdir_for(id);
-    let _ = std::fs::remove_dir_all(&work);
-    std::fs::create_dir_all(&work).map_err(|e| format!("mkdir {}: {e}", work.display()))?;
+    let work = formats::DocWorkdir::new(id);
+    let _ = std::fs::remove_dir_all(work.root());
+    std::fs::create_dir_all(work.root())
+        .map_err(|e| format!("mkdir {}: {e}", work.root().display()))?;
 
-    let is_pdf = disk
+    let ext = disk
         .extension()
         .and_then(|e| e.to_str())
-        .is_some_and(|e| e.eq_ignore_ascii_case("pdf"));
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    // Copy-original flavor is per-format (pdf today). Unknown extensions
+    // keep the convert branch — the TS boot gate (FILE_FORMATS) rejects them
+    // long before delivery ever runs, so this is unreachable in practice.
+    let flavor = formats::by_ext(&ext)
+        .map(|f| f.open)
+        .unwrap_or(formats::OpenFlavor::Convert);
+    let name = work.delivered_name(flavor, &disk)?;
 
-    let (delivered_path, name) = if is_pdf {
-        let file_name = disk
-            .file_name()
-            .ok_or_else(|| "document path has no file name".to_string())?;
-        let target = work.join(file_name);
-        sidecar::convert(&sidecar::ConvertRequest::Passthrough {
-            src: &disk,
-            dst: &target,
-        })
-        .map_err(|e| e.to_string())?;
-        (target, file_name.to_string_lossy().into_owned())
-    } else {
-        let out = work.join("Editor.bin");
-        let conv = sidecar::convert(&sidecar::ConvertRequest::OpenBinary {
-            src: &disk,
-            dst: &out,
-        })
-        .map_err(|e| e.to_string())?;
-        log::info!(
-            "x2t converted {} bytes → Editor.bin ({} bytes) in {:?}",
-            disk.display(),
-            std::fs::metadata(&out).map(|m| m.len()).unwrap_or(0),
-            conv.elapsed
-        );
-        (out.clone(), "Editor.bin".into())
+    let delivered_path = match flavor {
+        formats::OpenFlavor::CopyOriginal => {
+            let target = work.root().join(&name);
+            sidecar::convert(&sidecar::ConvertRequest::Passthrough {
+                src: &disk,
+                dst: &target,
+            })
+            .map_err(|e| e.to_string())?;
+            target
+        }
+        formats::OpenFlavor::Convert => {
+            let out = work.editor_bin();
+            let conv = sidecar::convert(&sidecar::ConvertRequest::OpenBinary {
+                src: &disk,
+                dst: &out,
+            })
+            .map_err(|e| e.to_string())?;
+            log::info!(
+                "x2t converted {} bytes → Editor.bin ({} bytes) in {:?}",
+                disk.display(),
+                std::fs::metadata(&out).map(|m| m.len()).unwrap_or(0),
+                conv.elapsed
+            );
+            out
+        }
     };
 
     let bytes = std::fs::read(&delivered_path)
@@ -176,7 +188,7 @@ fn get_document_for_delivery(
     log::info!("delivering {} ({} bytes) to engine", name, bytes.len());
 
     Ok(DeliverableDocument {
-        folder: work.to_string_lossy().into_owned(),
+        folder: work.root().to_string_lossy().into_owned(),
         name,
         // the engine's save-end contract derives the document name from the
         // source path — it must be the ORIGINAL file, not the workdir artifact

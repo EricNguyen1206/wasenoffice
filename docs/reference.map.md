@@ -72,9 +72,12 @@ Chuỗi mở file local của shell thật — NanoOffice tái tạo trong shim 
 
 ## Desktop open contract — MULTI-FORMAT (mới 29.09, T-048)
 
-Bản đồ format cho shell (bằng chứng từng dòng ở cột 3). Map ở code: `src/main.ts`
-`FILE_FORMATS` (một nhà); delivery nhánh pdf: `src-tauri/src/lib.rs`
-`get_document_for_delivery`.
+Bản đồ format cho shell (bằng chứng từng dòng ở cột 3). Map ở code (T-052, formats
+1 nhà): Rust `src-tauri/src/formats.rs` (bảng `FORMATS` + provenance từng hằng + workdir
+layout `DocWorkdir`) ↔ `src/main.ts` `FILE_FORMATS` (nửa boot-page) — test Rust
+`formats::tests::main_ts_file_formats_match_rust_table` đối chiếu 2 bảng (đếm entry +
+filetype/doctype/isForm); delivery nhánh pdf: `src-tauri/src/lib.rs`
+`get_document_for_delivery` (spawn qua seam `sidecar::convert`, T-A14).
 
 | Định dạng | Boot params | Đường deliver | Bằng chứng |
 |---|---|---|---|
