@@ -8,6 +8,30 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-02 · Architecture review #2 (post-A1) — 6 candidates landed thành TODO, user chỉ thị "làm hết" + ponytail sau
+
+- **Phạm vi:** 38 commits/12 ngày từ review #1 (27.09); first-party ~2.0k → ~4.6k dòng.
+  Sweep: agent Explore toàn hot set (save.rs 490 · allfonts.rs 1072 · delivery/desktopEditor
+  ~940 · 7 harness scripts) + main-agent kiểm chứng first-hand 3 claim load-bearing
+  (đều đúng): open chain mượn `bridge::save::x2t_path` (locality đảo ngược, lib.rs:158);
+  filesrv.rs:181-199 range-parse tự viết trong khi `mod.rs::parse_range` CÓ TEST vẫn còn
+  (parser không test phục vụ production); 3 smoke gates copy boilerplate gần nguyên văn
+  (boot/teardown/poll ×3 đã lệch style env-inline vs mảng CMD).
+- **6 candidates → TODO:** C1 T-A14 converter seam `sidecar::convert(req)→result` che 3
+  hình dạng gọi (open positional / save params-XML / pdf passthrough) — hấp thụ T-043,
+  làm TRƯỚC T-A20 (A2crate = adapter 2) · C2 T-052 formats + workdir 1 nhà (chặn T-049
+  gõ lại 257/513 từ prose) · C3 T-053 smoke-lib factor trước khi T-049 clone gates ·
+  C4 T-044 hạ còn check-script (~35 method ×3 nơi — tệ hơn review #1) · C5 T-054 font-root
+  1 chủ + filesrv range-reuse · C6 quick wins (provenance constants, log pointer 1 chiều,
+  env hấp thụ vào C1/C2). T-046 thu hẹp phần còn lại.
+- **Thứ tự thực hiện (user "làm hết"):** 1 subagent làm T-A14→T-052 (cùng file, kèm
+  nhau) → subagent 2 làm T-053→T-054→T-044 → ponytail review toàn source → độc lập
+  verify sau mỗi subagent (mỗi gate rewrite phải PASSED exit 0 trước khi xóa bản cũ —
+  replace-don't-layer; log contract gates 9/10/11 giữ nguyên byte).
+- **Trạng thái:** landed TODO (dashboard Track A 6/1🟨, PH-1 10, META 12); bắt đầu T-A14.
+
+---
+
 ## 2026-10-02 · T-A13: Gate 11 "sạch ONLYOFFICE" — ĐÓNG RUNG A1 (tự chủ phân phối) — GREEN (verify.sh FULL exit 0 với app ẨN + negative proven)
 
 - **Kết quả (confirmed) — 3 chiều bằng chứng:**
