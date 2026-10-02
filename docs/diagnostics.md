@@ -8,6 +8,62 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-02 · T-A22: A2/S2 — docx WRITE + round-trip, file ghi ra render GREEN — GREEN
+
+- **Phạm vi:** slice S2 của DD K01 §4 — `src/write.rs` serializer model → docx: 1 hàm/
+  construct đối xứng parser (`PartWriter::serialize/blocks/paragraph/run/drawing/table` +
+  `styles_xml` + `numbering_xml` + `rels_xml`/`content_types_xml`), quick-xml `escape()`,
+  zip crate có sẵn (deflate), không builder/trait (ponytail ULTRA). Package tự sinh đúng
+  chuẩn Part 2: part chính = canonical name `word/document.xml` (reader tra cứu qua root
+  rels — writer chỉ chọn tên; package self-consistent by construction), image rel ids GIỮ
+  id từ model (r:embed phải re-resolve identically hoặc round-trip gãy), header/footer rel
+  ids alloc mới tránh đụng, styles/numbering rel slots cố định (rIdStyles/rIdNumbering),
+  refuse image extension ngoài bảng media type (webp… → `WriteError`, không đoán).
+- **Clean-room:** 19 clause DrawingML verify qua bảng children/parents trong Remarks mirror
+  (raw XML từ OfficeDev/open-xml-docs-ref-dotnet): drawing §17.3.3.9 · wp:inline §20.4.2.8 ·
+  wp:extent §20.4.2.7 · a:graphic §20.1.2.2.16 · a:graphicData §20.1.2.2.17 · pic:pic
+  §20.2.2.5 · pic:nvPicPr §20.2.2.4 · pic:cNvPr §20.2.2.3 · pic:cNvPicPr §20.2.2.2 ·
+  pic:blipFill §20.2.2.1 · a:blip §20.1.8.13 · a:stretch §20.1.8.56 · a:fillRect §20.1.8.30 ·
+  pic:spPr §20.2.2.6 · a:xfrm §20.1.7.6 · a:off §20.1.7.4 · a:ext §20.1.7.3 · a:prstGeom
+  §20.1.9.18 · a:avLst §20.1.9.5. Bài học T-A21 LẶP LẠI: ký ức số section sai 5/19
+  (cNvPr/cNvPicPr đảo, stretch không phải .47, fillRect không phải .28, xfrm không phải
+  .7.5, prstGeom không phải .8.10) — số clause của MỘT element nằm ở bảng children của
+  element CHA (hoặc parents của con), không ở remark của chính nó.
+- **Model change (schema bắt buộc — theo handoff):** `StyleDef` +`kind: StyleKind`
+  (Paragraph/Character) — §17.7.4.17 `@w:type` là REQUIRED attribute, writer không thể sinh
+  styles.xml đúng schema thiếu nó; +derive `PartialEq`/`Clone` (round-trip compare + fuzz —
+  không đổi schema). Styles serialize FLAT (model đã resolve basedOn → không sinh basedOn;
+  re-parse resolve về chính nó = cùng model). Option 3-state của style sinh explicit kể cả
+  `Some(false)`.
+- **Limitation ghi rõ (model S1, không phải bug writer):** `Run.bold/italic` là bool
+  2-state → `false` serialize ABSENT (không phải `w:b w:val="false"`) — explicit-off
+  override của style bold MẤT intent trong file output (corpus p2 sẽ render bold khi mở);
+  model 3-state là việc khi parity/render yêu cầu. Tương tự `sectPr` không surface trong
+  model → header/footer parts được ghi kèm relationships nhưng không được reference từ
+  section (reader surface hdr/ftr từ rels nên round-trip vẫn bất biến).
+- **Image bytes:** model S1 relationship-only → media part ghi placeholder PNG 1×1 tự
+  encode std-thuần (RFC 2083 + RFC 1950/1951 stored block, crc32/adler32 tự viết, 72 B);
+  relationship + part + content type là dữ liệu thật. Bytes thật là việc S3+ nếu parity cần.
+- **2 bug bắt được qua chính round-trip test:** (1) writer thiếu wrapper `w:body` cho main
+  part (hdr/ftr giữ blocks trực tiếp, main phải wrap — "no w:body in document" khi re-parse);
+  (2) quên relationships cho styles.xml/numbering.xml (body khớp nhưng dict trống khi
+  re-parse — reader tra accessory parts qua doc rels).
+- **Bằng chứng:** `cargo test -p nanooffice-ooxml` 8 passed (5 read + 3 write mới: corpus
+  round-trip bất biến + edge XML escape/xml:space/webp-refuse + fuzz 500 vòng
+  mutation-on-model — write không panic, reparse luôn Ok, model bằng từng vòng);
+  `cargo test --workspace` 23 shell (+1 ignored) + 8 crate exit 0; oracle-obs x2t đọc file
+  ghi ra exit 0 (Editor.bin 2467 B); **`smoke-render.sh /tmp/ta22-roundtrip.docx` PASSED
+  exit 0 ×2** (contentReady + canvas 7 canvas 2302x958 + /fonts/ — gate pattern 9);
+  verify.sh **FULL exit 0** 16 gates (`/tmp/verify-ta22.log`).
+- **Quan sát (không sửa):** clippy 1.93.0 phát hiện mới `manual_is_multiple_of` flag
+  `src/protocol/allfonts.rs:1025` ở lệnh `--all-targets` (KHÔNG flag ở lệnh verify-style
+  `cargo clippy --workspace --quiet -- -D warnings` — verify exit 0). Ghi để session sau
+  không ngạc nhiên nếu toolchain verify nâng cấp bật flag này vào verify-style.
+- **Trạng thái:** T-A22 ✅ sink Track A. ▶ = T-A23 (S3 parity: x2t = DEV-ORACLE, so trên
+  model theo DD §5) → T-A24 (S4 adapter seam).
+
+---
+
 ## 2026-10-02 · T-A21: A2/S1 — docx READ đầy đủ (OPC chuẩn + table/list/image + styles resolve) — GREEN
 
 - **Phạm vi:** slice S1 của DD K01 (`docs/design/converter-a2/DD.md` §4) — crate

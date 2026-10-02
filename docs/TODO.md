@@ -15,14 +15,14 @@ type: queue
 
 ## Tình hình nhanh
 
-▶ Kế tiếp: T-A22 (A2 S2 — docx write: model → docx round-trip, mở được trong engine render GREEN — DD `docs/design/converter-a2/DD.md` §4; S1 read đã đầy đủ T-A21)
+▶ Kế tiếp: T-A23 (A2 S3 — parity harness: docx→model→docx so vs x2t làm DEV-ORACLE trên corpus + fuzz, tiêu chí DD `docs/design/converter-a2/DD.md` §5; S1 read + S2 write đã đầy đủ T-A21/T-A22)
 
 | Phase | Tổng | ✅ | 🟨 | ⏸ | ⬜ |
 |---|---|---|---|---|---|
 | PH-0 — ĐÃ ĐÓNG 27.09  |  6  | 6  | 0  | 0  | 0  |
 | PH-1  |  10 | 7  | 0  | 0  | 3  |
 | PH-4  |  3  | 0  | 0  | 0  | 3  |
-| Track A (QĐ9) |  10 | 7  | 0  | 0  | 3  |
+| Track A (QĐ9) |  10 | 8  | 0  | 0  | 2  |
 | META  | 12  | 8  | 0  | 0  | 4  |
 
 ## PH-0 — Spike editor + render DOCX (go/no-go) — ĐÃ ĐÓNG 27.09 · verdict GO WITH CAVEAT
@@ -57,12 +57,12 @@ type: queue
 > Rung hiện tại: **A2 — Converter Rust** (H2; A1 ĐÓNG 02.10). Task Track A bắt buộc đọc
 > `harness/rules/clean-room.md` trước khi làm; roadmap đầy đủ: `docs/vision.md` QĐ9.
 
-- [ ] ⬜ T-A22 · A2 **S2 — docx write**: model → docx round-trip (so trên model, không kỳ vọng byte-stable với x2t); file ghi ra mở trong engine render GREEN (pattern gate 9) · ← T-A21
 - [ ] ⬜ T-A23 · A2 **S3 — parity harness**: docx→model→docx so vs x2t (**x2t = DEV-ORACLE**, không reverse Editor.bin) trên corpus + fuzz; tiêu chí parity đo được DD §5 · ← T-A22
 - [ ] ⬜ T-A24 · A2 **S4 — cắm adapter** `sidecar::convert` (open path trước, save path sau) — x2t rút khỏi runtime khi cả 2 path qua adapter; xlsx/pptx (S5) seed khi S4 xong · ← T-A23
 
 - [x] ✅ T-A20 · A2 mở màn DESIGN-FIRST (ponytail ULTRA): probe 2 phương án bằng số liệu — **P1** (Editor.bin): 1962 B docx → 1586 B Editor.bin **deterministic**, payload 926 B không nén, TLV `[u8 tag][u32 len]` 2 chuỗi lồng verify byte-exact (+5/mức), style resolve trong binary, preamble 42 B chưa decode, delta records = format thứ 2 (T-010) → ước lượng **tháng** + dead code sau A4 · **P2** (OOXML core): 100% spec ECMA-376, fixture 21 element types (5 parts, 2.5 KB), docx cơ bản ~85 element types → ước lượng **tuần** → **CHỐT P2** (không 50/50: P1 chỉ rút 113 MB x2t trong khi sdkjs 313 MB vẫn ship; P2 = nền bắt buộc A3/A4, ship mọi rung) · crate slice `src-tauri/crates/nanooffice-ooxml` (parse docx → model tối giản + CLI JSON; 3 test; deps quick-xml/zip qua license gate; workspace member + verify.sh cargo `--workspace`) · DD mã **K01** `docs/design/converter-a2/DD.md` · verify.sh 16 gates exit 0 · 02.10 · 0cc770a · diagnostics 02.10 + reference.map § Editor.bin
 - [x] ✅ T-A21 · A2 **S1 — docx read đầy đủ** (ponytail ULTRA chuỗi A2): crate `nanooffice-ooxml` từ model tối giản lên read đầy đủ — **OPC đúng chuẩn** (Content_Types + rels, part chính tra cứu `_rels/.rels` không hardcode, refuse content-type sai) + recursive-descent parser 1 hàm/construct + **table** (`w:tbl` §17.4.38/tr/tc, cell lồng) + **list** (`w:numPr` raw + `numbering.xml` resolve numId→abstractNum→lvl: numFmt/lvlText) + **image relationship-only** (`a:blip r:embed` → part, refuse rel sai loại/external, `wp:extent` EMU) + **styles.xml resolve** basedOn chain (con thắng cha, cycle/dangling → Err) + **headers/footers** (rel type, root check w:hdr/w:ftr, rels riêng từng part); refuse-unknown thay parse-sai; corpus mới `make_docx_full.py` (10 parts: style chain + run override + table 2×2 + 3 list + PNG 1×1 r:embed + hdr/ftr + tiếng Việt); fuzz 500 vòng seed 42 (LCG tự viết, XML+zip mutation) 0 panic; spec-ref verify từng số qua bảng Remarks open-xml-docs (mirror ISO/IEC 29500-1 1st ed) — sửa 2 comment cũ sai (w:i §17.3.2.16, w:t §17.3.3.31); CLI JSON xuất đủ model mới · cargo test --workspace 23 shell + 5 crate exit 0 · verify.sh FULL exit 0 · 02.10 · diagnostics 02.10
+- [x] ✅ T-A22 · A2 **S2 — docx write + round-trip** (ponytail ULTRA chuỗi A2): writer đối xứng parser 1 hàm/construct (`src/write.rs` — quick-xml escape, zip có sẵn, không builder/trait); package OPC tự sinh đúng chuẩn Part 2 (Content_Types + rels, part chính = canonical name `word/document.xml` tra cứu bởi reader qua root rels — không hardcode path ngược); **round-trip `parse→write→parse` model bất biến 100%** trên corpus đầy đủ (table/list/image/hdr-ftr + tiếng Việt) + fuzz-write 500 vòng mutation-on-model 0 panic 0 lệch; **file ghi ra mở trong engine render GREEN** — x2t parse exit 0 (oracle-obs Editor.bin 2467 B) + `smoke-render.sh /tmp/ta22-roundtrip.docx` PASSED exit 0 ×2 (contentReady + canvas 2302x958 + /fonts/); model đổi tối thiểu theo schema: StyleDef `+kind` (§17.7.4.17 @w:type required) + derive PartialEq/Clone; image bytes không trong model → placeholder PNG 1×1 std-thuần (media rel/part/content-type thật); DrawingML clauses verify qua mirror Remarks (19 số § — vài số khác ký ức, verify bắt được); limitation ghi diagnostics: Run.bold/italic 2-state → false serialize absent · 3 test mới (corpus + edge XML/webp-refuse + fuzz) · cargo test --workspace 23 shell + 8 crate exit 0 · verify.sh FULL exit 0 · 02.10 · 805741f · diagnostics 02.10
 
 - [x] ✅ T-A14 · Converter seam `sidecar::convert` che 3 hình dạng gọi (OpenBinary positional success=dst-tồn-tại · SaveFromChanges params-XML success=exit0+output · Passthrough pdf-copy không spawn) — spawn/output-capture 1 chỗ; `x2t_path`/`find_bundled_x2t`/`target_dir_name`/strict-mode DI CHUYỂN nguyên khối từ save.rs (log strings nguyên văn — gate 10/11 grep); lib.rs hết `bridge::save::x2t_path()`; test pin resolution order env-if-exists→bundled→strict-error (tmp roots + fake converter qua interface, không đụng /Applications) + xoá stub `window/` (T-043 hấp thụ) · refactor thuần hành vi không đổi · 02.10 · 2d3da4e · diagnostics 02.10
 
