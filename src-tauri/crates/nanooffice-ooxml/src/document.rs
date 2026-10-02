@@ -5,8 +5,10 @@
 //! spec clause. Elements/attributes are matched by their prefixed names and
 //! the root must bind the `w:` prefix to the WordprocessingML namespace —
 //! anything outside the S1 construct table is skipped (subtree, no state
-//! carried) rather than guessed at; documents that bind `w:` wrongly are
-//! refused (DD §6 "refuse-unknown instead of parse-wrong").
+//! carried) rather than guessed at, with ONE exception: `mc:AlternateContent`
+//! run content is resolved through its first `mc:Choice` branch (Markup
+//! Compatibility, see [`Parser::parse_alt_content`]); documents that bind
+//! `w:` wrongly are refused (DD §6 "refuse-unknown instead of parse-wrong").
 
 use quick_xml::events::{BytesStart, Event};
 
@@ -235,6 +237,7 @@ impl Parser<'_> {
                     b"w:rPr" => self.parse_rpr(&mut run)?,
                     b"w:t" => in_t = true, // §17.3.3.31
                     b"w:drawing" => run.images.push(self.parse_drawing()?), // §17.3.3.9
+                    b"mc:AlternateContent" => self.parse_alt_content(&mut run)?,
                     _ => self.skip_element()?,
                 },
                 Event::Empty(_) => {} // <w:t/>, w:br/, w:tab/ — nothing to model
@@ -288,8 +291,10 @@ impl Parser<'_> {
         loop {
             buf.clear();
             match self.reader.read_event_into(&mut buf).map_err(xml_err)? {
-                Event::Start(_) => {} // graphic/pic wrappers hold nothing S1 needs
-                Event::Empty(e) => match e.name().as_ref() {
+                // wp:extent and a:blip can arrive as Start+End or self-closing
+                // Empty — x2t (and Word) emit `<a:blip r:embed=…></a:blip>`
+                // (caught by the T-A23 parity harness on a real x2t round-trip)
+                Event::Start(e) | Event::Empty(e) => match e.name().as_ref() {
                     b"wp:extent" => {
                         let cx = attr_i64(&e, b"cx")?;
                         let cy = attr_i64(&e, b"cy")?;
@@ -331,6 +336,62 @@ impl Parser<'_> {
                 }
                 Event::Eof => {
                     return Err(ParseError("unexpected end of XML inside w:drawing".into()))
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// `mc:AlternateContent` (namespace
+    /// `http://schemas.openxmlformats.org/markup-compatibility/2006`): one or
+    /// more `mc:Choice` branches plus an optional `mc:Fallback` — the same
+    /// content in alternative serializations. Spec rule (spec-ref: ECMA-376
+    /// Markup Compatibility, AlternateContent element — ECMA-376 Part 5 1st
+    /// ed., "Markup Compatibility Attributes and Elements"; Part 3 in
+    /// ISO/IEC 29500 editions): the selected branch "is processed as though
+    /// it replaces the entire AlternateContent element", and unselected
+    /// branches raise no error. This reader understands run content
+    /// (w:rPr/w:t/w:drawing), so the FIRST `mc:Choice` is selected — that is
+    /// where both Word and x2t put the DrawingML representation; the VML
+    /// `w:pict` in `mc:Fallback` is not modelled. Prefix is matched as the
+    /// literal `mc:` (the one Word/x2t emit); a part binding another prefix
+    /// to the compatibility namespace is out of S3 scope.
+    fn parse_alt_content(&mut self, run: &mut Run) -> Result<(), ParseError> {
+        const OUTER: &[u8] = b"mc:AlternateContent";
+        const CHOICE: &[u8] = b"mc:Choice";
+        let mut buf = Vec::new();
+        let mut chosen = false; // a branch has already been selected
+        let mut in_choice = false;
+        let mut in_t = false;
+        loop {
+            buf.clear();
+            match self.reader.read_event_into(&mut buf).map_err(xml_err)? {
+                Event::Start(e) => match e.name().as_ref() {
+                    CHOICE if chosen => self.skip_element()?, // later branches lose
+                    CHOICE => in_choice = true,
+                    n if in_choice && n == b"w:rPr" => self.parse_rpr(run)?,
+                    n if in_choice && n == b"w:t" => in_t = true, // §17.3.3.31
+                    n if in_choice && n == b"w:drawing" => run.images.push(self.parse_drawing()?),
+                    _ => self.skip_element()?, // Fallback, unknown Choice content
+                },
+                // leaf content inside the selected branch carries no model data
+                Event::Empty(_) => {}
+                Event::Text(t) if in_t => {
+                    run.text.push_str(&t.unescape().map_err(xml_err)?);
+                }
+                Event::End(e) => match e.name().as_ref() {
+                    OUTER => return Ok(()),
+                    CHOICE => {
+                        in_choice = false;
+                        chosen = true;
+                    }
+                    b"w:t" => in_t = false,
+                    _ => {}
+                },
+                Event::Eof => {
+                    return Err(ParseError(
+                        "unexpected end of XML inside mc:AlternateContent".into(),
+                    ))
                 }
                 _ => {}
             }

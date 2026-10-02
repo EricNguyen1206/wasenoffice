@@ -353,6 +353,58 @@ fn construct_semantics() {
     assert!(matches!(&t.rows[0][1], TableCell { blocks } if blocks.is_empty()));
 }
 
+/// `mc:AlternateContent` run content (bắt được qua parity harness T-A23: x2t
+/// round-trip bọc `w:drawing` trong `mc:Choice` + VML `mc:Fallback` — trước
+/// fix image bị mất). Branch được chọn phải surface image + text như run
+/// content thường; Fallback bị bỏ qua đúng quy tắc MCE.
+#[test]
+fn alternate_content_choice_surfaces_image() {
+    // cấu trúc mirror output thật của x2t (ElementContent như engine ghi):
+    // inline xmlns khai báo tại chỗ + wp:docPr/wp:cNvGraphicFramePr/pic:nvPr
+    // + Choice Requires="wps" + Fallback VML (w:pict).
+    let xml = concat!(
+        r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>"#,
+        r#"<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">"#,
+        r#"<w:body>"#,
+        r#"<w:p><w:r><w:t xml:space="preserve">trước ảnh </w:t>"#,
+        r#"<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">"#,
+        r#"<mc:Choice Requires="wps">"#,
+        r#"<w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" distT="0" distB="0" distL="0" distR="0">"#,
+        r#"<wp:extent cx="9525" cy="19050"/><wp:docPr id="1" name=""/><wp:cNvGraphicFramePr/>"#,
+        r#"<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">"#,
+        r#"<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">"#,
+        r#"<pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">"#,
+        r#"<pic:nvPicPr><pic:cNvPr id="1" name="pixel"/><pic:cNvPicPr/><pic:nvPr/></pic:nvPicPr>"#,
+        r#"<pic:blipFill><a:blip r:embed="rIdImg"></a:blip><a:stretch><a:fillRect/></a:stretch></pic:blipFill>"#,
+        r#"<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="9525" cy="19050"/></a:xfrm>"#,
+        r#"<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>"#,
+        r#"</a:graphicData></a:graphic></wp:inline></w:drawing>"#,
+        r#"</mc:Choice>"#,
+        r#"<mc:Fallback><w:pict><v:shape xmlns:v="urn:schemas-microsoft-com:vml" style="width:1pt;height:2pt"><v:imagedata r:id="rIdGhost"/></v:shape></w:pict></mc:Fallback>"#,
+        r#"</mc:AlternateContent>"#,
+        r#"<w:t xml:space="preserve"> sau ảnh</w:t></w:r></w:p>"#,
+        r#"</w:body></w:document>"#,
+    );
+    let rels = r#"<Relationship Id="rIdImg" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/>"#;
+    let doc = nanooffice_ooxml::parse_docx(&minimal_package_with(&xml, rels, &[])).unwrap();
+
+    let p = para(&doc, 0);
+    assert_eq!(p.runs.len(), 1, "AlternateContent KHÔNG tách run");
+    assert_eq!(p.runs[0].text, "trước ảnh  sau ảnh");
+    let img = &p.runs[0].images[0];
+    assert_eq!(
+        img.rel_id, "rIdImg",
+        "Choice thắng — Fallback rIdGhost bị bỏ"
+    );
+    assert_eq!(img.part, "word/media/image1.png");
+    assert_eq!((img.cx_emu, img.cy_emu), (9525, 19050));
+
+    // round-trip: writer ghi plain w:drawing, re-parse vẫn đủ image
+    let out = nanooffice_ooxml::write_docx(&doc).unwrap();
+    let reparsed = nanooffice_ooxml::parse_docx(&out).unwrap();
+    assert_eq!(doc, reparsed, "round-trip bất biến qua AlternateContent");
+}
+
 /// Fuzz (mutation, seed cố định, không dep): XML mutations + zip mutations —
 /// mọi trường hợp phải là `Ok` hoặc `Err`, KHÔNG panic.
 #[test]
