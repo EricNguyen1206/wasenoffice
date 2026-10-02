@@ -4,14 +4,16 @@ set -u
 cd "$(dirname "$0")/../.."
 fail=0
 
-echo "▸ cargo check (src-tauri)"
-(cd src-tauri && cargo check --quiet) || fail=1
+# --workspace: manifest src-tauri là package + workspace root — không có flag này
+# cargo mặc định chỉ chạy package gốc, crate A2 (crates/nanooffice-ooxml, T-A20) không được phủ.
+echo "▸ cargo check (src-tauri workspace)"
+(cd src-tauri && cargo check --workspace --quiet) || fail=1
 
-echo "▸ cargo fmt --check (src-tauri)"
-(cd src-tauri && cargo fmt --check) || fail=1
+echo "▸ cargo fmt --check (src-tauri workspace)"
+(cd src-tauri && cargo fmt --check --all) || fail=1
 
-echo "▸ cargo clippy -D warnings (src-tauri)"
-(cd src-tauri && cargo clippy --quiet -- -D warnings) || fail=1
+echo "▸ cargo clippy -D warnings (src-tauri workspace)"
+(cd src-tauri && cargo clippy --workspace --quiet -- -D warnings) || fail=1
 
 echo "▸ pnpm build (src)"
 pnpm build --logLevel error || fail=1
