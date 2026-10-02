@@ -225,8 +225,18 @@ impl AllFonts {
     fn enumerate() -> AllFonts {
         let mut all_files: Vec<PathBuf> = Vec::new();
         let mut all_faces: Vec<Face> = Vec::new();
-        for (disk_prefix, _) in super::FONT_ROOTS {
-            for path in walk(Path::new(disk_prefix)) {
+        for url_root in super::FONT_URL_ROOTS {
+            let Some(root) = super::font_root_disk(url_root) else {
+                log::warn!("AllFonts: font root {url_root} unavailable — skipped");
+                continue;
+            };
+            if url_root == "app" && !root.is_dir() {
+                log::warn!(
+                    "AllFonts: bundled font set missing at {} — run harness/scripts/bundle-fonts.sh (system fonts only)",
+                    root.display()
+                );
+            }
+            for path in walk(&root) {
                 let file_idx = all_files.len() as u16;
                 let mut parsed = parse_file(&path, file_idx);
                 if parsed.is_empty() {

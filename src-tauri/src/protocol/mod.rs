@@ -28,19 +28,28 @@ pub(crate) mod allfonts;
 pub const ENGINE_SCHEME: &str = "nanooffice-engine";
 pub const FILE_SCHEME: &str = "nanooffice-file";
 
-/// Font roots reachable through `nanooffice-engine://localhost/fonts/<root>/<enc>`.
-/// (path-prefix on disk, URL namespace segment) — mirrors the roots listed in the
+/// Font URL namespaces reachable through `nanooffice-engine://localhost/fonts/<root>/<enc>`
+/// (and the loopback mirror `/fonts/<root>/…`) — mirrors the roots listed in the
 /// installed app's generated AllFonts.js (observed 22.09.2026: only these two).
-/// Since T-A11 these two roots are also what `protocol::allfonts` enumerates to
-/// GENERATE the AllFonts.js that both consumers (filesrv + `bridge::save`'s
-/// `<m_sAllFontsPath>`/`<m_sFontDir>`) read.
-const FONT_ROOTS: [(&str, &str); 2] = [
-    (
-        "/Applications/ONLYOFFICE.app/Contents/Resources/login/fonts/",
-        "app",
-    ),
-    ("/System/Library/Fonts/", "sys"),
-];
+/// Since T-A11 these roots are what `protocol::allfonts` enumerates to GENERATE
+/// the AllFonts.js that both consumers (filesrv + `bridge::save`'s
+/// `<m_sAllFontsPath>`/`<m_sFontDir>`) read; since T-A12 the `app` namespace
+/// resolves to `engines/fonts/` (`bundle-fonts.sh`) — the installed app's font
+/// files are no longer read at runtime. Order matters: it fixes the enumeration
+/// order of the generated AllFonts.js.
+const FONT_URL_ROOTS: [&str; 2] = ["app", "sys"];
+
+/// Disk root behind a font URL namespace. `app` = the bundled font set
+/// (`engines/fonts/`, `harness/scripts/bundle-fonts.sh`); `sys` = macOS system
+/// fonts. Keeping the `app` name preserves the AllFonts.js URL namespace
+/// (`/fonts/app/…`) so the engine-facing contract does not change.
+fn font_root_disk(url_root: &str) -> Option<PathBuf> {
+    match url_root {
+        "app" => engines_root().map(|e| e.join("fonts")),
+        "sys" => Some(PathBuf::from("/System/Library/Fonts")),
+        _ => None,
+    }
+}
 
 /// fileId → absolute path registry. Kept in Rust state; JS only ever sees
 /// `…/file/<id>/<name>` URLs (custom scheme + loopback HTTP mirror).
@@ -320,8 +329,12 @@ fn percent_decode(s: &str) -> String {
 /// `nanooffice-engine://localhost/fonts/<root>/<enc>` URLs.
 fn rewrite_font_paths(js: &str) -> Result<String, String> {
     let mut out = js.to_string();
-    for (disk_prefix, url_root) in FONT_ROOTS {
-        let needle = format!("\"{disk_prefix}");
+    for url_root in FONT_URL_ROOTS {
+        let Some(disk) = font_root_disk(url_root) else {
+            continue;
+        };
+        // trailing slash so the needle never matches a sibling directory
+        let needle = format!("\"{}/", disk.display());
         let base = format!(
             "http://127.0.0.1:{}/fonts/{url_root}/",
             filesrv::bound_port()
@@ -399,10 +412,10 @@ pub fn handle_engine<R: tauri::Runtime>(
         let Some((root, rel)) = rest.split_once('/') else {
             return empty(StatusCode::NOT_FOUND);
         };
-        let Some((disk_prefix, _)) = FONT_ROOTS.iter().find(|(_, r)| *r == root) else {
+        let Some(disk_root) = font_root_disk(root) else {
             return empty(StatusCode::FORBIDDEN);
         };
-        let Some(full) = safe_join(Path::new(disk_prefix), rel) else {
+        let Some(full) = safe_join(&disk_root, rel) else {
             return empty(StatusCode::FORBIDDEN);
         };
         return serve_file(&full, &request, None);
@@ -455,18 +468,38 @@ mod tests {
 
     #[test]
     fn rewrite_replaces_only_known_prefixes() {
-        let js = r#"window["__fonts_files"] = [
-"/Applications/ONLYOFFICE.app/Contents/Resources/login/fonts/OpenSans-Bold.ttf",
-"/System/Library/Fonts/Avenir Next Condensed.ttc",
+        // sys root is static; app root resolves to <engines>/fonts (T-A12) —
+        // compute it the same way the rewriter does instead of hardcoding.
+        let sys = font_root_disk("sys").expect("sys root");
+        let app = font_root_disk("app").expect("engines root (engines/editors/sdkjs missing?)");
+        let js = format!(
+            r#"window["__fonts_files"] = [
+"{}/OpenSans-Bold.ttf",
+"{}/Avenir Next Condensed.ttc",
 "/Unknown/Place/x.ttf"
-];"#;
-        let out = rewrite_font_paths(js).expect("rewrite ok");
+];"#,
+            app.display(),
+            sys.display()
+        );
+        let out = rewrite_font_paths(&js).expect("rewrite ok");
         // PH-0 deviation (reference.map.md): fonts are served through the
         // loopback filesrv (`http://127.0.0.1:<port>/fonts/…`) — assert the
-        // rewritten namespaces, not the port-dependent base.
+        // rewritten namespaces, not the port-dependent base. The `app`
+        // namespace keeps its name since T-A12 although it now serves from
+        // engines/fonts (URL contract frozen).
         assert!(out.contains("/fonts/app/OpenSans-Bold.ttf"));
         assert!(out.contains("/fonts/sys/Avenir%20Next%20Condensed.ttc"));
         assert!(out.contains("\"/Unknown/Place/x.ttf\""));
+        assert!(!out.contains("ONLYOFFICE.app"), "no app path may remain");
+    }
+
+    #[test]
+    fn app_font_root_is_bundled_not_installed_app() {
+        // T-A12: the `app` namespace must resolve under engines/ — the last
+        // runtime reference to the installed ONLYOFFICE.app's font files.
+        let app = font_root_disk("app").expect("engines root (engines/editors/sdkjs missing?)");
+        assert!(app.to_string_lossy().contains("engines"));
+        assert!(!app.to_string_lossy().contains("ONLYOFFICE"));
     }
 
     #[test]

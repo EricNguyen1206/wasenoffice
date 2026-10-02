@@ -102,12 +102,17 @@ fn handle(mut stream: TcpStream, registry: Arc<FileRegistry>) {
     }
     if let Some(rest) = engine_path.strip_prefix("fonts/") {
         match resolve_font_path(rest) {
-            Some(full) => serve(
-                &mut stream,
-                &full,
-                range_header.as_deref(),
-                method == "HEAD",
-            ),
+            Some(full) => {
+                // T-A12 additive log (log contract untouched): shows which
+                // disk root a /fonts/<root>/… request is served from.
+                log::info!("font serve: /fonts/{rest} from {}", full.display());
+                serve(
+                    &mut stream,
+                    &full,
+                    range_header.as_deref(),
+                    method == "HEAD",
+                );
+            }
             None => respond(&mut stream, 403, &[], &[], false),
         }
         return;
@@ -255,8 +260,8 @@ fn resolve_engine_payload(rest: &str) -> Option<PathBuf> {
 /// `app/<enc>` | `sys/<enc>` → whitelisted absolute font path.
 fn resolve_font_path(rest: &str) -> Option<PathBuf> {
     let (root, rel) = rest.split_once('/')?;
-    let (disk_prefix, _) = super::FONT_ROOTS.iter().find(|(_, r)| *r == root)?;
-    super::safe_join(std::path::Path::new(disk_prefix), rel)
+    let disk_root = super::font_root_disk(root)?;
+    super::safe_join(&disk_root, rel)
 }
 
 fn respond_bytes(mut stream: &mut TcpStream, mime: &str, body: Vec<u8>, head: bool) {
