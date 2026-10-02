@@ -8,6 +8,58 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-02 · T-A21: A2/S1 — docx READ đầy đủ (OPC chuẩn + table/list/image + styles resolve) — GREEN
+
+- **Phạm vi:** slice S1 của DD K01 (`docs/design/converter-a2/DD.md` §4) — crate
+  `nanooffice-ooxml` từ model tối giản lên read đầy đủ văn bản cơ bản: OPC đúng chuẩn
+  (Content_Types + rels — part chính tra cứu qua `_rels/.rels`, KHÔNG hardcode
+  `word/document.xml`; refuse content-type sai), body blocks (paragraph + `w:tbl` 2×2,
+  cell lồng được), paragraph props (pStyle/jc/numPr), run props (b/i/u/sz), image
+  relationship-only (`a:blip r:embed` → part + `wp:extent` EMU, không decode PNG),
+  styles.xml resolve chain `basedOn` (con thắng cha, cycle/dangling → Err),
+  numbering resolve (numId→abstractNum→lvl: numFmt+lvlText), headers/footers
+  (rel type header/footer, root check `w:hdr`/`w:ftr`, rels RIÊNG của từng part).
+- **Clean-room:** mọi parser path ghi `spec-ref:` số section thật, verify bằng bảng
+  Remarks của open-xml-docs-ref-dotnet (mirror ISO/IEC 29500-1 1st ed, fetch raw XML
+  từ GitHub — rẻ hơn WebFetch HTML ~20×). Bảng đã verify: document §17.2.3 · body
+  §17.2.2 · p §17.3.1.22 · pPr §17.3.1.25 · pStyle §17.3.1.27 · numPr §17.3.1.19 ·
+  jc §17.3.1.13 · r §17.3.2.25 · rPr §17.3.2.27 · b §17.3.2.1 · **i §17.3.2.16 · sz
+  §17.3.2.38 · u §17.3.2.40** (comment cũ T-A20 ghi i=§17.3.2.13 SAI — đã sửa) ·
+  **t §17.3.3.31** (comment cũ ghi §17.3.3.30 SAI — sửa) · drawing §17.3.3.9 ·
+  tbl §17.4.38 · tr §17.4.79 · tc §17.4.66 · style §17.7.4.17 · basedOn §17.7.4.3 ·
+  name §17.7.4.9 · abstractNum §17.9.1 · ilvl §17.9.3 · num §17.9.16 · lvl §17.9.7 ·
+  numId §17.9.19 · numFmt §17.9.18 · lvlText §17.9.12 · ftr §17.10.3 · hdr §17.10.4 ·
+  **headerReference §17.10.5** · sectPr §17.6.18 · wp:inline §20.4.2.8 · wp:extent
+  §20.4.2.7. Bài học: đoán số section dễ lệch (basedOn không phải .1, lvlText không
+  phải .6, headerReference không phải .1) — luôn verify trước khi ghi.
+- **Parser recursive-descent** thay state-machine phẳng: 1 hàm/construct
+  (`parse_blocks/paragraph/ppr/numpr/run/rpr/drawing/table/row/cell` + skip_element
+  depth-saturating) — không visitor/trait; `Event::Empty` root (`<w:styles/>`,
+  `<w:numbering/>`, `<w:document/>`) phải được coi là root hợp lệ — quick-xml emit
+  Empty cho self-closing, chỉ match Start là bỏ sót (bắt được qua test header part).
+  Bug bắt được khi test: `<w:tc/>` Empty phải push cell rỗng trong parse_row.
+- **Corpus:** generator mới `harness/fixtures/make_docx_full.py` (stdlib, PNG 1×1 tự
+  encode struct+zlib) → `tests/fixtures/nanooffice-full-fixture.docx` 10 parts: style
+  chain Heading1→Normal + run override bold=false, 5 run props, table 2×2, list
+  decimal/lowerLetter/bullet, image r:embed, header/footer, tiếng Việt — fixture cũ
+  giữ nguyên (vẫn render GREEN trong engine, giờ đọc qua OPC lookup thay hardcode).
+- **Fuzz:** 500 vòng seed 42 (LCG tự viết, không dep): XML truncate/splice-junk/
+  byte-flip + zip byte-flip + namespace-sai → mọi case Ok/Err, 0 panic.
+- **Bằng chứng:** `cargo test -p nanooffice-ooxml` **5 passed** (fixture cũ exact +
+  corpus đầy đủ + 9 case malformed + semantics + fuzz); `cargo test --workspace`
+  23 shell (+1 ignored) + 5 crate exit 0; CLI smoke JSON đủ model mới (10 blocks,
+  3 styles — TableNormal skip đúng, numbering {1:[0,1], 2:[0]}, image part+EMU);
+  verify.sh **FULL exit 0** 16 gates (`/tmp/verify-ta21.log`); clippy bắt 2
+  single-match thật (Empty arm 1-pattern → guard pattern).
+- **Quan sát (không sửa — ngoài scope):** test tích thể `sidecar
+  convert_shapes_through_the_seam` FLAKY khi chạy `cargo test --workspace` song song
+  — x2t thật exit 88 "no Editor.bin" 1/2 lần, chạy tuần tự/`--test-threads=1` +
+  retry parallel đều pass. Ghi nhận cho session sau nếu recur.
+- **Trạng thái:** T-A21 ✅ sink Track A. ▶ = T-A22 (S2 write: model → docx round-trip,
+  file ghi ra mở trong engine render GREEN pattern gate 9).
+
+---
+
 ## 2026-10-02 · T-A20: mở màn A2 — design-first chốt P2 "OOXML core trước" + crate slice nanooffice-ooxml — GREEN
 
 - **Phạm vi:** design-first theo handoff `ta20.md` (ponytail ULTRA — user chỉ thị): probe 2
