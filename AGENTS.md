@@ -57,7 +57,7 @@ nanooffice/
 | Phase | Trạng thái | Ghi chú |
 |---|---|---|
 | PH-0 Spike (load editor + render DOCX trong WKWebView) | ✅ ĐÓNG 27.09 — verdict **GO WITH CAVEAT** | render GREEN tự động (verify.sh gate 9, TC-D01-06); baseline debug 27.09: RAM 1 doc ~561–579 MB vs ONLYOFFICE 570 MB (start page); caveat duy nhất: scroll/edit keyboard chờ user xác nhận thủ công ~30s — `docs/diagnostics.md` 27.09 T-003 |
-| Track A rung A0+A1 (QĐ9 — tự chủ shell + phân phối) | ✅ A1 ĐÓNG 02.10 · A2 mở 02.10 | **NanoOffice phân phối độc lập**: chạy trọn open→edit→save KHÔNG cần ONLYOFFICE.app cài sẵn — x2t bundled (T-A10, 113 MB) + AllFonts tự sinh (T-A11) + fonts bundled có license (T-A12) + gate 11 "sạch ONLYOFFICE" thường trụ verify.sh (T-A13: strict clean-machine + negative proven + test tích thể mv app → verify FULL exit 0 khi app ẨN); **A2**: T-A20 chốt P2 "OOXML core trước" bằng probe số liệu + crate slice `nanooffice-ooxml`; T-A21 S1 docx READ đầy đủ (OPC chuẩn + table/list/image + styles resolve, fuzz 0 panic); T-A22 S2 docx WRITE + round-trip model bất biến 100% + file ghi ra render GREEN; T-A23 S3 parity harness 15/15 construct + 0 diff không phân loại — kế tiếp T-A24 (S4 adapter seam) |
+| Track A rung A0–A2 (QĐ9 — tự chủ shell + phân phối + converter) | ✅ A1 ĐÓNG 02.10 · A2 ĐÓNG 03.10 | **A1 — phân phối độc lập**: chạy trọn open→edit→save KHÔNG cần ONLYOFFICE.app cài sẵn — x2t bundled (T-A10, 113 MB) + AllFonts tự sinh (T-A11) + fonts bundled có license (T-A12) + gate 11 "sạch ONLYOFFICE" thường trụ verify.sh (T-A13: strict clean-machine + negative proven + test tích thể mv app → verify FULL exit 0 khi app ẨN); **A2 — converter Rust**: T-A20 chốt P2 "OOXML core trước" bằng probe số liệu + crate slice `nanooffice-ooxml`; T-A21 S1 docx READ đầy đủ (OPC chuẩn + table/list/image + styles resolve, fuzz 0 panic); T-A22 S2 docx WRITE + round-trip model bất biến 100% + file ghi ra render GREEN; T-A23 S3 parity harness 15/15 construct + 0 diff không phân loại; T-A24 S4 adapter vào runtime — open-side pre-normalize (docx → canonical.docx qua crate → x2t) trong seam `sidecar::convert`, kill switch `NANO_OFFICE_NO_RUST_CONVERTER`, gates 9/10/11 GREEN cả ON lẫn OFF — kế tiếp A3 viewer (T-A25) |
 | PH-1 Vòng đời file (open/save/convert qua x2t sidecar) | ⬜ | |
 | PH-2 Trải nghiệm desktop (print/clipboard/fonts/tabs) | ⬜ | |
 | PH-3 Tùy chọn (crypto/signature/cloud) | ⬜ | có thể cắt vĩnh viễn |
@@ -74,7 +74,18 @@ negative proven exit 1) — bằng chứng đóng rung: test tích thể mv app 
 khi app ẨN (`harness/scripts/clean-machine-proof.sh`, diagnostics 02.10). Runtime dependency
 bắt buộc lên app: **0** (fallback x2t = WARN dev-only, bị strict mode chặn; upstream submodule
 = reference theo D1 tới A6).
-Mới nhất 03.10 (**T-A23 — A2/S3 parity harness**, ponytail ULTRA chuỗi A2 — verify FULL exit 0):
+Mới nhất 03.10 (**T-A24 — A2/S4 adapter, ĐÓNG RUNG A2**, ponytail ULTRA chuỗi A2 — verify FULL
+exit 0): crate `nanooffice-ooxml` vào đường runtime qua seam `sidecar::convert` — **open-side
+pre-normalize**: open docx → crate parse+write `canonical.docx` trong workdir → x2t chuyển
+canonical ra Editor.bin (save-side KHÔNG thay được — x2t fromChanges làm việc trực tiếp trên
+Editor.bin, giữ x2t đến A4 theo DD K01 §2 P2). Crate refuse → WARN + x2t nhận file gốc (không
+bao giờ chặn open); kill switch `NANO_OFFICE_NO_RUST_CONVERTER=1` = đường cũ nguyên vẹn.
+Log ADDITIVE `converter: rust-canonical → x2t (…, normalize …)` — không đụng log contract
+gates 9/10/11. Bằng chứng: verify.sh FULL exit 0 (ON) + gate 9/10 counterfactual OFF exit 0
+(Editor.bin 1586 B đường cũ vs 1495 B canonical) + parity-a2.sh exit 0 (7/7 invariant) +
+cargo test 23 shell + 9 crate (test seam thêm case ON/refuse/kill-switch); overhead ~2 ms/open.
+Kế tiếp: **T-A25 (A3 mở màn — viewer Rust đọc-only)**.
+Trước đó 03.10 (**T-A23 — A2/S3 parity harness**, ponytail ULTRA chuỗi A2 — verify FULL exit 0):
 `harness/scripts/parity-a2.sh` mỏng + CLI có sẵn — mỗi corpus file chạy x2t roundtrip (2 call
 shape của seam: docx→Editor.bin positional + params XML→docx) + crate roundtrip, 3-way model
 compare canonical JSON (INVARIANT m-orig==m-crate gate cứng 7/7; PARITY m-crate vs m-x2t =

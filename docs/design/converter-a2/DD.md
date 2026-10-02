@@ -102,6 +102,12 @@ src-tauri/crates/nanooffice-ooxml/     ← crate duy nhất của A2 (KHÔNG wor
 | S4 | cắm adapter `sidecar::convert` (open path trước, save path sau) | gate 9/10 qua bằng adapter — rung A2 milestone |
 | S5+ | xlsx (SpreadsheetML §18), pptx (PresentationML §19) | theo đúng thứ tự QĐ9 |
 
+> **S4 landed 03.10 (T-A24 — rung A2 đóng):** adapter = open-side pre-normalize trong
+> `sidecar::convert::OpenBinary` (docx → canonical.docx qua crate → x2t; save-side không thay
+> được — x2t fromChanges làm việc trực tiếp trên Editor.bin, giữ x2t đến A4); kill switch
+> `NANO_OFFICE_NO_RUST_CONVERTER`, crate-refuse → fallback file gốc. Chi tiết + bằng chứng:
+> diagnostics 03.10 T-A24.
+
 ## 5. Tiêu chí parity đo được
 
 - **Model parity (S1):** với mỗi fixture corpus: parse bằng crate ↔ parse thủ công theo spec

@@ -1946,6 +1946,7 @@ dependencies = [
  "base64 0.23.1",
  "env_logger",
  "log",
+ "nanooffice-ooxml",
  "serde",
  "serde_json",
  "tauri",

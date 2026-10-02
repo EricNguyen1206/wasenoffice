@@ -8,8 +8,8 @@
 //! - the conversion interface [`convert`]: the 3 call shapes the shell uses
 //!   today (open-time positional, save-time params XML, PDF passthrough).
 //!   Spawn + output capture live HERE, once — call sites only pick a shape.
-//!   Track A's Rust converter (T-A20, rung A2) plugs in behind the same seam
-//!   as a second adapter.
+//!   Track A's Rust converter adapter lives here too ([`rust_canonical`],
+//!   T-A24): docx → canonical via the crate, then x2t (kill-switchable).
 //!
 //! Process rules (harness/skills/x2t-sidecar/SKILL.md): one short-lived
 //! process per conversion task, never a long-running daemon; max 1 concurrent
@@ -178,6 +178,10 @@ pub fn convert(req: &ConvertRequest<'_>) -> Result<ConvertResult, ConvertError> 
             })
         }
         ConvertRequest::OpenBinary { src, dst } => {
+            // A2 adapter (T-A24): docx goes through the crate first — x2t
+            // converts the canonical copy, everything else is untouched.
+            let canonical = rust_canonical(src, dst);
+            let src = canonical.as_deref().unwrap_or(src);
             let run = spawn_x2t(&[src, dst])?;
             if !dst.is_file() {
                 return Err(ConvertError {
@@ -214,6 +218,51 @@ pub fn convert(req: &ConvertRequest<'_>) -> Result<ConvertResult, ConvertError> 
             Ok(ConvertResult {
                 elapsed: run.elapsed,
             })
+        }
+    }
+}
+
+/// A2 adapter (T-A24) — the Rust OOXML crate's slot in the OPEN path: parse
+/// the user `.docx` and write a canonical one, then x2t converts THAT into
+/// Editor.bin (Editor.bin itself stays x2t's until A4 — DD K01 §2 P2). A file
+/// the crate refuses must still open exactly as before → any parse/write
+/// error only WARNs and falls back to the original bytes. Kill switch
+/// `NANO_OFFICE_NO_RUST_CONVERTER` (set ≠ "0", like `NO_APP_FALLBACK`)
+/// restores the direct path — counterfactual + rollback.
+fn rust_canonical(src: &Path, dst: &Path) -> Option<PathBuf> {
+    let is_docx = src
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("docx"));
+    if !is_docx {
+        return None; // crate scope: docx today (xlsx/pptx = S5)
+    }
+    if matches!(std::env::var("NANO_OFFICE_NO_RUST_CONVERTER"), Ok(v) if v != "0") {
+        log::info!(
+            "converter: rust-canonical OFF (NANO_OFFICE_NO_RUST_CONVERTER set) — x2t direct"
+        );
+        return None;
+    }
+    let canonical = dst.with_file_name("canonical.docx");
+    let started = Instant::now();
+    let outcome = nanooffice_ooxml::parse_docx_file(src)
+        .map_err(|e| e.to_string())
+        .and_then(|doc| {
+            nanooffice_ooxml::write_docx_file(&doc, &canonical).map_err(|e| e.to_string())
+        });
+    match outcome {
+        Ok(()) => {
+            log::info!(
+                "converter: rust-canonical → x2t ({} → {}, normalize {:?})",
+                src.display(),
+                canonical.display(),
+                started.elapsed()
+            );
+            Some(canonical)
+        }
+        Err(e) => {
+            log::warn!("converter: rust-canonical failed ({e}) — x2t takes the original file");
+            None
         }
     }
 }
@@ -415,9 +464,81 @@ mod tests {
         .unwrap();
         assert_eq!(std::fs::read(&copy_dst).unwrap(), b"DOCY;v10");
 
+        // (d) T-A24 adapter: a .docx source round-trips through the crate —
+        // canonical.docx lands next to Editor.bin and is what x2t receives
+        // (b' left the env on the failing converter — back to the fake one)
+        std::env::set_var("NANO_OFFICE_X2T", &fake);
+        let doc = nanooffice_ooxml::Document {
+            body: vec![nanooffice_ooxml::Block::Paragraph(
+                nanooffice_ooxml::Paragraph {
+                    runs: vec![nanooffice_ooxml::Run {
+                        text: "adapter".into(),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                },
+            )],
+            headers: vec![],
+            footers: vec![],
+            styles: Default::default(),
+            numbering: Default::default(),
+        };
+        let docx = dir.join("t24.docx");
+        nanooffice_ooxml::write_docx_file(&doc, &docx).unwrap();
+        let dst2 = dir.join("Editor2.bin");
+        let canonical = dir.join("canonical.docx");
+        convert(&ConvertRequest::OpenBinary {
+            src: &docx,
+            dst: &dst2,
+        })
+        .unwrap();
+        assert!(
+            canonical.is_file(),
+            "adapter must write canonical.docx next to Editor.bin"
+        );
+        assert_eq!(
+            std::fs::read(&dst2).unwrap(),
+            std::fs::read(&canonical).unwrap(),
+            "x2t must receive the canonical copy, not the original"
+        );
+
+        // (e) crate refuses the file → fallback: the open still works, and
+        // no stale canonical copy is left behind
+        std::fs::remove_file(&canonical).unwrap();
+        std::fs::write(&docx, b"not a zip").unwrap();
+        convert(&ConvertRequest::OpenBinary {
+            src: &docx,
+            dst: &dst2,
+        })
+        .unwrap();
+        assert!(dst2.is_file());
+        assert!(
+            !canonical.exists(),
+            "fallback must not leave a canonical copy"
+        );
+
+        // (f) kill switch NANO_OFFICE_NO_RUST_CONVERTER → direct path, no
+        // canonical copy even for a file the crate would accept
+        nanooffice_ooxml::write_docx_file(&doc, &docx).unwrap();
+        let saved_switch = std::env::var("NANO_OFFICE_NO_RUST_CONVERTER").ok();
+        std::env::set_var("NANO_OFFICE_NO_RUST_CONVERTER", "1");
+        convert(&ConvertRequest::OpenBinary {
+            src: &docx,
+            dst: &dst2,
+        })
+        .unwrap();
+        assert!(
+            !canonical.exists(),
+            "kill switch must restore the direct path"
+        );
+
         match saved_override {
             Some(v) => std::env::set_var("NANO_OFFICE_X2T", v),
             None => std::env::remove_var("NANO_OFFICE_X2T"),
+        }
+        match saved_switch {
+            Some(v) => std::env::set_var("NANO_OFFICE_NO_RUST_CONVERTER", v),
+            None => std::env::remove_var("NANO_OFFICE_NO_RUST_CONVERTER"),
         }
         let _ = std::fs::remove_dir_all(&dir);
     }

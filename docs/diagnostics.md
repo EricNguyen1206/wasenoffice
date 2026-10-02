@@ -8,6 +8,49 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-03 · T-A24: A2/S4 — adapter crate vào đường runtime (open-side canonical → x2t) — rung A2 milestone
+
+- **Chốt chỗ cắm (Bước 1, trước khi code):** save-side KHÔNG thay được — save hôm nay là x2t
+  fromChanges trực tiếp trên Editor.bin (bridge/save.rs), mà crate KHÔNG sản xuất Editor.bin
+  (DD §2 P2: Editor.bin giữ x2t đến A4) → đề xuất A chết tự nhiên. Chọn **đề xuất B
+  (open-side pre-normalize)** cắm trong seam `sidecar::convert` nhánh `OpenBinary` (đúng chỗ
+  T-A14 dự liệu "second adapter"): src `.docx` → crate `parse_docx_file` + `write_docx_file` →
+  `canonical.docx` trong workdir → x2t chuyển **canonical** ra Editor.bin. xlsx/pptx/pdf không
+  đụng (scope crate = docx; S5 mới mở rộng). Crate parse/write lỗi (refuse-unknown) → WARN +
+  x2t nhận **file gốc** — file crate từ chối vẫn mở đúng như trước, không bao giờ chặn open.
+- **Kill switch:** `NANO_OFFICE_NO_RUST_CONVERTER` set (≠"0") → đường cũ nguyên vẹn (mirror
+  semantics `NANO_OFFICE_NO_APP_FALLBACK` của T-A13); mặc định ON. Counterfactual = gate 9/10
+  chạy cả 2 chế độ.
+- **Log ADDITIVE (không đụng contract gates 9/10/11):** `converter: rust-canonical → x2t (…,
+  normalize …)` (ON) · `converter: rust-canonical failed (…) — x2t takes the original file`
+  (fallback WARN) · `converter: rust-canonical OFF (…)` (kill-switch evidence). Không dòng nào
+  chạm chuỗi grep đóng băng trong smoke-lib.sh.
+- **Fidelity ceiling chấp nhận có chủ đích:** model S1 chưa surface image bytes (writer ghi
+  placeholder PNG 1×1 — T-A22), sectPr, hyperlink, rStyle → canonical là LOSSY trên file thật
+  có construct ngoài model surface; kill switch là rollback tức thời; bytes thật + construct
+  còn lại là việc tự nhiên của A3 (viewer dùng model trực tiếp → image bytes trở thành bắt
+  buộc). Gate 9/10 fixture nằm trọn trong model surface (invariant 7/7 T-A23).
+- **Bằng chứng:** verify.sh **FULL exit 0** chế độ ON (`/tmp/verify-ta24.log` — 6 smoke PASSED;
+  log app giữ tại `/tmp/nanooffice-smoke-ezoNVw` …): gate 9 `converter: rust-canonical → x2t
+  (…, normalize 2.08 ms)` → `x2t converted … Editor.bin (1495 bytes) in 114.6 ms`; gate 10
+  save round-trip GREEN (marker ×1, 25562 B); gate 11 clean-machine GREEN. **Counterfactual
+  OFF** (`NANO_OFFICE_NO_RUST_CONVERTER=1`): gate 9 exit 0 — log `converter: rust-canonical
+  OFF (…) — x2t direct`, Editor.bin **1586 B = đường cũ** (vs 1495 B canonical — hai đường
+  phân biệt được bằng kích thước binary); gate 10 exit 0 (marker ×1, 25570 B). Log contract
+  gates 9/10/11 byte-identical (smoke-lib.sh hằng đóng băng không đụng). `parity-a2.sh` exit 0
+  (7/7 parse + invariant, 0 hard-fail — đúng baseline T-A23). `cargo test --workspace` 23
+  shell + 9 crate exit 0 — test seam mở rộng: (d) docx qua adapter, x2t nhận ĐÚNG canonical
+  (so bytes), (e) file hỏng → fallback không chặn open, (f) kill switch không sinh canonical.
+- **Overhead đo được:** normalize ≈ **2 ms/open** (2.08/1.96/1.86 ms trên 3 gate) trên fixture
+  nhỏ; x2t 37–130 ms cùng run — tổng open tăng <2%, không thấy được từ ngoài.
+- **Residual risk (ghi nhận, không sửa):** nếu x2t từ chối canonical của một file crate parse
+  được (chưa từng obs — T-A22 render GREEN + T-A23 parity) → open lỗi thay vì fallback tự
+  động; khi recur, thêm retry-on-original trong `rust_canonical`.
+- **Trạng thái:** T-A24 ✅ sink Track A — **RUNG A2 ĐÓNG** (vision QĐ9 bảng thang A2 ✅). ▶ =
+  T-A25 (A3 mở màn — viewer Rust đọc-only "quick view" không boot sdkjs).
+
+---
+
 ## 2026-10-03 · T-A23: A2/S3 — parity harness (crate ↔ x2t trên model): 15/15 construct parity, 0 diff không phân loại — GREEN
 
 - **Phạm vi:** slice S3 của DD K01 §4/§5 — `harness/scripts/parity-a2.sh` (~115 dòng, script
