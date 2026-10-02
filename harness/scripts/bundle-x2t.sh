@@ -24,7 +24,7 @@
 # Trimming the remaining ~113 MB below the 100 MB A1 budget = T-A12.
 #
 # Target dir name: `rustc -vV` host triple (e.g. aarch64-apple-darwin) —
-# MUST match src-tauri/src/bridge/save.rs target_dir_name() at runtime
+# MUST match src-tauri/src/sidecar/mod.rs target_dir_name() at runtime
 # (composed there from std::env::consts::ARCH/OS — keep the tables in sync).
 #
 # Usage: bundle-x2t.sh [source-converter-dir]

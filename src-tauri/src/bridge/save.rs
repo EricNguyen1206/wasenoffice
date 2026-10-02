@@ -59,92 +59,6 @@ pub fn workdir_for(id: u32) -> PathBuf {
     std::env::temp_dir().join(format!("nanooffice-doc-{id}"))
 }
 
-/// x2t sidecar binary — resolution order (T-A10, Track A rung A1):
-/// 1. env `NANO_OFFICE_X2T` (tests / custom builds) — honored only when the
-///    file exists, so a bogus value falls through to the bundled converter
-///    (the T-A10 counterfactual relies on that). The resolved path is logged:
-///    gate 11 asserts 0 `/Applications/ONLYOFFICE` references in the whole
-///    log, so an override wrongly pointed into the installed app is caught.
-/// 2. bundled converter: `engines/converter/<target>/x2t` (created by
-///    `harness/scripts/bundle-x2t.sh`), found by walking up from the exe dir
-///    and the cwd — dev trees have the repo root 3 levels above target/debug
-/// 3. installed ONLYOFFICE.app fallback — logged as WARN; DISABLED under
-///    clean-machine mode (`NANO_OFFICE_NO_APP_FALLBACK`), which turns a
-///    missing bundled converter into a hard error instead (T-A13, gate 11)
-pub fn x2t_path() -> String {
-    if let Ok(p) = std::env::var("NANO_OFFICE_X2T") {
-        if !p.is_empty() {
-            if Path::new(&p).is_file() {
-                log::info!("[x2t] using NANO_OFFICE_X2T override: {p}");
-                return p;
-            }
-            log::warn!("x2t: NANO_OFFICE_X2T points to a missing file ({p}) — ignoring");
-        }
-    }
-    if let Some(p) = find_bundled_x2t() {
-        return p;
-    }
-    if no_app_fallback() {
-        log::error!(
-            "x2t: clean-machine mode (NANO_OFFICE_NO_APP_FALLBACK set): bundled converter engines/converter/{}/x2t not found — app fallback disabled",
-            target_dir_name()
-        );
-        return String::new();
-    }
-    log::warn!(
-        "x2t: bundled converter engines/converter/{}/x2t not found — falling back to the installed ONLYOFFICE.app (A1 runtime dependency to remove)",
-        target_dir_name()
-    );
-    "/Applications/ONLYOFFICE.app/Contents/Resources/converter/x2t".to_string()
-}
-
-/// Clean-machine mode (`NANO_OFFICE_NO_APP_FALLBACK`): set (to anything but
-/// "0") the installed-app fallback is off and a missing bundled converter
-/// fails loudly. Gate 11 boots the app with this always on; a dev opts out
-/// explicitly to test the fallback path.
-fn no_app_fallback() -> bool {
-    match std::env::var("NANO_OFFICE_NO_APP_FALLBACK") {
-        Ok(v) => v != "0",
-        Err(_) => false,
-    }
-}
-
-/// `engines/converter/<target>` dir name — composed from std::env::consts.
-/// Single home for the naming rule: `harness/scripts/bundle-x2t.sh` derives
-/// the same name from `rustc -vV` host at bundle time — keep the two in sync.
-fn target_dir_name() -> String {
-    let arch = std::env::consts::ARCH;
-    match std::env::consts::OS {
-        "macos" => format!("{arch}-apple-darwin"),
-        "linux" => format!("{arch}-unknown-linux-gnu"),
-        "windows" => format!("{arch}-pc-windows-msvc"),
-        os => format!("{arch}-{os}"),
-    }
-}
-
-/// Walk up from the exe dir and the cwd looking for
-/// `engines/converter/<target>/x2t`. Returns the path and logs it — gate 10
-/// evidence that the save used the bundled converter (smoke-save.sh keeps the
-/// full log).
-fn find_bundled_x2t() -> Option<String> {
-    let rel = format!("engines/converter/{}/x2t", target_dir_name());
-    let mut roots: Vec<PathBuf> = Vec::new();
-    if let Ok(exe) = std::env::current_exe() {
-        roots.extend(exe.ancestors().skip(1).map(Path::to_path_buf));
-    }
-    if let Ok(cwd) = std::env::current_dir() {
-        roots.extend(cwd.ancestors().map(Path::to_path_buf));
-    }
-    for root in roots {
-        let cand = root.join(&rel);
-        if cand.is_file() {
-            log::info!("[x2t] using bundled converter: {}", cand.display());
-            return Some(cand.to_string_lossy().into_owned());
-        }
-    }
-    None
-}
-
 fn changes_path(work: &Path) -> PathBuf {
     work.join("changes").join("changes0.json")
 }
@@ -379,42 +293,17 @@ pub fn save_document(app: &tauri::AppHandle, registry: &FileRegistry, payload: &
         );
     }
 
-    let started = std::time::Instant::now();
-    match std::process::Command::new(x2t_path()).arg(&params).output() {
-        // NB: a non-zero exit with output present means a PARTIAL conversion
-        // (observed: missing font dir → changes dropped, file still written).
-        // Never swap that over the original — surface the error instead.
-        Ok(out)
-            if out.status.success()
-                && tmp_out.is_file()
-                && std::fs::metadata(&tmp_out).is_ok_and(|m| m.len() > 0) =>
-        {
-            // conversion complete — swap it in
-        }
-        Ok(out) => {
-            let stderr = String::from_utf8_lossy(&out.stderr);
-            let stdout = String::from_utf8_lossy(&out.stdout);
-            let detail = if stderr.trim().is_empty() {
-                stdout
-            } else {
-                stderr
-            };
-            return finish(
-                app,
-                Some(&disk),
-                false,
-                2,
-                &format!(
-                    "x2t failed (exit {:?}, output: {})",
-                    out.status.code(),
-                    detail.chars().take(200).collect::<String>()
-                ),
-            );
-        }
-        Err(e) => {
-            return finish(app, Some(&disk), false, 2, &format!("spawn x2t: {e}"));
-        }
-    }
+    // Success = exit 0 + non-empty output (a non-zero exit with output
+    // present means a PARTIAL conversion — never swap that over the original;
+    // observed: missing font dir → changes dropped, file still written).
+    // The criterion + spawn + output capture live in the sidecar seam.
+    let conv = match crate::sidecar::convert(&crate::sidecar::ConvertRequest::SaveFromChanges {
+        params_xml: &params,
+        output: &tmp_out,
+    }) {
+        Ok(conv) => conv, // conversion complete — swap it in
+        Err(e) => return finish(app, Some(&disk), false, 2, &e.note),
+    };
 
     if let Err(e) = std::fs::rename(&tmp_out, &disk) {
         return finish(
@@ -432,7 +321,7 @@ pub fn save_document(app: &tauri::AppHandle, registry: &FileRegistry, payload: &
         "save delivered: {} ({} bytes) in {:?}",
         disk.display(),
         len,
-        started.elapsed()
+        conv.elapsed
     );
     finish(app, Some(&disk), true, 0, "")
 }

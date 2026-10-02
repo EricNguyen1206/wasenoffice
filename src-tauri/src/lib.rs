@@ -3,8 +3,7 @@
 //! Modules:
 //! - `bridge`   : shim of `window.AscDesktopEditor` (~130 methods, see docs/reference.map.md)
 //! - `protocol` : `nanooffice-engine://` assets + `nanooffice-file://` user documents
-//! - `sidecar`  : x2t converter process management (PH-1)
-//! - `window`   : window / tab state management (PH-2)
+//! - `sidecar`  : x2t converter seam — binary resolution + `convert()` (T-A14)
 //!
 //! Shim JS injected into every frame (in this order, see `run`): probe flag →
 //! `BRIDGE_JS` (desktopEditor.js — bridge + relay) → `DELIVERY_JS`
@@ -13,7 +12,6 @@
 mod bridge;
 mod protocol;
 mod sidecar;
-mod window;
 
 use serde::Serialize;
 use std::sync::Arc;
@@ -126,7 +124,7 @@ fn payload_to_short(payload: &serde_json::Value) -> String {
 /// Boot params per format live across the boundary in `src/main.ts`
 /// (FILE_FORMATS) — touch both when adding a format (xps/djvu are
 /// CROSSPLATFORM too, same no-x2t rule).
-/// PH-0: synchronous one-shot x2t call; PH-1 replaces this with the sidecar.
+/// Conversions run through the sidecar seam (`sidecar::convert`, T-A14).
 #[tauri::command]
 fn get_document_for_delivery(
     registry: State<'_, Arc<FileRegistry>>,
@@ -151,32 +149,24 @@ fn get_document_for_delivery(
             .file_name()
             .ok_or_else(|| "document path has no file name".to_string())?;
         let target = work.join(file_name);
-        std::fs::copy(&disk, &target).map_err(|e| format!("copy original into workdir: {e}"))?;
+        sidecar::convert(&sidecar::ConvertRequest::Passthrough {
+            src: &disk,
+            dst: &target,
+        })
+        .map_err(|e| e.to_string())?;
         (target, file_name.to_string_lossy().into_owned())
     } else {
         let out = work.join("Editor.bin");
-        let x2t = bridge::save::x2t_path();
-        let started = std::time::Instant::now();
-        let status = std::process::Command::new(&x2t)
-            .arg(&disk)
-            .arg(&out)
-            .output()
-            .map_err(|e| format!("spawn x2t: {e}"))?;
-        if !out.is_file() {
-            return Err(format!(
-                "x2t produced no Editor.bin (exit {:?}, stderr: {})",
-                status.status.code(),
-                String::from_utf8_lossy(&status.stderr)
-                    .chars()
-                    .take(200)
-                    .collect::<String>()
-            ));
-        }
+        let conv = sidecar::convert(&sidecar::ConvertRequest::OpenBinary {
+            src: &disk,
+            dst: &out,
+        })
+        .map_err(|e| e.to_string())?;
         log::info!(
             "x2t converted {} bytes → Editor.bin ({} bytes) in {:?}",
             disk.display(),
             std::fs::metadata(&out).map(|m| m.len()).unwrap_or(0),
-            started.elapsed()
+            conv.elapsed
         );
         (out.clone(), "Editor.bin".into())
     };

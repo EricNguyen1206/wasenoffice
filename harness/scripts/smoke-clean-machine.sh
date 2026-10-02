@@ -4,7 +4,7 @@
 # log carries ZERO references to the installed ONLYOFFICE.app.
 #
 # Boots the real app (pnpm tauri dev) with NANO_OFFICE_NO_APP_FALLBACK=1 —
-# src-tauri/src/bridge/save.rs::x2t_path() then resolves the bundled
+# src-tauri/src/sidecar/mod.rs::x2t_path() then resolves the bundled
 # converter or fails loudly, never silently falling back to the installed
 # app — plus the same auto-probe as gate 10 (open fixture → asc_AddText +
 # asc_Save → x2t converts Editor.bin + changes0.json back to the ORIGINAL).
