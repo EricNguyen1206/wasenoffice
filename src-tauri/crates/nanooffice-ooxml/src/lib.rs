@@ -5,23 +5,26 @@
 //! Part 2 OPC`) and black-box observation. No upstream code is read or
 //! translated.
 //!
-//! Slice scope (T-A21, design `docs/design/converter-a2/DD.md` §4 S1): full
-//! basic-text read — OPC (Content_Types + relationships), body blocks
-//! (paragraph + table), paragraph props (pStyle/jc/numPr), run props
-//! (b/i/u/sz), numbering resolve, image relationships (r:embed → part, no
-//! image decoding), styles.xml basedOn resolve, headers/footers. Write is S2,
-//! the adapter is S4 — out of scope here.
+//! Slice scope (T-A21 design §4 S1, T-A22 S2): full basic-text read (OPC,
+//! body blocks paragraph + table, pStyle/jc/numPr, b/i/u/sz, numbering
+//! resolve, image relationships, styles basedOn resolve, headers/footers)
+//! and the matching write side — `write::write_docx` serializes the model
+//! back to an OPC package, symmetrical to the parser, one function per
+//! construct. The S4 adapter is out of scope here.
 
 mod document;
 mod opc;
 mod styles;
+pub mod write;
+
+pub use write::{write_docx, write_docx_file};
 
 use std::collections::BTreeMap;
 
 use serde::Serialize;
 
 /// A parsed document — the S1 read model.
-#[derive(Debug, Serialize)]
+#[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct Document {
     /// Block-level content of `w:body` (§17.2.2), in document order.
     pub body: Vec<Block>,
@@ -41,14 +44,14 @@ pub struct Document {
 }
 
 /// One block-level element of the body/cell content stream.
-#[derive(Debug, Serialize)]
+#[derive(Debug, PartialEq, Serialize, Clone)]
 pub enum Block {
     Paragraph(Paragraph),
     Table(Table),
 }
 
 /// One `w:p` (§17.3.1.22): its direct paragraph properties and its runs.
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, PartialEq, Serialize, Clone)]
 pub struct Paragraph {
     /// `w:pStyle w:val` (§17.3.1.27) — the referenced paragraph style.
     pub style: Option<String>,
@@ -63,7 +66,7 @@ pub struct Paragraph {
 
 /// A `w:numPr` reference: `w:numId w:val` (§17.9.19) + `w:ilvl w:val`
 /// (§17.9.3).
-#[derive(Debug, Serialize)]
+#[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct NumRef {
     pub num_id: u32,
     pub ilvl: u32,
@@ -71,7 +74,7 @@ pub struct NumRef {
 
 /// One `w:r` (§17.3.2.25). Text props are the direct `w:rPr` (§17.3.2.27)
 /// values only — style-chain resolution lives on `StyleDef`.
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, PartialEq, Serialize, Clone)]
 pub struct Run {
     /// Concatenated `w:t` content (§17.3.3.31); empty when the run carries
     /// non-text content (an image, a break).
@@ -92,7 +95,7 @@ pub struct Run {
 /// An embedded image reference: `a:blip r:embed` resolved through the part's
 /// relationships to its OPC part name, with the `wp:extent` (§20.4.2.7)
 /// size in EMU. S1 reads relationships only — image bytes are not touched.
-#[derive(Debug, Serialize)]
+#[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct ImageRef {
     /// The `r:embed` relationship id.
     pub rel_id: String,
@@ -106,7 +109,7 @@ pub struct ImageRef {
 
 /// One `w:tbl` (§17.4.38) — rows of cells. Row/cell properties (tblPr,
 /// tblGrid, tcPr) are not modelled in S1.
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, PartialEq, Serialize, Clone)]
 pub struct Table {
     /// `w:tr` rows (§17.4.79) in order; each row's `w:tc` cells (§17.4.66)
     /// in order.
@@ -115,14 +118,14 @@ pub struct Table {
 
 /// One `w:tc` (§17.4.66) — a cell holds block-level content (paragraphs and
 /// nested tables, per the CT_Tc content model).
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, PartialEq, Serialize, Clone)]
 pub struct TableCell {
     pub blocks: Vec<Block>,
 }
 
 /// A header or footer part: its OPC part name plus its block content. The
 /// part's own relationships are used for its content (e.g. header images).
-#[derive(Debug, Serialize)]
+#[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct HeaderFooter {
     /// OPC part name (e.g. `word/header1.xml`).
     pub part: String,
@@ -132,8 +135,12 @@ pub struct HeaderFooter {
 /// A style after basedOn-chain resolution (§17.7.4.17 `w:style`,
 /// §17.7.4.3 `w:basedOn`, §17.7.4.9 `w:name`). `None` = no value declared
 /// anywhere on the chain; a declared value always wins over the parent's.
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, PartialEq, Serialize, Clone)]
 pub struct StyleDef {
+    /// WordprocessingML style type (§17.7.4.17 @w:type — a required
+    /// attribute, so the writer cannot emit styles.xml without it). S1 only
+    /// surfaces paragraph + character styles.
+    pub kind: StyleKind,
     pub name: Option<String>,
     /// From the style's `w:pPr/w:jc` (§17.7.8.2-style pPr, jc §17.3.1.13).
     pub align: Option<String>,
@@ -147,9 +154,19 @@ pub struct StyleDef {
     pub size: Option<u32>,
 }
 
+/// WordprocessingML style type (§17.7.4.17 @w:type): the two S1-modelled
+/// kinds. Paragraph styles are referenced from `w:pPr/w:pStyle`
+/// (§17.3.1.27), character styles from `w:rPr/w:rStyle` (§17.5.2.3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+pub enum StyleKind {
+    #[default]
+    Paragraph,
+    Character,
+}
+
 /// One resolved numbering level: `w:numFmt w:val` (§17.9.18) and
 /// `w:lvlText w:val` (§17.9.12) — the format string with `%1..%9` placeholders.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct NumLvl {
     pub num_fmt: String,
     pub lvl_text: String,
@@ -160,6 +177,12 @@ pub struct NumLvl {
 #[derive(Debug)]
 pub struct ParseError(pub String);
 
+/// Write failure — a model that cannot be serialized into a valid OPC
+/// package (duplicate relationship ids pointing at different parts, an image
+/// part of an unknown extension). Never a panic.
+#[derive(Debug)]
+pub struct WriteError(pub String);
+
 impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
@@ -167,6 +190,14 @@ impl std::fmt::Display for ParseError {
 }
 
 impl std::error::Error for ParseError {}
+
+impl std::fmt::Display for WriteError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for WriteError {}
 
 pub(crate) fn xml_err(e: quick_xml::Error) -> ParseError {
     ParseError(format!("xml: {e}"))

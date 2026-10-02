@@ -16,6 +16,19 @@ use crate::{xml_err, ParseError};
 pub const CT_MAIN_DOCUMENT: &str =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml";
 
+/// Content types of the WordprocessingML accessory parts the model covers
+/// (Part 2 §10.1.2.1.x media-type names, Part 1 part definitions).
+pub const CT_STYLES: &str =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml";
+pub const CT_NUMBERING: &str =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml";
+pub const CT_HEADER: &str =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml";
+pub const CT_FOOTER: &str =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml";
+/// Content type of relationships parts (Part 2, package relationship part).
+pub const CT_RELS: &str = "application/vnd.openxmlformats-package.relationships+xml";
+
 /// Relationship types (Part 2 / §17.16, officeDocument/2006/relationships/*).
 pub const RT_OFFICE_DOCUMENT: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument";

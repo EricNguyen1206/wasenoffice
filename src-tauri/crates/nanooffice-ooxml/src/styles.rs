@@ -11,11 +11,12 @@ use quick_xml::events::{BytesStart, Event};
 
 use crate::document::onoff;
 use crate::opc::attr;
-use crate::{xml_err, NumLvl, ParseError, StyleDef};
+use crate::{xml_err, NumLvl, ParseError, StyleDef, StyleKind};
 
 /// Raw style as written in styles.xml, before chain resolution.
 #[derive(Debug, Default)]
 struct RawStyle {
+    kind: StyleKind,
     name: Option<String>,
     based_on: Option<String>,
     align: Option<String>,
@@ -75,12 +76,18 @@ fn parse_style(
     raw: &mut BTreeMap<String, RawStyle>,
 ) -> Result<(), ParseError> {
     let style_type = attr(&open, b"w:type")?;
-    if !matches!(style_type.as_deref(), Some("paragraph") | Some("character")) {
-        return skip(reader);
-    }
+    let kind = match style_type.as_deref() {
+        Some("paragraph") => StyleKind::Paragraph,
+        Some("character") => StyleKind::Character,
+        // table/numbering styles stay out of the model (S1 surface)
+        _ => return skip(reader),
+    };
     let id =
         attr(&open, b"w:styleId")?.ok_or_else(|| ParseError("w:style missing w:styleId".into()))?;
-    let mut style = RawStyle::default();
+    let mut style = RawStyle {
+        kind,
+        ..Default::default()
+    };
     let mut buf = Vec::new();
     loop {
         buf.clear();
@@ -190,6 +197,7 @@ fn resolve_style(
     };
     path.remove(id);
     Ok(StyleDef {
+        kind: style.kind, // the type is identity, not an inherited property
         name: style
             .name
             .clone()
