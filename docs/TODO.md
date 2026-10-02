@@ -15,15 +15,15 @@ type: queue
 
 ## Tình hình nhanh
 
-▶ Kế tiếp: T-053 (smoke-lib factor — review #2 C3; subagent 2 theo thứ tự T-053→T-054→T-044 như diagnostics 02.10 review #2)
+▶ Kế tiếp: T-A20 (mở màn A2 — converter Rust DOCX clean-room, slot adapter sau sidecar seam T-A14; chuỗi review #2 subagent 2 T-053→T-054→T-044 đã xong 02.10 — diagnostics)
 
 | Phase | Tổng | ✅ | 🟨 | ⏸ | ⬜ |
 |---|---|---|---|---|---|
 | PH-0 — ĐÃ ĐÓNG 27.09  |  6  | 6  | 0  | 0  | 0  |
-| PH-1  |  10 | 6  | 0  | 0  | 4  |
+| PH-1  |  10 | 7  | 0  | 0  | 3  |
 | PH-4  |  3  | 0  | 0  | 0  | 3  |
 | Track A (QĐ9) |  6  | 5  | 0  | 0  | 1  |
-| META  | 12  | 6  | 0  | 0  | 6  |
+| META  | 12  | 8  | 0  | 0  | 4  |
 
 ## PH-0 — Spike editor + render DOCX (go/no-go) — ĐÃ ĐÓNG 27.09 · verdict GO WITH CAVEAT
 
@@ -33,7 +33,6 @@ type: queue
 
 ## PH-1 — Vòng đời file (open/save/convert qua x2t sidecar)
 
-- [ ] ⬜ T-053 · `smoke-lib.sh` — factor 3 bản sao boilerplate gate (boot/teardown/poll/save-evidence/tail ×3 đã lệch style — review #2 C3) TRƯỚC khi T-049 clone gate theo format; mỗi gate rewrite phải PASSED exit 0 độc lập trước khi xóa bản cũ (replace-don't-layer); log contract giữ nguyên byte · ← review #2
 - [ ] ⬜ T-049 · Save multi-format (XLSX/PPTX) qua x2t from-changes: định danh format code PPTX (spec-ref `AVS_OFFICESTUDIO_FILE_*` — core chưa clone, hoặc oracle tiếp) · XLSX = **257 đã oracle-confirmed** (29.09) · 513 = export PDF (đã obs, không phải PPTX) · PPTY→PPTX cần `<m_sFontDir>`+`<m_sAllFontsPath>` (exit 80 nếu thiếu) · không truyền m_nFormatTo thì extension output quyết định (PK hợp lệ) · save PDF = pipeline khác (`localSaveToDrawingFormat`) cần điều tra riêng (OQ-F01-1) · bằng chứng: reference.map § multi-format · ← T-048 ← T-052 (formats 1 nhà) + T-053 (gate lib)
 - [ ] ⬜ T-046 · Module config `env.rs` phần CÒN LẠI (review #2: hấp thụ discovery vào T-A14 + formats vào T-052 — còn PROBE/SAVE_PROBE/DEVTOOLS/OPEN gom sau khi PH-2 có lý do thứ hai) · diagnostics 27.09 + review #2
 - [ ] ⬜ T-047 · Điều tra dialog lỗi "An error has occurred…" thỉnh thoảng hiện sau khi open thành công (emitter `iLa` ở viewer api riêng) · ← T-010 · diagnostics 27.09 (T-002)
@@ -43,6 +42,7 @@ type: queue
 - [x] ✅ T-011 · Round-trip test tự động trong verify.sh — gate 10 `smoke-save.sh` edit→save→disk (fixture fresh + marker random `NANO_OFFICE_SAVE_PROBE`; TC-D01-11 GREEN: standalone ×2 exit 0 + counterfactual probe-tắt exit 1 đúng kỳ vọng) · 28.09 · 7ba9150 · diagnostics 28.09
 - [x] ✅ T-048 · Wire entry XLSX/PPTX/PDF — **mở được cả 4 định dạng** (map `FILE_FORMATS` 1 nhà trong main.ts: xlsx→cell/pptx→slide/pdf→pdf+isForm=false; PDF không qua x2t — deliver file gốc, oracle CDP app thật; shim font-loader generalise 3 build) · smoke gates xlsx/pptx/pdf trong verify.sh exit 0 + negative proven + gates docx/save regression GREEN · màn E01/P01/F01 đăng ký + DD/TEST · 29.09 · 7725690 · diagnostics 29.09
 - [x] ✅ T-050 · Fix gate pptx flaky — probe one-shot 6/8/15s → **interval lặp 2s ×60 (dừng sớm khi canvas height>0)**, chuỗi log contract gate 9 giữ nguyên verbatim · chứng minh pptx ×3 liên tiếp PASSED exit 0 + docx regression GREEN · 30.09 · eec769d · diagnostics 30.09 ("fix landed")
+- [x] ✅ T-053 · `smoke-lib.sh` factor 3 gate (review #2 C3): boot/teardown/poll/save-evidence/tail 1 nhà (170 dòng, SOURCE + chống double-trap, style env+mảng thống nhất); log contract gates 9/10/11 đóng băng hằng đầu lib byte-identical; consumer mỏng 82→61/93→69/107→88 dòng; verify.sh không đổi cấu trúc gates · replace-don't-layer proven: 3 gate standalone PASSED exit 0 + negative FORCE_APP_X2T exit 1 + verify.sh FULL exit 0 · 02.10 · 8be3224 · diagnostics 02.10
 
 ## PH-4 — Đóng gói + updater (trigger: PH-2 xong)
 
@@ -68,15 +68,15 @@ type: queue
 
 ## META — harness / docs / skills
 
-- [ ] ⬜ T-054 · Font-root bảng 1 chủ (review #2 C5): `FONT_URL_ROOTS`/`font_root_disk` chuyển vào `protocol/allfonts` (producer tự làm chủ; filesrv/mod.rs thành consumer, hết `super::` ngược dòng) + 2 flavor artifact (URL-rewrite/disk) cùng nhà + test `generated()` qua interface (winner-selection hiện 0 coverage) · kèm quick win: filesrv.rs:181-199 range-parse tự viết → reuse `mod.rs::parse_range` có test (parser không test đang phục vụ production) · ← review #2
 - [ ] ⬜ T-020 · Add 2 skill theo audit 26.09: `systematic-debugging` (superpowers) + `handoff` (mattpocock) qua cổng acceptance · **chờ user duyệt**
 - [ ] ⬜ T-021 · CI + gates số liệu size/RAM/startup · trigger: PH-4
 - [ ] ⬜ T-034 · Bật GitNexus index `upstream/sdkjs` phục vụ reverse font pipeline (trigger đã chạm: bridge first wave xong) · ← T-001 · skill: gitnexus-cli
 - [ ] 🚫 T-043 · ~~Xoá stub `sidecar/` + `window/`~~ hấp thụ vào **T-A14** theo review #2 (sidecar = converter seam thật; xoá stub trong cùng commit; `window/` xoá kèm — 0 dòng code)
-- [ ] ⬜ T-044 · Bridge registry — hạ còn **check-script 1 phiên** (review #2: đã tệ hơn, ~35 method ×3 nơi + 1 bảng docs; trigger ĐÃ chạm vì T-049 sắp thêm wave): script verify.sh đối chiếu KNOWN_METHODS/LOCAL_TRUTHS ↔ bridge/mod.rs dispatch ↔ reference.map; `globals.d.ts` sync/async đúng contract · diagnostics 27.09 + review #2
 - [x] ✅ T-042 · Gate 9 smoke render behavioral trong verify.sh — TC-D01-06 chạy tự động, exit code (architecture review Candidate 1; negative test proven) · 27.09 · 82502c1
 - [x] ✅ T-022 · Migration OKF-thin: frontmatter `type` toàn docs + gate check-docs.mjs (QĐ8) · 27.09
 - [x] ✅ T-030 · QĐ5 hai ngôi nhà harness/.agents + QĐ6 hệ DD/TEST mã hóa màn hình + CONTRIBUTING + docs routing · 26–27.09 · bbb99b1
 - [x] ✅ T-031 · QĐ7 TODO queue + template handoff + vòng đời task + protocol đa-phiên · 27.09
 - [x] ✅ T-032 · Chốt stack giữ Rust+Tauri (re-validate) · 26.09 · ea24231 · research: `techstack-analysis.md` (untracked — user: research không commit)
 - [x] ✅ T-033 · Quyết định 5 "hai ngôi nhà" ghi vision · 26.09
+- [x] ✅ T-054 · Font-root bảng 1 chủ (review #2 C5) + quick win filesrv range: `FONT_URL_ROOTS`/`font_root_disk`/`engines_root`/`encode_uri_component`/`rewrite_font_paths`(port param)/`engine_flavor_js` VỀ `protocol/allfonts` (2 flavor disk+URL cùng nhà; mod.rs+filesrv consumer, 0 `super::` ngược dòng từ allfonts); filesrv bỏ range-parse tự viết (0 test + bug 0-byte underflow) → `mod.rs::parse_range_header` có test; +1 test enumerate qua interface trên engines/fonts bundled (skip-friendly, giới hạn ghi comment) · cargo test 23 passed/clippy 0/fmt clean · 02.10 · c797293 · diagnostics 02.10
+- [x] ✅ T-044 · Bridge registry — hạ còn **check-script 1 phiên**: `check-bridge-surface.mjs` (node stdlib) đối chiếu shim KNOWN_METHODS/LOCAL_TRUTHS ↔ bridge/mod.rs dispatch ↔ reference.map (2 chiều, normalize+expand token) ↔ globals.d.ts sync-heuristic; wire verify.sh sau check-docs (gate 16); bắt được 2 mismatch THẬT lần chạy đầu (bảng Property shorthand → tách tên exact; globals.d.ts Promise-only → `unknown`) — sửa đúng chỗ; negative arm bogus → exit 1 proven · 02.10 · d1d04fc · diagnostics 02.10

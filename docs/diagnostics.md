@@ -8,6 +8,70 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-02 · T-053 + T-054 + T-044: smoke-lib 1 nhà · font-root 1 chủ · gate bridge-surface — GREEN (review #2 hygiene C3+C5+C4, 3 commit nhỏ theo thứ tự user duyệt)
+
+- **Phạm vi:** subagent 2 chuỗi 3 task review #2 (T-053→T-054→T-044); nguyên tắc
+  replace-don't-layer — gate/script rewrite phải PASSED exit 0 độc lập TRƯỚC khi
+  thay bản cũ; log contract gates 9/10/11 giữ nguyên BYTE. Không đụng sidecar/
+  formats/save journal/delivery.js (vừa landed T-A14/T-052).
+- **T-053 (8be3224):** `harness/scripts/smoke-lib.sh` (170 dòng, SOURCE — guard
+  cuối file chống execute; chống double-trap qua `_SMOKE_TRAP_SET`, mỗi script
+  đúng 1 trap EXIT; style thống nhất env + mảng): `smoke_init` (pnpm/port-1420/
+  fixture-gen + pre-stat) · `smoke_boot ENV… LOG` (set -m process-group +
+  teardown) · `smoke_poll TIMEOUT PREDICATE [what]` (kill -0 + sleep 2 +
+  SMOKE_ABORT fail-fast + SMOKE_SUMMARY mỗi vòng) · `smoke_save_evidence` (cặp
+  grep save lines + unzip grep -cF + stat) · `smoke_fail_tail` (FAILED + refs
+  app khi APP_HITS>0 + tail -40). LOG CONTRACT đóng băng thành hằng đầu lib
+  (SMOKE_RE_* + SMOKE_APP_PATH, cross-ref 2 chiều emitter pointer comments giữ
+  nguyên). 3 gate thành consumer mỏng: render 82→61 · save 93→69 · clean 107→88
+  dòng; verify.sh KHÔNG đổi cấu trúc gates (đường dẫn giữ nguyên).
+  **Bằng chứng:** render docx standalone PASSED exit 0 · save standalone
+  PASSED exit 0 (1962→25569 B, marker ×1) · clean-machine standalone PASSED
+  exit 0 · **negative** SMOKE_CLEAN_FORCE_APP_X2T=1 → exit 1 (app-path-hits=1,
+  fail-fast bắt đúng dòng override `[x2t] using NANO_OFFICE_X2T`) · verify.sh
+  FULL 15 gates exit 0 (`/tmp/verify-t053.log`).
+- **T-054 (c797293):** font-root bảng + CẢ HAI flavor AllFonts.js về 1 nhà
+  `protocol/allfonts` (producer): DI CHUYỂN từ mod.rs — `FONT_URL_ROOTS` +
+  `font_root_disk` + `engines_root` (discovery chung) + `encode_uri_component`
+  (1 encoder cạnh URL producer, hết nguy cơ drift) + `rewrite_font_paths`
+  (PORT làm tham số — producer không phụ thuộc server) + composition
+  `engine_flavor_js(port)` (thay generate_all_fonts_js). mod.rs + filesrv thành
+  consumer (`allfonts::`), **hết `super::` ngược dòng từ allfonts** (0 match).
+  Quick win: filesrv.rs:181-199 range-parse tự viết (0 test + latent bug 0-byte
+  body: `total - 1` underflow) → XOÁ, gọi `mod.rs::parse_range_header`
+  (refactor parse_range nhận `Option<&str>` — bản có test; RangeSpec pub(crate)).
+  Test: +1 `bundled_fonts_enumerate_via_interface` qua interface `generated()`
+  (structure js_raw + app-root contribution + Carlito family + URL flavor;
+  skip-friendly khi engines thiếu — giới hạn sys-machine-dependent ghi comment);
+  2 test rewrite/app-root dời theo bảng. **Bằng chứng:** cargo test **23 passed
+  / 0 failed** (+1 ignored cũ) · clippy -D warnings exit 0 · fmt clean.
+  Ghi nhận ngoài scope: filesrv percent_decode private vẫn trùng mod.rs (không
+  đụng — không nằm trong task).
+- **T-044 (d1d04fc):** gate `harness/scripts/check-bridge-surface.mjs` (node
+  stdlib, hạ còn check-script — KHÔNG sinh code): đối chiếu (a) KNOWN_METHODS +
+  LOCAL_TRUTHS (desktopEditor.js — const-block match, **strip comment trước khi
+  tách chuỗi**: apostrophe trong comment "ack'd" từng lệch cặp quote nuốt ~50
+  method) ↔ (b) bridge/mod.rs match arms (dòng bắt đầu `"X"`/`| "X"` trước
+  `_ =>`, chỉ quét TRƯỚC `=>` — không lầm `env!("CARGO_PKG_VERSION")`) ↔
+  (c) reference.map (implemented ⊆ doc-token normalize+expand; bảng PH-0 cột
+  Method ⊆ surface shim) ↔ (d) globals.d.ts sync-heuristic (LOCAL_TRUTHS key
+  trên dòng Promise → flag). execCommand allowlist có chủ đích. Wire verify.sh
+  sau check-docs. **Gate bắt được 2 mismatch THẬT ngay lần chạy đầu** (giá trị
+  của gate — sửa đúng chỗ, không nể): (1) bảng PH-0 hàng Property dùng
+  shorthand `Property_Get/SetCryptoMode` máy không đọc ra tên chính xác → tách
+  2 tên exact; (2) globals.d.ts khai báo AscDesktopEditor + execCommand trả
+  **Promise-only** trong khi LOCAL_TRUTHS trả SYNC (CEF shell cũng sync —
+  call-sites dùng trong `if`) → đổi trả về `unknown` (pnpm build exit 0).
+  **Bằng chứng:** gate PASS exit 0 (KNOWN=89 · LOCAL_TRUTHS=28 · dispatch=30 ·
+  PH0-doc=31 · sync-ok) · negative: tiêm arm `BogusT044Method` vào dispatch →
+  exit 1 (2 mismatch đúng loại) → phục hồi → exit 0.
+- **Trạng thái:** T-053 ✅ (sink PH-1) · T-054 ✅ + T-044 ✅ (sink META). verify.sh
+  giờ 16 gates (thêm check-bridge-surface). Chuỗi review #2 hết subagent 2;
+  kế tiếp **T-A20** (A2 converter Rust) hoặc PH-1 còn lại (T-046/T-047/T-049 —
+  T-049 giờ có gate-lib để clone theo format).
+
+---
+
 ## 2026-10-02 · T-A14 + T-052: converter seam + formats/workdir 1 nhà — GREEN (refactor thuần, hành vi KHÔNG đổi)
 
 - **Phạm vi (review #2 C1+C2, 1 subagent theo thứ tự user duyệt):** T-A14 seam converter
