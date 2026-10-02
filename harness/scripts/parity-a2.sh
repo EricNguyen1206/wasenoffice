@@ -49,22 +49,21 @@ fi
 WORK="$(mktemp -d /tmp/nanooffice-parity-a2-XXXXXX)"
 FORMAT_TO_DOCX=65   # src-tauri/src/formats.rs — docx save code (65 = Wired)
 
-printf '%-34s %-9s %-10s %s\n' "file" "parse" "invariant" "parity-diff (crate-rt vs x2t-rt)"
+row() { printf '%-34s %-9s %-10s %s\n' "$1" "$2" "$3" "$4"; }
+row "file" "parse" "invariant" "parity-diff (crate-rt vs x2t-rt)"
 FAILS=0
-FILES=0
 PARITY_CLEAN=0
 
 for f in "${CORPUS[@]}"; do
   name="$(basename "$f" .docx)"
   dir="$WORK/$name"
   mkdir -p "$dir"
-  FILES=$((FILES + 1))
 
   # (a) x2t round-trip — call 1: docx → Editor.bin (OpenBinary shape:
   # success = bin exists; x2t is routinely non-zero with valid output)
   "$X2T" "$f" "$dir/Editor.bin" >"$dir/x2t-open.log" 2>&1
   if [ ! -f "$dir/Editor.bin" ]; then
-    printf '%-34s %-9s %-10s %s\n' "$name" "x2t-open FAIL" "-" "see $dir/x2t-open.log"
+    row "$name" "x2t-open FAIL" "-" "see $dir/x2t-open.log"
     FAILS=$((FAILS + 1)); continue
   fi
   # call 2: Editor.bin → docx (SaveFromChanges shape: success = exit 0 +
@@ -75,20 +74,20 @@ for f in "${CORPUS[@]}"; do
   "$X2T" "$dir/params.xml" >"$dir/x2t-save.log" 2>&1
   rc=$?
   if [ $rc -ne 0 ] || [ ! -s "$dir/x2t-rt.docx" ]; then
-    printf '%-34s %-9s %-10s %s\n' "$name" "x2t-rt FAIL" "-" "exit=$rc, see $dir/x2t-save.log"
+    row "$name" "x2t-rt FAIL" "-" "exit=$rc, see $dir/x2t-save.log"
     FAILS=$((FAILS + 1)); continue
   fi
 
   # (b) crate round-trip + (c) three parses to canonical JSON
   if ! "$CLI" "$f" "$dir/crate-rt.docx" 2>"$dir/crate-rt.err"; then
-    printf '%-34s %-9s %-10s %s\n' "$name" "crate-rt FAIL" "-" "$(cat "$dir/crate-rt.err")"
+    row "$name" "crate-rt FAIL" "-" "$(cat "$dir/crate-rt.err")"
     FAILS=$((FAILS + 1)); continue
   fi
   ok=1
   for pair in "$f:m-orig" "$dir/crate-rt.docx:m-crate" "$dir/x2t-rt.docx:m-x2t"; do
     src="${pair%%:*}"; dst="${pair##*:}"
     if ! "$CLI" "$src" >"$dir/$dst.json" 2>"$dir/$dst.err"; then
-      printf '%-34s %-9s %-10s %s\n' "$name" "parse FAIL ($dst)" "-" "$(head -1 "$dir/$dst.err")"
+      row "$name" "parse FAIL ($dst)" "-" "$(head -1 "$dir/$dst.err")"
       ok=0
     fi
   done
@@ -104,15 +103,15 @@ for f in "${CORPUS[@]}"; do
   # PARITY: crate round-trip model vs x2t round-trip model
   if diff -q "$dir/m-crate.json" "$dir/m-x2t.json" >/dev/null; then
     PARITY_CLEAN=$((PARITY_CLEAN + 1))
-    printf '%-34s %-9s %-10s %s\n' "$name" "ok" "$INV" "IDENTICAL"
+    row "$name" "ok" "$INV" "IDENTICAL"
   else
     diff "$dir/m-crate.json" "$dir/m-x2t.json" > "$dir/PARITY.diff"
-    printf '%-34s %-9s %-10s %s\n' "$name" "ok" "$INV" "$(grep -c '^[<>]' "$dir/PARITY.diff") diff line(s) → $dir/PARITY.diff"
+    row "$name" "ok" "$INV" "$(grep -c '^[<>]' "$dir/PARITY.diff") diff line(s) → $dir/PARITY.diff"
   fi
 done
 
 echo
-echo "parity-a2: files=$FILES parity-clean=$PARITY_CLEAN hard-fails=$FAILS"
+echo "parity-a2: files=${#CORPUS[@]} parity-clean=$PARITY_CLEAN hard-fails=$FAILS"
 echo "parity-a2: artifacts kept at $WORK (m-orig/m-crate/m-x2t JSON, PARITY.diff per file)"
 [ "$FAILS" -eq 0 ] || exit 1
 exit 0

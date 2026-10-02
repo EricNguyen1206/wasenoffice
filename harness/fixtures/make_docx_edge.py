@@ -1,25 +1,12 @@
 #!/usr/bin/env python3
 """Generate the edge-corpus DOCX fixtures for T-A23 (A2/S3 parity harness).
 
-Usage: make_docx_edge.py [outdir]
-  (default: harness/fixtures/corpus-a2)
+Four fixtures probing constructs the base fixtures (make_docx.py,
+make_docx_full.py) do not exercise — spec-derived from ECMA-376 / ISO 29500,
+stdlib only. The expected-model note per file lives in ONE home:
+`corpus-a2/NOTES.md` (also the harness corpus list).
 
-Four fixtures that probe constructs the base fixtures (make_docx.py,
-make_docx_full.py) do not exercise, spec-derived from ECMA-376 / ISO 29500
-(stdlib only, no upstream code). Each file has an expected-model note in
-`corpus-a2/NOTES.md` and here in its docstring:
-
-  edge-multilevel-list.docx  — one abstractNum, 3 levels (decimal / lowerRoman
-                               / lowerLetter), paragraphs at ilvl 0..2.
-  edge-nested-table.docx     — outer 1x2 table whose second cell holds a
-                               nested 2x1 table + a trailing paragraph.
-  edge-style-override.docx   — style chain Normal -> Quote -> IntenseQuote
-                               (2 basedOn hops) + character style Strong +
-                               explicit run overrides (italic=false, bold=false).
-  edge-image-multi.docx      — one image relationship referenced by 3 drawings
-                               with different extents.
-
-All generators share the minimal-package writer of make_docx_full.py.
+Usage: make_docx_edge.py [outdir]   (default: harness/fixtures/corpus-a2)
 """
 import struct
 import sys
@@ -49,7 +36,10 @@ def package(parts: dict[str, str | bytes]) -> None:
     name = parts.pop("__name__")
     with zipfile.ZipFile(f"{out}/{name}", "w", zipfile.ZIP_DEFLATED) as z:
         for part, content in parts.items():
-            z.writestr(part, content)
+            # pinned timestamp → regenerate-and-cmp detects generator↔corpus drift
+            zi = zipfile.ZipInfo(part, date_time=(2026, 10, 3, 0, 0, 0))
+            zi.compress_type = zipfile.ZIP_DEFLATED
+            z.writestr(zi, content)
 
 
 def content_types(extra_overrides: str) -> str:
@@ -89,8 +79,6 @@ def document(body: str) -> str:
 # ---------------------------------------------------------------- fixtures
 
 def make_multilevel_list() -> None:
-    """Expected model: numbering {1: {0: decimal '%1.', 1: lowerRoman '%2.',
-    2: lowerLetter '%3)'}}; 5 paragraphs — ilvl 0, 0, 1, 1, 2 all numId=1."""
     numbering = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:numbering {W}>
   <w:abstractNum w:abstractNumId="0">
@@ -129,9 +117,6 @@ def make_multilevel_list() -> None:
 
 
 def make_nested_table() -> None:
-    """Expected model: body = [para 'Bảng lồng:', table 1x2 — cell(0,0) = para
-    'trống', cell(0,1) = [table 2x1 ('ô trong', 'hàng hai'), para 'sau bảng trong'],
-    para 'Kết thúc bảng lồng.']."""
     inner = (
         "<w:tbl><w:tr>"
         '<w:tc><w:p><w:r><w:t>ô trong</w:t></w:r></w:p></w:tc>'
@@ -159,11 +144,6 @@ def make_nested_table() -> None:
 
 
 def make_style_override() -> None:
-    """Expected model: styles — IntenseQuote {bold Some(true), italic
-    Some(true)} (2 basedOn hops), Quote {italic Some(true)}, Normal {}, Strong
-    (character) {bold Some(true)}; runs — run trên Quote có italic=false
-    override, run trên IntenseQuote có bold=false override, 1 run rStyle
-    Strong."""
     styles = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles {W}>
   <w:style w:type="paragraph" w:default="1" w:styleId="Normal">
@@ -206,8 +186,6 @@ def make_style_override() -> None:
 
 
 def make_image_multi() -> None:
-    """Expected model: 3 paragraphs, mỗi run 1 image — CÙNG rel rIdImg, part
-    word/media/image1.png, extents 9525x9525 / 19050x9525 / 28575x9525 EMU."""
     def drawing(cx: int, cy: int, pic_id: int, name: str) -> str:
         return (
             f'<w:r><w:drawing><wp:inline><wp:extent cx="{cx}" cy="{cy}"/>'

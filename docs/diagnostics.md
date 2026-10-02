@@ -10,7 +10,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ## 2026-10-03 · T-A23: A2/S3 — parity harness (crate ↔ x2t trên model): 15/15 construct parity, 0 diff không phân loại — GREEN
 
-- **Phạm vi:** slice S3 của DD K01 §4/§5 — `harness/scripts/parity-a2.sh` (~130 dòng, script
+- **Phạm vi:** slice S3 của DD K01 §4/§5 — `harness/scripts/parity-a2.sh` (~115 dòng, script
   mỏng + CLI crate có sẵn, không framework compare): mỗi corpus file chạy x2t round-trip
   (docx→Editor.bin positional + params XML Editor.bin→docx — đúng 2 call shape của seam) +
   crate round-trip, rồi 3-way compare trên canonical JSON CLI: **INVARIANT m-orig == m-crate**
