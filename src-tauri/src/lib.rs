@@ -229,7 +229,6 @@ pub fn run() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
         .manage(Arc::new(FileRegistry::default()))
         .register_uri_scheme_protocol(protocol::ENGINE_SCHEME, protocol::handle_engine)
         .register_uri_scheme_protocol(protocol::FILE_SCHEME, protocol::handle_file)

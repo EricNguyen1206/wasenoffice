@@ -258,7 +258,7 @@ fn safe_join(root: &Path, rel: &str) -> Option<PathBuf> {
 // the URL producer that needs it (one home, no drift between the two).
 // ---------------------------------------------------------------------------
 
-fn percent_decode(s: &str) -> String {
+pub(crate) fn percent_decode(s: &str) -> String {
     let bytes = s.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
