@@ -62,16 +62,20 @@ pub fn workdir_for(id: u32) -> PathBuf {
 /// x2t sidecar binary — resolution order (T-A10, Track A rung A1):
 /// 1. env `NANO_OFFICE_X2T` (tests / custom builds) — honored only when the
 ///    file exists, so a bogus value falls through to the bundled converter
-///    (the T-A10 counterfactual relies on that)
+///    (the T-A10 counterfactual relies on that). The resolved path is logged:
+///    gate 11 asserts 0 `/Applications/ONLYOFFICE` references in the whole
+///    log, so an override wrongly pointed into the installed app is caught.
 /// 2. bundled converter: `engines/converter/<target>/x2t` (created by
 ///    `harness/scripts/bundle-x2t.sh`), found by walking up from the exe dir
 ///    and the cwd — dev trees have the repo root 3 levels above target/debug
-/// 3. installed ONLYOFFICE.app fallback — logged as WARN: this is the exact
-///    runtime dependency rung A1 is pulling out
+/// 3. installed ONLYOFFICE.app fallback — logged as WARN; DISABLED under
+///    clean-machine mode (`NANO_OFFICE_NO_APP_FALLBACK`), which turns a
+///    missing bundled converter into a hard error instead (T-A13, gate 11)
 pub fn x2t_path() -> String {
     if let Ok(p) = std::env::var("NANO_OFFICE_X2T") {
         if !p.is_empty() {
             if Path::new(&p).is_file() {
+                log::info!("[x2t] using NANO_OFFICE_X2T override: {p}");
                 return p;
             }
             log::warn!("x2t: NANO_OFFICE_X2T points to a missing file ({p}) — ignoring");
@@ -80,11 +84,29 @@ pub fn x2t_path() -> String {
     if let Some(p) = find_bundled_x2t() {
         return p;
     }
+    if no_app_fallback() {
+        log::error!(
+            "x2t: clean-machine mode (NANO_OFFICE_NO_APP_FALLBACK set): bundled converter engines/converter/{}/x2t not found — app fallback disabled",
+            target_dir_name()
+        );
+        return String::new();
+    }
     log::warn!(
         "x2t: bundled converter engines/converter/{}/x2t not found — falling back to the installed ONLYOFFICE.app (A1 runtime dependency to remove)",
         target_dir_name()
     );
     "/Applications/ONLYOFFICE.app/Contents/Resources/converter/x2t".to_string()
+}
+
+/// Clean-machine mode (`NANO_OFFICE_NO_APP_FALLBACK`): set (to anything but
+/// "0") the installed-app fallback is off and a missing bundled converter
+/// fails loudly. Gate 11 boots the app with this always on; a dev opts out
+/// explicitly to test the fallback path.
+fn no_app_fallback() -> bool {
+    match std::env::var("NANO_OFFICE_NO_APP_FALLBACK") {
+        Ok(v) => v != "0",
+        Err(_) => false,
+    }
 }
 
 /// `engines/converter/<target>` dir name — composed from std::env::consts.
