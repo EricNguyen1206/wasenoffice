@@ -42,7 +42,7 @@ async bridge không thay thế được — call-sites dùng trong `if` / lúc l
 | `LocalFileSave(param, pwd, docinfo, fileType, json, oldPwd)` | `word/Local/api.js:264` (+ `DesktopOfflineAppDocumentStartSave` :214); wrapper cpp:2174 → `cefview.cpp:3099` → x2t params XML | **DONE-PH1** (`bridge/save.rs::save_document` — x2t `Editor.bin`+changes → file gốc, atomic rename; lỗi → `EndSave(2)`; cần `<m_sFontDir>`+`<m_sAllFontsPath>` — không có thì x2t drop changes im lặng) |
 | `OnSave` | word/api.js:2710 (`CoAuthoringApi.onUnSaveLock`); wrapper cpp:1757 | **DONE-PH1** (ack) |
 | `CheckNeedWheel` | word/Drawing/HtmlPage.js:2415 (sync `false ===` so sánh); wrapper cpp:1879 trả true | **DONE-PH1** (sync-truth `true` — legacy compat) |
-| `Property_Get/SetCryptoMode` (property `AscDesktopEditor.CryptoMode`) | wrapper cpp:2675 (defineProperty) + 4024/4035; mặc định 0 | **DONE-PH1** (getter 0 / setter ack — crypto PH-3 off) |
+| `Property_GetCryptoMode` / `Property_SetCryptoMode` (property `AscDesktopEditor.CryptoMode`) | wrapper cpp:2675 (defineProperty) + 4024/4035; mặc định 0 | **DONE-PH1** (getter 0 / setter ack — crypto PH-3 off) |
 | `onDocumentModifiedChanged` | engine gọi ngay sau open (báo dirty state) | **DONE-PH0** (ack; shell thật track cho title/save — PH-1) |
 | `LocalFileRecents` / `LocalFileRecovers` / `LocalFileOpenRecent` / `LocalFileOpenRecover` | web-apps documenteditor app.js (`i.LocalFileRecents()` sau `doc:onready`) + loginpage panels.js | **DONE-PH0** (ack null; push list qua `onupdaterecents` là PH-2) |
 | `LocalStartOpen` | sdkjs Local/common.js:64, cefview.cpp:3013 | **DONE-PH0** (ack + delivery chain EndLoad chạy thật) |

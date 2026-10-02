@@ -24,9 +24,13 @@ interface DocsApiConfig {
 
 declare global {
   interface Window {
-    /** Injected by src/shim/desktopEditor.js — Rust-backed AscDesktopEditor shim. */
-    AscDesktopEditor: Record<string, (...args: unknown[]) => Promise<unknown>> & {
-      execCommand: (cmd: string, json: string) => Promise<unknown>;
+    /** Injected by src/shim/desktopEditor.js — Rust-backed AscDesktopEditor shim.
+     *  Return type is `unknown` BY CONTRACT: LOCAL_TRUTHS methods answer
+     *  SYNCHRONOUSLY (the CEF shell does the same — call-sites use them in
+     *  `if` conditions), everything else resolves a Promise; typed Promise-only
+     *  would lie about ~28 sync methods. Gate: harness/scripts/check-bridge-surface.mjs. */
+    AscDesktopEditor: Record<string, (...args: unknown[]) => unknown> & {
+      execCommand: (cmd: string, json: string) => unknown;
     };
     /** Env object normally injected by native (theme, lang, rtl, printer...). */
     RendererProcessVariable: Record<string, unknown>;
