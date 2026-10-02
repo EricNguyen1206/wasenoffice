@@ -15,10 +15,10 @@
 #   2. fixture mtime + size changed since boot
 #   3. marker in word/document.xml: `unzip -p <fixture> word/document.xml |
 #      grep -c <marker>` ≥ 1 (direct grep suffices — proven 28.09 T-010)
-# LOG CONTRACT (gate 10): the two lines above are grep targets of this script;
+# LOG CONTRACT (gate 10): the lines above are grep targets of this script;
 # the emitting ends carry pointer comments — change in the SAME commit or the
-# gate breaks silently (same discipline as the frozen gate-9 contract in
-# src/shim/delivery.js).
+# gate breaks silently (same discipline as the frozen gate-9 contract).
+# Since T-053 the patterns + boilerplate live in harness/scripts/smoke-lib.sh.
 #
 # This is verify.sh gate 10. Marker: env NANO_OFFICE_SAVE_PROBE IS the probe
 # text (src-tauri/src/lib.rs injects it verbatim as
@@ -34,6 +34,7 @@ set -u
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
+. "$ROOT/harness/scripts/smoke-lib.sh"
 
 TIMEOUT="${SMOKE_SAVE_TIMEOUT:-240}"
 LOG="$(mktemp /tmp/nanooffice-smoke-save-XXXXXX)"
@@ -43,50 +44,26 @@ MARKER="T011-$RANDOM-SAVED-BY-NANOOFFICE"
 PROBE_TEXT="$MARKER"
 if [ "${SMOKE_SAVE_NO_PROBE:-0}" = "1" ]; then PROBE_TEXT=""; fi
 
-command -v pnpm >/dev/null 2>&1 || { echo "smoke: pnpm not found"; exit 1; }
-if lsof -nP -iTCP:1420 -sTCP:LISTEN >/dev/null 2>&1; then
-  echo "smoke: port 1420 đã có listener (pnpm/tauri dev khác đang chạy?) — tắt rồi chạy lại"
-  exit 1
-fi
-
-python3 "$ROOT/harness/fixtures/make_docx.py" "$FIXTURE" || { echo "smoke: cannot generate fixture"; exit 1; }
-PRE_SIZE=$(stat -f '%z' "$FIXTURE")
-PRE_MTIME=$(stat -f '%m' "$FIXTURE")
-
+smoke_init "$FIXTURE"
 echo "smoke: fixture=$FIXTURE log=$LOG timeout=${TIMEOUT}s"
 echo "smoke: marker=$MARKER"
 if [ -z "$PROBE_TEXT" ]; then echo "smoke: COUNTERFACTUAL — probe disabled, this run MUST FAIL"; fi
 
-# Job control: the background job gets its own process group, so the EXIT trap
-# can tear down the whole tree (pnpm → tauri-cli → cargo → app) without
-# touching unrelated processes. Same teardown as smoke-render.sh (gate 9).
-set -m
-NANO_OFFICE_OPEN="$FIXTURE" NANO_OFFICE_SAVE_PROBE="$PROBE_TEXT" NANO_OFFICE_DEVTOOLS=0 RUST_LOG=info \
-  pnpm tauri dev >"$LOG" 2>&1 &
-APP_PID=$!
-cleanup() { disown "$APP_PID" 2>/dev/null; kill -- "-$APP_PID" >/dev/null 2>&1; sleep 1; kill -9 -- "-$APP_PID" >/dev/null 2>&1; }
-trap cleanup EXIT
+smoke_boot "NANO_OFFICE_OPEN=$FIXTURE" "NANO_OFFICE_SAVE_PROBE=$PROBE_TEXT" \
+  "NANO_OFFICE_DEVTOOLS=0" "RUST_LOG=info" "$LOG"
 
-deadline=$((SECONDS + TIMEOUT))
-while :; do
-  s1=$(grep -Ec 'save-end delivered to engine|save delivered:' "$LOG" 2>/dev/null); s1=${s1:-0}
-  s2=$(unzip -p "$FIXTURE" word/document.xml 2>/dev/null | grep -cF -- "$MARKER"); s2=${s2:-0}
-  POST_SIZE=$(stat -f '%z' "$FIXTURE" 2>/dev/null); POST_SIZE=${POST_SIZE:-0}
-  POST_MTIME=$(stat -f '%m' "$FIXTURE" 2>/dev/null); POST_MTIME=${POST_MTIME:-0}
-  if [ "$POST_SIZE" != "$PRE_SIZE" ] && [ "$POST_MTIME" != "$PRE_MTIME" ]; then s3=1; else s3=0; fi
-  if [ "$s1" -ge 1 ] && [ "$s2" -ge 1 ] && [ "$s3" -eq 1 ]; then
-    echo "smoke: ✓ save round-trip log · ✓ file mutated on disk ($PRE_SIZE → $POST_SIZE B, mtime $PRE_MTIME → $POST_MTIME) · ✓ marker in word/document.xml ×$s2"
-    grep -m1 -E 'save-end delivered to engine|save delivered:' "$LOG" | sed 's/^/smoke:   /' | cut -c1-140
-    grep -m1 'save probe: asc_Save() called' "$LOG" | sed 's/^/smoke:   /' | cut -c1-140
-    echo "smoke: PASSED — full log kept at $LOG (mutated fixture kept at $FIXTURE)"
-    exit 0
-  fi
-  if ! kill -0 "$APP_PID" 2>/dev/null; then echo "smoke: app process exited before save evidence appeared"; break; fi
-  if [ "$SECONDS" -ge "$deadline" ]; then echo "smoke: timed out after ${TIMEOUT}s"; break; fi
-  sleep 2
-done
+save_signals() {
+  smoke_save_evidence "$FIXTURE" "$MARKER" word/document.xml
+  SMOKE_SUMMARY="save-log=$SMOKE_S1 marker-grep=$SMOKE_S2 disk-mutated=$SMOKE_S3"
+  [ "$SMOKE_S1" -ge 1 ] && [ "$SMOKE_S2" -ge 1 ] && [ "$SMOKE_S3" -eq 1 ]
+}
 
-echo "smoke: FAILED — save-log=$s1 marker-grep=$s2 disk-mutated=$s3"
-echo "smoke: log tail (last 40 lines of $LOG):"
-tail -40 "$LOG"
+if smoke_poll "$TIMEOUT" save_signals "save evidence"; then
+  echo "smoke: ✓ save round-trip log · ✓ file mutated on disk ($SMOKE_PRE_SIZE → $SMOKE_POST_SIZE B, mtime $SMOKE_PRE_MTIME → $SMOKE_POST_MTIME) · ✓ marker in word/document.xml ×$SMOKE_S2"
+  grep -m1 -E "$SMOKE_RE_SAVE_DELIVERED" "$LOG" | sed 's/^/smoke:   /' | cut -c1-140
+  grep -m1 "$SMOKE_RE_SAVE_PROBE" "$LOG" | sed 's/^/smoke:   /' | cut -c1-140
+  echo "smoke: PASSED — full log kept at $LOG (mutated fixture kept at $FIXTURE)"
+  exit 0
+fi
+smoke_fail_tail "$LOG"
 exit 1

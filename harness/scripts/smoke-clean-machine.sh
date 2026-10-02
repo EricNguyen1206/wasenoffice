@@ -19,9 +19,10 @@
 # SMOKE_CLEAN_FORCE_APP_X2T=1 → exit 1 with #2 > 0).
 #
 # This is verify.sh gate 11. LOG CONTRACT: line 1 reuses the frozen gate-10
-# targets; #2–#4 are the emitting ends of save.rs (override log / fallback
-# WARN / strict error) — change in the SAME commit or the gate breaks
-# silently.
+# targets; #2–#4 are the emitting ends of sidecar/mod.rs (override log /
+# fallback WARN / strict error) — change in the SAME commit or the gate
+# breaks silently. Since T-053 the patterns + boilerplate live in
+# harness/scripts/smoke-lib.sh.
 #
 # Usage: smoke-clean-machine.sh
 # Env:   SMOKE_CLEAN_TIMEOUT=240        total seconds before giving up
@@ -33,6 +34,7 @@ set -u
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
+. "$ROOT/harness/scripts/smoke-lib.sh"
 
 TIMEOUT="${SMOKE_CLEAN_TIMEOUT:-240}"
 LOG="$(mktemp /tmp/nanooffice-smoke-clean-XXXXXX)"
@@ -40,12 +42,6 @@ WORK="$(mktemp -d /tmp/nanooffice-smoke-clean-XXXXXX)"
 FIXTURE="$WORK/ta13.docx"
 MARKER="TA13-$RANDOM-SAVED-BY-NANOOFFICE"
 APP_X2T="/Applications/ONLYOFFICE.app/Contents/Resources/converter/x2t"
-
-command -v pnpm >/dev/null 2>&1 || { echo "smoke: pnpm not found"; exit 1; }
-if lsof -nP -iTCP:1420 -sTCP:LISTEN >/dev/null 2>&1; then
-  echo "smoke: port 1420 đã có listener (pnpm/tauri dev khác đang chạy?) — tắt rồi chạy lại"
-  exit 1
-fi
 
 if [ "${SMOKE_CLEAN_FORCE_APP_X2T:-0}" = "1" ]; then
   if [ ! -f "$APP_X2T" ]; then
@@ -57,51 +53,36 @@ else
   FORCE_X2T=""
 fi
 
-python3 "$ROOT/harness/fixtures/make_docx.py" "$FIXTURE" || { echo "smoke: cannot generate fixture"; exit 1; }
-PRE_SIZE=$(stat -f '%z' "$FIXTURE")
-PRE_MTIME=$(stat -f '%m' "$FIXTURE")
-
+smoke_init "$FIXTURE"
 echo "smoke: fixture=$FIXTURE log=$LOG timeout=${TIMEOUT}s"
 echo "smoke: marker=$MARKER"
 
-# Job control: same teardown discipline as smoke-save.sh (gate 10).
-set -m
-CMD=(env NANO_OFFICE_OPEN="$FIXTURE" NANO_OFFICE_SAVE_PROBE="$MARKER" \
-  NANO_OFFICE_NO_APP_FALLBACK=1 NANO_OFFICE_DEVTOOLS=0 RUST_LOG=info)
-[ -n "$FORCE_X2T" ] && CMD+=("NANO_OFFICE_X2T=$FORCE_X2T")
-"${CMD[@]}" pnpm tauri dev >"$LOG" 2>&1 &
-APP_PID=$!
-cleanup() { disown "$APP_PID" 2>/dev/null; kill -- "-$APP_PID" >/dev/null 2>&1; sleep 1; kill -9 -- "-$APP_PID" >/dev/null 2>&1; }
-trap cleanup EXIT
+BOOT_ENVS=("NANO_OFFICE_OPEN=$FIXTURE" "NANO_OFFICE_SAVE_PROBE=$MARKER" \
+  "NANO_OFFICE_NO_APP_FALLBACK=1" "NANO_OFFICE_DEVTOOLS=0" "RUST_LOG=info")
+[ -n "$FORCE_X2T" ] && BOOT_ENVS+=("NANO_OFFICE_X2T=$FORCE_X2T")
+smoke_boot "${BOOT_ENVS[@]}" "$LOG"
 
-deadline=$((SECONDS + TIMEOUT))
-while :; do
-  s1=$(grep -Ec 'save-end delivered to engine|save delivered:' "$LOG" 2>/dev/null); s1=${s1:-0}
-  s2=$(unzip -p "$FIXTURE" word/document.xml 2>/dev/null | grep -cF -- "$MARKER"); s2=${s2:-0}
-  POST_SIZE=$(stat -f '%z' "$FIXTURE" 2>/dev/null); POST_SIZE=${POST_SIZE:-0}
-  POST_MTIME=$(stat -f '%m' "$FIXTURE" 2>/dev/null); POST_MTIME=${POST_MTIME:-0}
-  if [ "$POST_SIZE" != "$PRE_SIZE" ] && [ "$POST_MTIME" != "$PRE_MTIME" ]; then s3=1; else s3=0; fi
-  s4=$(grep -cF '/Applications/ONLYOFFICE' "$LOG" 2>/dev/null); s4=${s4:-0}
-  s5=$(grep -c 'falling back to the installed ONLYOFFICE' "$LOG" 2>/dev/null); s5=${s5:-0}
-  s6=$(grep -c 'clean-machine mode' "$LOG" 2>/dev/null); s6=${s6:-0}
+clean_signals() {
+  smoke_save_evidence "$FIXTURE" "$MARKER" word/document.xml
+  local s4 s5 s6
+  s4=$(grep -cF "$SMOKE_APP_PATH" "$LOG" 2>/dev/null); s4=${s4:-0}
+  s5=$(grep -c "$SMOKE_RE_FALLBACK_WARN" "$LOG" 2>/dev/null); s5=${s5:-0}
+  s6=$(grep -c "$SMOKE_RE_STRICT_ERROR" "$LOG" 2>/dev/null); s6=${s6:-0}
+  SMOKE_SUMMARY="save-log=$SMOKE_S1 marker-grep=$SMOKE_S2 disk-mutated=$SMOKE_S3 app-path-hits=$s4 fallback-warn=$s5 strict-error=$s6"
   # app path reference = hard violation — fail fast (negative proof lands here)
-  [ "$s4" -gt 0 ] && break
-  if [ "$s1" -ge 1 ] && [ "$s2" -ge 1 ] && [ "$s3" -eq 1 ] \
-     && [ "$s4" -eq 0 ] && [ "$s5" -eq 0 ] && [ "$s6" -eq 0 ]; then
-    echo "smoke: ✓ save round-trip ($PRE_SIZE → $POST_SIZE B, marker ×$s2) · ✓ 0 path /Applications/ONLYOFFICE trong log · ✓ 0 WARN fallback · ✓ strict mode không trip"
-    echo "smoke: PASSED — full log kept at $LOG"
-    exit 0
+  if [ "$s4" -gt 0 ]; then
+    SMOKE_APP_HITS=$s4
+    SMOKE_ABORT=1
+    return 1
   fi
-  if ! kill -0 "$APP_PID" 2>/dev/null; then echo "smoke: app process exited before clean-machine evidence appeared"; break; fi
-  if [ "$SECONDS" -ge "$deadline" ]; then echo "smoke: timed out after ${TIMEOUT}s"; break; fi
-  sleep 2
-done
+  [ "$SMOKE_S1" -ge 1 ] && [ "$SMOKE_S2" -ge 1 ] && [ "$SMOKE_S3" -eq 1 ] \
+    && [ "$s4" -eq 0 ] && [ "$s5" -eq 0 ] && [ "$s6" -eq 0 ]
+}
 
-echo "smoke: FAILED — save-log=$s1 marker-grep=$s2 disk-mutated=$s3 app-path-hits=$s4 fallback-warn=$s5 strict-error=$s6"
-if [ "$s4" -gt 0 ]; then
-  echo "smoke: log tham chiếu app cài sẵn (${s4} lần):"
-  grep -nF '/Applications/ONLYOFFICE' "$LOG" | head -5 | sed 's/^/smoke:   /' | cut -c1-160
+if smoke_poll "$TIMEOUT" clean_signals "clean-machine evidence"; then
+  echo "smoke: ✓ save round-trip ($SMOKE_PRE_SIZE → $SMOKE_POST_SIZE B, marker ×$SMOKE_S2) · ✓ 0 path /Applications/ONLYOFFICE trong log · ✓ 0 WARN fallback · ✓ strict mode không trip"
+  echo "smoke: PASSED — full log kept at $LOG"
+  exit 0
 fi
-echo "smoke: log tail (last 40 lines of $LOG):"
-tail -40 "$LOG"
+smoke_fail_tail "$LOG"
 exit 1
