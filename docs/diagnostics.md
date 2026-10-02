@@ -8,6 +8,53 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-02 · T-A14 + T-052: converter seam + formats/workdir 1 nhà — GREEN (refactor thuần, hành vi KHÔNG đổi)
+
+- **Phạm vi (review #2 C1+C2, 1 subagent theo thứ tự user duyệt):** T-A14 seam converter
+  trước T-A20; T-052 formats + workdir 1 nhà kèm ngay sau. Pure refactor — mọi hành vi
+  hôm nay giữ nguyên; bằng chứng = `cargo test` + verify.sh FULL.
+- **T-A14 (2d3da4e):** module `src-tauri/src/sidecar/mod.rs` THẬT (thay stub PH-1; xoá
+  `window/mod.rs` kèm — T-043 hấp thụ, 0 dòng code):
+  (1) `x2t_path`/`find_bundled_x2t`/`target_dir_name`/`no_app_fallback` DI CHUYỂN nguyên
+  khối từ save.rs — log strings nguyên văn ("[x2t] using bundled converter:", override,
+  fallback WARN, "clean-machine mode" — gate 10/11 grep targets); consumer ngoài
+  bundle-x2t.sh/smoke-clean-machine.sh chỉ sửa comment path.
+  (2) interface `convert(req)→Result<ConvertResult,ConvertError>` che 3 hình dạng gọi:
+  `OpenBinary{src,dst}` (positional 2-arg, success=dst tồn tại — x2t non-zero vẫn ghi
+  output hợp lệ) · `SaveFromChanges{params_xml,output}` (1-arg, success=exit 0 + output
+  non-empty — partial-conversion không bao giờ swap qua file gốc) · `Passthrough{src,dst}`
+  (pdf-copy, không spawn). 3 call-site cũ (lib.rs open + pdf, save.rs spawn) đổi sang
+  seam — spawn/output-capture 1 chỗ; lib.rs hết `bridge::save::x2t_path()` (hết locality
+  đảo ngược). KHÔNG thêm timeout (giữ `.output()` blocking như hôm nay — kill sẽ đáp 1
+  chỗ trong sidecar khi có bằng chứng hang).
+  (3) Test pin: resolution order env-if-exists → bundled walk-up → strict-error/app-
+  fallback qua `x2t_path_in(tmp roots)` + 3 shape qua interface với fake converter (env
+  branch 1 — deterministic, KHÔNG đụng /Applications thật; passthrough proven no-spawn:
+  env trỏ converter failing vẫn copy Ok).
+- **T-052 (c5d8771):** module `src-tauri/src/formats.rs`: bảng `FORMATS` (ext ↔ doctype
+  ↔ extra boot params ↔ OpenFlavor ↔ SaveCode ↔ inner_xml_path) + provenance từng hằng:
+  docx=65 Wired (save contract), xlsx=257 **KnownUnwired** (oracle 29.09), pptx=
+  **Unidentified** + comment bẫy "513=export-PDF KHÔNG phải pptx" (T-049 đừng nhầm),
+  pdf=CopyOriginal; `m_nCsvTxtEncoding=46`/`m_nCsvDelimiter=4`/`m_nDoctParams=1` về 1 nhà
+  với provenance TBD (T-049) — value observed T-010. Struct `DocWorkdir` (editor_bin/
+  changes_dir+changes_file/params_xml/delivered_name) thay 3 module tự biết layout —
+  folder string `nanooffice-doc-<id>` đóng băng (delivery.js consume, test pin). Save
+  gate đọc bảng (`wired_save_code`) — hôm nay vẫn CHỈ docx (xlsx/pptx từ chối y hệt
+  trước). Đối chiếu main.ts FILE_FORMATS: **test Rust** đọc main.ts ở RUNTIME (không
+  include_str! — bẫy stale-rebuild ngoài crate root; lý do "ít moving parts" hơn script
+  verify.sh: không gate mới, chạy cùng cargo test) assert đếm entry + filetype/doctype/
+  isForm khớp từng dòng.
+- **Bằng chứng (confirmed):** `cargo test` **22 passed / 0 failed** (18 sau T-A14: +3
+  sidecar; +4 formats sau T-052); `cargo clippy -D warnings` exit 0; fmt clean; **verify.sh
+  FULL 15 gates exit 0** (`/tmp/verify-ta14-t052.log`: cargo/fmt/clippy/pnpm/licenses/
+  docs + smoke render ×4 + save + clean-machine — gate 10/11 grep các log line di chuyển
+  vẫn bắt được = log contract nguyên vẹn).
+- **Trạng thái:** T-A14 ✅ (2d3da4e) sink Track A · T-052 ✅ sink PH-1. Slot adapter T-A20
+  sẵn sàng (A2crate cắm sau `convert`); T-049 giờ có bảng 1 nhà (khỏi gõ lại 257/513 từ
+  prose). Kế tiếp: T-053 (subagent 2: T-053→T-054→T-044).
+
+---
+
 ## 2026-10-02 · Architecture review #2 (post-A1) — 6 candidates landed thành TODO, user chỉ thị "làm hết" + ponytail sau
 
 - **Phạm vi:** 38 commits/12 ngày từ review #1 (27.09); first-party ~2.0k → ~4.6k dòng.

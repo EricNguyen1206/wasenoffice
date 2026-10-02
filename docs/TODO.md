@@ -15,14 +15,14 @@ type: queue
 
 ## Tình hình nhanh
 
-▶ Đang làm: 🟨 T-A14 (02.10) — trích converter seam (review #2 C1, hấp thụ T-043); T-052 formats 1 nhà làm kèm ngay sau trong cùng phiên (chi tiết diagnostics 02.10 review #2)
+▶ Kế tiếp: T-053 (smoke-lib factor — review #2 C3; subagent 2 theo thứ tự T-053→T-054→T-044 như diagnostics 02.10 review #2)
 
 | Phase | Tổng | ✅ | 🟨 | ⏸ | ⬜ |
 |---|---|---|---|---|---|
 | PH-0 — ĐÃ ĐÓNG 27.09  |  6  | 6  | 0  | 0  | 0  |
-| PH-1  |  10 | 5  | 0  | 0  | 5  |
+| PH-1  |  10 | 6  | 0  | 0  | 4  |
 | PH-4  |  3  | 0  | 0  | 0  | 3  |
-| Track A (QĐ9) |  6  | 4  | 1  | 0  | 1  |
+| Track A (QĐ9) |  6  | 5  | 0  | 0  | 1  |
 | META  | 12  | 6  | 0  | 0  | 6  |
 
 ## PH-0 — Spike editor + render DOCX (go/no-go) — ĐÃ ĐÓNG 27.09 · verdict GO WITH CAVEAT
@@ -33,11 +33,11 @@ type: queue
 
 ## PH-1 — Vòng đời file (open/save/convert qua x2t sidecar)
 
-- [ ] ⬜ T-052 · Formats + doc-workdir 1 nhà (review #2 C2): bảng Rust `ext ↔ x2t-code ↔ doctype ↔ boot-params` (main.ts dùng/check bản này — hết gõ lại 257/513 từ prose khi T-049) + provenance comment các hằng params XML + struct workdir paths (Editor.bin/changes/params_to.xml hết là tri thức bộ lạc của 3 module) · ← review #2 · làm kèm T-A14
 - [ ] ⬜ T-053 · `smoke-lib.sh` — factor 3 bản sao boilerplate gate (boot/teardown/poll/save-evidence/tail ×3 đã lệch style — review #2 C3) TRƯỚC khi T-049 clone gate theo format; mỗi gate rewrite phải PASSED exit 0 độc lập trước khi xóa bản cũ (replace-don't-layer); log contract giữ nguyên byte · ← review #2
 - [ ] ⬜ T-049 · Save multi-format (XLSX/PPTX) qua x2t from-changes: định danh format code PPTX (spec-ref `AVS_OFFICESTUDIO_FILE_*` — core chưa clone, hoặc oracle tiếp) · XLSX = **257 đã oracle-confirmed** (29.09) · 513 = export PDF (đã obs, không phải PPTX) · PPTY→PPTX cần `<m_sFontDir>`+`<m_sAllFontsPath>` (exit 80 nếu thiếu) · không truyền m_nFormatTo thì extension output quyết định (PK hợp lệ) · save PDF = pipeline khác (`localSaveToDrawingFormat`) cần điều tra riêng (OQ-F01-1) · bằng chứng: reference.map § multi-format · ← T-048 ← T-052 (formats 1 nhà) + T-053 (gate lib)
 - [ ] ⬜ T-046 · Module config `env.rs` phần CÒN LẠI (review #2: hấp thụ discovery vào T-A14 + formats vào T-052 — còn PROBE/SAVE_PROBE/DEVTOOLS/OPEN gom sau khi PH-2 có lý do thứ hai) · diagnostics 27.09 + review #2
 - [ ] ⬜ T-047 · Điều tra dialog lỗi "An error has occurred…" thỉnh thoảng hiện sau khi open thành công (emitter `iLa` ở viewer api riêng) · ← T-010 · diagnostics 27.09 (T-002)
+- [x] ✅ T-052 · Formats + doc-workdir 1 nhà (review #2 C2): bảng Rust `src-tauri/src/formats.rs` (`FORMATS`: ext ↔ doctype ↔ boot-params ↔ save-status ↔ inner-part + provenance từng hằng — docx 65 Wired, xlsx 257 KnownUnwired, pptx Unidentified + bẫy 513=export-PDF KHÔNG phải pptx; `m_nCsvTxtEncoding=46`/`m_nCsvDelimiter=4`/`m_nDoctParams=1` provenance TBD T-049) + struct `DocWorkdir` 1 nhà layout workdir (Editor.bin/changes/params_to.xml — folder contract `nanooffice-doc-<id>` đóng băng, delivery.js consume) + test đối chiếu main.ts FILE_FORMATS (đọc RUNTIME không include_str! — bẫy stale rebuild; lý do ít moving parts ghi commit) · save gate vẫn chỉ docx, hành vi giữ nguyên (verify.sh 15 gates exit 0) · 02.10 · c5d8771 · reference.map § MULTI-FORMAT + diagnostics 02.10
 - [x] ✅ T-045 · Refactor open-delivery chain thành module có tên (ready predicate + timeout thành hằng tên) + probe sau `NANO_OFFICE_PROBE` (review C3) · 28.09 · 0d8f7a6
 - [x] ✅ T-010 · Open/save/convert end-to-end qua x2t sidecar — **SAVE DOCX round-trip GREEN** (mở → `asc_AddText`+`asc_Save` probe → file gốc 1962→25613 B chứa text trong `word/document.xml` → reopen render GREEN; verify.sh exit 0) · 28.09 · a9e69d7 · contract: reference.map § Desktop save contract, diagnostics 28.09
 - [x] ✅ T-011 · Round-trip test tự động trong verify.sh — gate 10 `smoke-save.sh` edit→save→disk (fixture fresh + marker random `NANO_OFFICE_SAVE_PROBE`; TC-D01-11 GREEN: standalone ×2 exit 0 + counterfactual probe-tắt exit 1 đúng kỳ vọng) · 28.09 · 7ba9150 · diagnostics 28.09
@@ -57,8 +57,9 @@ type: queue
 > Rung hiện tại: **A2 — Converter Rust** (H2; A1 ĐÓNG 02.10). Task Track A bắt buộc đọc
 > `harness/rules/clean-room.md` trước khi làm; roadmap đầy đủ: `docs/vision.md` QĐ9.
 
-- [ ] ⬜ T-A14 · Trích **converter seam** trước T-A20 implement (review #2 C1 — Strong): module `sidecar` THẬT (hấp thụ T-043 xoá stub — doc stub trỏ path đã chết từ T-A10): interface `convert(req)→result` che 3 hình dạng gọi hôm nay (open positional 2-arg lib.rs:160 · save params-XML save.rs:383 · pdf passthrough lib.rs:144) + `x2t_path`/`find_bundled_x2t` rời `bridge::save` (hết locality đảo ngược) + 2 walk-up discovery gộp · A2crate = adapter thứ 2 cắm vào · pin resolution order bằng test · ← review #2 · trước T-A20
 - [ ] ⬜ T-A20 · A2 mở màn: **Converter Rust thay x2t — bắt đầu DOCX** (parse/serialize OOXML từ spec ECMA-376/ISO 29500 — clean-room `harness/rules/clean-room.md`: chỉ `spec-ref:` + `oracle-obs:`, CẤM đọc upstream core) · đích đóng rung A2: round-trip parity vs x2t trên corpus + fuzz, x2t rút khỏi runtime · seed 02.10 khi đóng A1 — KHÔNG kèm thiết kế chi tiết (thiết kế sống lúc claim) · ← T-A14 (seam sẵn sàng cắm adapter)
+
+- [x] ✅ T-A14 · Converter seam `sidecar::convert` che 3 hình dạng gọi (OpenBinary positional success=dst-tồn-tại · SaveFromChanges params-XML success=exit0+output · Passthrough pdf-copy không spawn) — spawn/output-capture 1 chỗ; `x2t_path`/`find_bundled_x2t`/`target_dir_name`/strict-mode DI CHUYỂN nguyên khối từ save.rs (log strings nguyên văn — gate 10/11 grep); lib.rs hết `bridge::save::x2t_path()`; test pin resolution order env-if-exists→bundled→strict-error (tmp roots + fake converter qua interface, không đụng /Applications) + xoá stub `window/` (T-043 hấp thụ) · refactor thuần hành vi không đổi · 02.10 · 2d3da4e · diagnostics 02.10
 
 - [x] ✅ T-A12 · A1: Bundle font subset vào `engines/fonts/` + trim engines best-effort — `bundle-fonts.sh` (manifest pinned 20 file, license text kèm từng set — S6: OpenSans Apache 2.0, Carlito/Caladea/Asana OFL 1.1, OpenSymbol OFL 1.0; ASC.ttf loại — license không rõ + 0 fetch); root `app` → `engines/fonts` giữ namespace `/fonts/app/` (`FONT_URL_ROOTS` + `font_root_disk()` 1 nhà — generator + filesrv tự theo; log ADDITIVE "font serve", log contract gate 9/10 nguyên vẹn); trim: sdkjs-plugins 38 MB 0 fetch → loại khỏi bản copy sau (KHÔNG xoá local) · verify.sh exit 0 (4 render + save GREEN bằng font bundled; 0 path ONLYOFFICE trong AllFonts.js + logs); AllFonts 355/557/387 = bộ số app trừ ASCW3 · 02.10 · 0ab802f + 765de58 · reference.map § Font bundle + diagnostics 02.10
 - [x] ✅ T-A11 · A1: Tự sinh `AllFonts.js` bằng Rust — clean-room ĐẦU TIÊN của Track A: `protocol/allfonts.rs` enumerate FONT_ROOTS + parse sfnt std-thuần (không thêm crate), 5 global đúng format oracle-obs (selection bin v2 decode sạch 91283/91283B); 2 consumer (filesrv + save.rs `m_sAllFontsPath`) cùng 1 nhà → index khớp by construction; xoá `all_fonts_source()` — runtime hết đọc data-dir app (counterfactual mv: render + save vẫn GREEN) · verify.sh exit 0; parity 528/528 face giao tập khớp 100% field; deviations (tie-break 27/387 family, ranges tự sinh, superset) ghi reference.map · 30.09 · fc714e0 · reference.map § AllFonts generator + diagnostics 30.09

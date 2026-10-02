@@ -74,8 +74,14 @@ negative proven exit 1) — bằng chứng đóng rung: test tích thể mv app 
 khi app ẨN (`harness/scripts/clean-machine-proof.sh`, diagnostics 02.10). Runtime dependency
 bắt buộc lên app: **0** (fallback x2t = WARN dev-only, bị strict mode chặn; upstream submodule
 = reference theo D1 tới A6).
-Kế tiếp: **T-A20** (mở màn A2 — Converter Rust thay x2t, bắt đầu DOCX, clean-room
-ECMA-376 — chỉ spec-ref + oracle-obs) hoặc PH-1 còn lại (T-046/T-047/T-049 save multi-format).
+Mới nhất 02.10 (review #2, refactor thuần — hành vi không đổi, verify 15 gates exit 0):
+**T-A14** converter seam `sidecar::convert` che 3 call-shape (open positional / save
+params-XML / pdf passthrough — x2t_path rời save.rs, test pin resolution order) + **T-052**
+formats + workdir 1 nhà `src-tauri/src/formats.rs` (bảng ext↔doctype↔x2t-code có provenance,
+test đối chiếu main.ts) — slot adapter T-A20 sẵn.
+Kế tiếp: **T-053→T-054→T-044** (subagent 2, review #2 C3/C5/C4) rồi ponytail review; hoặc
+**T-A20** (mở màn A2 — Converter Rust thay x2t, bắt đầu DOCX, clean-room ECMA-376 — chỉ
+spec-ref + oracle-obs, cắm sau seam); PH-1 còn lại T-049 dùng bảng formats.rs.
 Trước đó: T-A12 02.10 — font bundle `engines/fonts` + trim sdkjs-plugins; T-A11 30.09 —
 AllFonts tự sinh Rust (clean-room đầu tiên); T-A10 30.09 — x2t bundled; T-048 29.09 mở cả 4
 định dạng + T-050 30.09 fix gate pptx flaky.
