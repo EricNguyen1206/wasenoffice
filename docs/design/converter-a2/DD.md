@@ -113,6 +113,41 @@ src-tauri/crates/nanooffice-ooxml/     ← crate duy nhất của A2 (KHÔNG wor
 - **Behavioral parity (S4):** file do S2 ghi mở trong engine: contentReady + canvas + text marker
   (đúng pattern gate 9/10, log contract giữ nguyên).
 
+### 5.1 Kết quả S3 (03.10.2026 — T-A23)
+
+Harness: `harness/scripts/parity-a2.sh` — 3-way model compare trên canonical JSON
+(m-orig = parse gốc · m-crate = parse(crate-roundtrip) · m-x2t = parse(x2t docx→Editor.bin→docx,
+2 lần gọi bundled). INVARIANT m-orig == m-crate gate cứng; PARITY = m-crate vs m-x2t.
+
+- **Corpus (7 file):** 2 fixture crate + `harness/fixtures/corpus-a2/` — edge-multilevel-list,
+  edge-nested-table, edge-style-override, edge-image-multi (`make_docx_edge.py`) +
+  engine-save-t011 (file thật của gate 10, marker `T011-*-SAVED-BY-NANOOFFICE`).
+- **Metric:** **15/15 construct parity** (paragraph/text, pStyle, jc, numPr raw, b/i/u/sz, run
+  override tắt-explicit, table, nested table, numbering 3 mức resolve, image part+extent,
+  multi-image cùng rel, styles chain resolve, hdr/ftr, tiếng Việt, AlternateContent-image) —
+  invariant 7/7, x2t parse 7/7, **0 diff không phân loại**.
+- **Bugs crate bắt được qua parity (fix + test hồi quy, 03.10):** (1) `mc:AlternateContent` —
+  x2t (và Word) bọc `w:drawing` trong `mc:Choice`+VML `mc:Fallback`; parser skip cả subtree →
+  mất image trên MỌI file x2t-rt. Fix: chọn branch `mc:Choice` đầu tiên, xử lý làm run content
+  (spec-ref: ECMA-376 Markup Compatibility, AlternateContent — branch được chọn "is processed
+  as though it replaces the entire AlternateContent element"; namespace mc =
+  `http://schemas.openxmlformats.org/markup-compatibility/2006`; số clause ISO/IEC 29500-3 cụ
+  thể không verify được từ nguồn mở — MS protocol docs dẫn §10.2.1, chưa độc lập xác nhận nên
+  KHÔNG ghi số). (2) `a:blip` chỉ đọc ở `Event::Empty` — x2t ghi `<a:blip r:embed=…></a:blip>`
+  Start+End → rớt embed. Fix: đọc cả Start lẫn Empty (như `wp:extent`).
+- **Khác biệt x2t-side còn lại — 2 lớp, đều vô hại (oracle-obs):** (a) **rel_id renumber** —
+  x2t đánh lại id quan hệ (rIdImg → rId9/rId6); part + extent + target không đổi; id quan hệ là
+  chuỗi tùy ý trong package (ECMA-376 Part 2) → model nội dung tương đương. (b) **empty-run
+  drop** — file engine-save chứa 8 `<w:r></w:r>` trên 14 run; crate preserve 14/14 (invariant
+  green), x2t roundtrip drop 8 run rỗng (normalization giữ content; 0 hunks đổi text/props).
+- **Ceiling + điều kiện 100%:** model-level đã đạt parity đầy đủ trên corpus — khác biệt còn
+  lại là normalization phía x2t, không phải lệch model. Blind-spot ghi rõ: `rStyle` (character
+  style trên run) không nằm trong model — cả 2 phía cùng bỏ nên parity "mù" ở construct đó;
+  `Run.bold/italic` 2-state vẫn invisible ở model level (x2t giữ explicit `w:val="false"` trên
+  output của nó, obs corpus) — nâng 3-state chỉ khi render/A4 đòi. sectPr chưa surface —
+  không tạo diff (hdr/ftr đã surface qua rels cả 2 phía). Fuzz vẫn ở crate tests (T-A21/A22,
+  500 vòng 0 panic) — harness này đo corpus, không đo fuzz.
+
 ## 6. Rủi ro + mitigations
 
 | Rủi ro | Mitigation |
@@ -138,7 +173,8 @@ src-tauri/crates/nanooffice-ooxml/     ← crate duy nhất của A2 (KHÔNG wor
 
 - **OQ-K01-1 (user veto):** khuyến nghị P2 — user chốt? Nếu muốn P1 (rút x2t trước A4) → mở lại
   theo trigger §2, effort tháng, ghi rõ trong TODO.
-- **OQ-K01-2:** corpus cho S3 — dùng corpus docx thật (license?) hay tự sinh + fuzz (proven,
-  pattern make_*.py)? Quyết lúc S3.
+- **OQ-K01-2 (ĐÓNG 03.10, T-A23):** corpus S3 = tự sinh (make_docx_edge.py, spec-derived) +
+  file engine-save thật từ gate 10 — không cần corpus docx thật ngoài (license question tắt);
+  corpus thật tăng dần khi S4 mở (file user mở được = file adapter phải đọc).
 - **OQ-K01-3:** `docProps/core.xml` (metadata) có vào S1 không — AI layer QĐ3 cần metadata sớm;
   default: có, vì chi phí ~0 (1 part nhỏ).

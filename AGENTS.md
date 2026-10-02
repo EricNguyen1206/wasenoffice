@@ -57,7 +57,7 @@ nanooffice/
 | Phase | Trạng thái | Ghi chú |
 |---|---|---|
 | PH-0 Spike (load editor + render DOCX trong WKWebView) | ✅ ĐÓNG 27.09 — verdict **GO WITH CAVEAT** | render GREEN tự động (verify.sh gate 9, TC-D01-06); baseline debug 27.09: RAM 1 doc ~561–579 MB vs ONLYOFFICE 570 MB (start page); caveat duy nhất: scroll/edit keyboard chờ user xác nhận thủ công ~30s — `docs/diagnostics.md` 27.09 T-003 |
-| Track A rung A0+A1 (QĐ9 — tự chủ shell + phân phối) | ✅ A1 ĐÓNG 02.10 · A2 mở 02.10 | **NanoOffice phân phối độc lập**: chạy trọn open→edit→save KHÔNG cần ONLYOFFICE.app cài sẵn — x2t bundled (T-A10, 113 MB) + AllFonts tự sinh (T-A11) + fonts bundled có license (T-A12) + gate 11 "sạch ONLYOFFICE" thường trụ verify.sh (T-A13: strict clean-machine + negative proven + test tích thể mv app → verify FULL exit 0 khi app ẨN); **A2**: T-A20 chốt P2 "OOXML core trước" bằng probe số liệu + crate slice `nanooffice-ooxml`; T-A21 S1 docx READ đầy đủ (OPC chuẩn + table/list/image + styles resolve, fuzz 0 panic); T-A22 S2 docx WRITE + round-trip model bất biến 100% + file ghi ra render GREEN — kế tiếp T-A23 (S3 parity) |
+| Track A rung A0+A1 (QĐ9 — tự chủ shell + phân phối) | ✅ A1 ĐÓNG 02.10 · A2 mở 02.10 | **NanoOffice phân phối độc lập**: chạy trọn open→edit→save KHÔNG cần ONLYOFFICE.app cài sẵn — x2t bundled (T-A10, 113 MB) + AllFonts tự sinh (T-A11) + fonts bundled có license (T-A12) + gate 11 "sạch ONLYOFFICE" thường trụ verify.sh (T-A13: strict clean-machine + negative proven + test tích thể mv app → verify FULL exit 0 khi app ẨN); **A2**: T-A20 chốt P2 "OOXML core trước" bằng probe số liệu + crate slice `nanooffice-ooxml`; T-A21 S1 docx READ đầy đủ (OPC chuẩn + table/list/image + styles resolve, fuzz 0 panic); T-A22 S2 docx WRITE + round-trip model bất biến 100% + file ghi ra render GREEN; T-A23 S3 parity harness 15/15 construct + 0 diff không phân loại — kế tiếp T-A24 (S4 adapter seam) |
 | PH-1 Vòng đời file (open/save/convert qua x2t sidecar) | ⬜ | |
 | PH-2 Trải nghiệm desktop (print/clipboard/fonts/tabs) | ⬜ | |
 | PH-3 Tùy chọn (crypto/signature/cloud) | ⬜ | có thể cắt vĩnh viễn |
@@ -74,7 +74,19 @@ negative proven exit 1) — bằng chứng đóng rung: test tích thể mv app 
 khi app ẨN (`harness/scripts/clean-machine-proof.sh`, diagnostics 02.10). Runtime dependency
 bắt buộc lên app: **0** (fallback x2t = WARN dev-only, bị strict mode chặn; upstream submodule
 = reference theo D1 tới A6).
-Mới nhất 02.10 (**T-A22 — A2/S2 docx WRITE + round-trip**, ponytail ULTRA chuỗi A2 —
+Mới nhất 03.10 (**T-A23 — A2/S3 parity harness**, ponytail ULTRA chuỗi A2 — verify FULL exit 0):
+`harness/scripts/parity-a2.sh` mỏng + CLI có sẵn — mỗi corpus file chạy x2t roundtrip (2 call
+shape của seam: docx→Editor.bin positional + params XML→docx) + crate roundtrip, 3-way model
+compare canonical JSON (INVARIANT m-orig==m-crate gate cứng 7/7; PARITY m-crate vs m-x2t =
+**15/15 construct**, DD §5.1). Corpus 7 file: 2 fixture crate + 4 mới `make_docx_edge.py`
+(multilevel-list/nested-table/style-override/image-multi) + **engine-save thật gate 10**
+(engine-save-t011.docx). **2 bug crate fix + test hồi quy:** `mc:AlternateContent` (x2t/Word
+bọc drawing trong mc:Choice + VML Fallback — trước fix mất image trên mọi file x2t-rt; fix =
+branch Choice đầu làm run content, ECMA-376 MCE, số clause 29500-3 không verify được từ nguồn
+mở → không ghi số) + `a:blip` Start+End (x2t writer trộn self-closing và có-end-tag). Diff còn
+lại 2 lớp vô hại oracle-obs: rel_id renumber + empty-run drop. Không nâng model (3-state/
+sectPr không bị đòi; blind-spot rStyle ghi DD). Harness ×2 deterministic exit 0.
+Trước đó 02.10 (**T-A22 — A2/S2 docx WRITE + round-trip**, ponytail ULTRA chuỗi A2 —
 verify 16 gates exit 0): crate `nanooffice-ooxml` ghi model → docx hợp lệ — writer đối
 xứng parser 1 hàm/construct (`src/write.rs`, quick-xml escape + zip có sẵn, không
 builder/trait); package OPC tự sinh đúng chuẩn (Content_Types/rels — part chính = canonical

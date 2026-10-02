@@ -8,6 +8,53 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-03 · T-A23: A2/S3 — parity harness (crate ↔ x2t trên model): 15/15 construct parity, 0 diff không phân loại — GREEN
+
+- **Phạm vi:** slice S3 của DD K01 §4/§5 — `harness/scripts/parity-a2.sh` (~130 dòng, script
+  mỏng + CLI crate có sẵn, không framework compare): mỗi corpus file chạy x2t round-trip
+  (docx→Editor.bin positional + params XML Editor.bin→docx — đúng 2 call shape của seam) +
+  crate round-trip, rồi 3-way compare trên canonical JSON CLI: **INVARIANT m-orig == m-crate**
+  (gate cứng — crate round-trip phải exact) + **PARITY m-crate vs m-x2t** (số liệu đo, phân
+  loại bằng tay vào DD §5.1). x2t = DEV-ORACLE (so output hành vi, không reverse).
+- **Corpus 7 file:** 2 fixture crate + 4 fixture mới `make_docx_edge.py` (multilevel-list 3
+  mức, nested-table 1 cấp, style-override chain Quote→IntenseQuote + rStyle, image-multi 3
+  drawing cùng rel) + **engine-save-t011.docx = file thật gate 10** (smoke-save, marker
+  `T011-10466-SAVED-BY-NANOOFFICE`, package do x2t save sinh — styleIds numeric "138"…).
+  Expected-model note từng file: `harness/fixtures/corpus-a2/NOTES.md`.
+- **2 bug crate bắt được qua parity probing (fix + test hồi quy):** (1) `mc:AlternateContent` —
+  x2t/Word bọc `w:drawing` trong `mc:Choice` + VML `mc:Fallback`; parser skip cả subtree → mất
+  image trên mọi file x2t-rt (image trong package, rel r:id9 đúng — parse không thấy). Fix:
+  `parse_alt_content` chọn branch `mc:Choice` ĐẦU TIÊN, xử lý làm run content; Fallback bỏ.
+  Spec-ref: ECMA-376 Markup Compatibility AlternateContent — "processed as though it replaces
+  the entire AlternateContent element" (quote từ spec text browsable); **số clause 29500-3
+  cụ thể KHÔNG verify được từ nguồn mở** (mirror open-xml-docs Remarks trống cho mc classes;
+  MS protocol docs dẫn §10.2.1 qua search — chưa độc lập xác nhận → KHÔNG ghi số, lần sau
+  cần số thì fetch spec bản quyền). (2) `a:blip` chỉ đọc ở `Event::Empty` — x2t ghi
+  `<a:blip r:embed=…></a:blip>` Start+End → rớt embed (bắt được vì fixture tự viết dùng
+  self-closing). Fix: Start|Empty như `wp:extent`. Bài học: **x2t writer trộn 2 serialization**
+  — `<wp:extent …/>` self-closing NHƯNG `<a:blip …></a:blip>` có end tag, `<pic:cNvPr …></pic:cNvPr>`
+  cũng vậy → mọi parser đọc element đơn lẻ phải handle cả 2 dạng.
+- **Phân loại diff (đầy đủ trong DD §5.1):** 2 lớp x2t-side vô hại — (a) rel_id renumber
+  (rIdImg→rId9/rId6; part/extent/target nguyên vẹn; id quan hệ = chuỗi tùy ý Part 2);
+  (b) empty-run drop (engine-save có 8/14 run `<w:r></w:r>` thật trong XML gốc — crate
+  preserve 14/14, x2t roundtrip drop 8; 0 hunks đổi text/props). 0 diff không hiểu.
+- **Không nâng model:** Run.bold 3-state + sectPr surface KHÔNG bị parity đòi (x2t giữ
+  explicit `w:b w:val="false"` trên output — model 2-state invisible; hdr/ftr surface qua rels
+  cả 2 phía). Blind-spot ghi DD: `rStyle` không nằm trong model — parity "mù" ở construct đó.
+- **Bằng chứng:** harness ×2 deterministic — 7/7 parse ok, invariant 7/7, parity-clean 4/7
+  (3 file diff = đúng 2 lớp vô hại trên), exit 0 (`/tmp/nanooffice-parity-a2-VNTEE6`);
+  crate tests 9 passed (6 parse + 3 write — thêm `alternate_content_choice_surfaces_image`
+  mirror cấu trúc x2t: Choice + Fallback VML + `<a:blip></a:blip>` Start+End + round-trip
+  bất biến); oracle-obs probe thủ công: x2t full-fixture 2970 B Editor.bin, params exit 0.
+- **Quan sát (không sửa):** x2t lần-chạy-đầu-tiên sau bundle có thể fail "Couldn't create
+  temp folder" rồi run sau exit 0 cùng cwd (nghi Gatekeeper first-run scan macOS) — harness
+  không retry; nếu recur khi CI thì xem lại. Lần chạy đầu phiên cũng dính (probe 1 fail,
+  probe 2 ok).
+- **Trạng thái:** T-A23 ✅ sink Track A. ▶ = T-A24 (S4 — cắm adapter `sidecar::convert`,
+  open path trước → rung A2 milestone khi cả 2 path qua adapter).
+
+---
+
 ## 2026-10-02 · T-A22: A2/S2 — docx WRITE + round-trip, file ghi ra render GREEN — GREEN
 
 - **Phạm vi:** slice S2 của DD K01 §4 — `src/write.rs` serializer model → docx: 1 hàm/
