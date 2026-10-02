@@ -135,8 +135,9 @@ black-box trên binary đã build (`otool -L`, chạy thật) — không đọc 
   `engines/editors` (sibling của converter/, không phải của `<target>/`) → bundle script
   tạo symlink `engines/converter/editors → ../editors` để giữ nguyên relative layout.
   `<allfonts>` trong config trỏ `../../editors/sdkjs/common/AllFonts.js` — file chưa
-  tồn tại ở engines (T-A11 tự sinh); save params XML vẫn truyền
-  `<m_sAllFontsPath>`/`<m_sFontDir>` từ font cache app (all_fonts_source) nên save GREEN.
+  tồn tại ở engines (T-A11 tự sinh); save params XML truyền `<m_sAllFontsPath>`/
+  `<m_sFontDir>` từ generator (T-A11, § AllFonts generator — `all_fonts_source` cũ đã
+  xoá) nên save GREEN.
 - **Đo size (oracle-obs `du`, 30.09):** converter dir app = 323 MB (templates 207 ·
   x2t 42 · UnicodeConverter 31 · graphics 14 · PdfFile 7.2 · IWorkFile 5.3 · empty 2.9 ·
   HWPFile 2.7 · HtmlFile2 2.2 · ooxmlsignature 2.1 · kernel 1.4 · DjVuFile 1.2 ·
@@ -154,7 +155,9 @@ black-box trên binary đã build (`otool -L`, chạy thật) — không đọc 
 
 ## AllFonts generator — Rust thay việc app sinh (mới 30.09, T-A11, rung A1 — clean-room ĐẦU TIÊN)
 
-- **Nhà duy nhất:** `src-tauri/src/protocol/allfonts.rs` — enumerate FONT_ROOTS (2 root như app)
+- **Nhà duy nhất:** `src-tauri/src/protocol/allfonts.rs` — enumerate FONT_URL_ROOTS qua
+  `font_root_disk()` (2 root như app; từ T-A12 root `app` = `engines/fonts/` bundle —
+  § Font bundle — hết đọc app cài sẵn)
   + parse sfnt std-thuần (seek-read từng table, không đọc nguyên file — TTC lớn) → 1 chuỗi
   AllFonts.js (`js_raw`). 2 consumer: filesrv serve `rewrite_font_paths(js_raw)` (URL loopback)
   + `bridge/save.rs` ghi `js_raw` (disk path) ra `$TMPDIR/nanooffice-allfonts/AllFonts.js` cho
@@ -192,6 +195,44 @@ black-box trên binary đã build (`otool -L`, chạy thật) — không đọc 
   superset +1 family Apple Color Emoji (bitmap-only, app skip); `__fonts_ranges` tự sinh từ
   cmap coverage (widest-span-wins; 4370 vs 4686 triplet); Mac-Roman high-byte decode Latin-1;
   thứ tự file walk không replica app (index self-consistent là đủ).
+
+## Font bundle — engines/fonts (mới 02.10, T-A12, rung A1)
+
+- **Nhà:** `harness/scripts/bundle-fonts.sh` (committed; nội dung `engines/fonts/` không
+  commit — `.gitignore engines/*`). Copy layout nguyên vẹn từ root font app cài sẵn
+  (`/Applications/ONLYOFFICE.app/Contents/Resources/login/fonts/`): OpenSans ×5 + root
+  LICENSE.txt; `crosextra/` Carlito ×4 + LICENSE; `caladea/` ×4 + LICENSE;
+  `asana/` ASANA.ttc + LICENSE; `openoffice/` opens___.ttf + LICENSE. Manifest pinned
+  20 file — lệch → script thoát lỗi (không bundle im lặng bộ khác). **KHÔNG bundle
+  ASC.ttf** (license không rõ: name table chỉ có family "ASCW3" + version, không có
+  manufacturer/license fields, app không kèm LICENSE riêng; engine 0 fetch — consumer
+  thay bằng symbol font inline base64).
+- **URL namespace giữ nguyên `/fonts/app/…`** (`protocol/mod.rs` `FONT_URL_ROOTS` +
+  `font_root_disk()`: app = `engines/fonts/` qua `engines_root()`, sys =
+  `/System/Library/Fonts`) — AllFonts sinh + engine fetch không đổi hành vi; chỉ thêm
+  log ADDITIVE `font serve: … from <disk path>` (filesrv.rs — log contract gate 9/10
+  nguyên vẹn). 2 consumer: filesrv serve URL loopback + save.rs ghi js_raw (disk path)
+  cho x2t — cả hai tự theo resolver, hết path app.
+- **License gate S6 (mỗi set — name table sfnt + LICENSE.txt kèm, oracle-obs 02.10):**
+
+| Set | File | License | Bằng chứng trong font file | License text bundle |
+|---|---|---|---|---|
+| Open Sans | OpenSans-{Regular,Light,Semibold,ExtraBold,Bold}.ttf | Apache 2.0 | nameID 8 "Ascender Corporation", nameID 14 `apache.org/licenses/LICENSE-2.0` | root `LICENSE.txt` |
+| Carlito | crosextra/Carlito-{Regular,Italic,Bold,BoldItalic}.ttf | SIL OFL 1.1 | nameID 8 "tyPoland Lukasz Dziedzic", nameID 14 `scripts.sil.org/OFL` | `crosextra/LICENSE.txt` |
+| Caladea | caladea/caladea-{regular,bold,italic,bolditalic}.ttf | SIL OFL 1.1 (dual Apache 2.0) | nameID 14 `apache.org/licenses/LICENSE-2.0`; dir LICENSE.txt = OFL 1.1 | `caladea/LICENSE.txt` |
+| Asana Math | asana/ASANA.ttc | SIL OFL 1.1 | dir LICENSE.txt (TTC — name table đọc qua face) | `asana/LICENSE.txt` |
+| OpenSymbol | openoffice/opens___.ttf | SIL OFL 1.0 | dir LICENSE.txt | `openoffice/LICENSE.txt` |
+
+- **Đủ license redistribution kèm license text** (OFL/Apache — không phải AGPL; font giữ
+  license riêng). Bundle full root (4.9 MB) thay vì chỉ Carlito fixture-fetch: giữ bộ
+  substitute family cho tài liệu thật trên máy sạch (Cambria→Caladea, bullet→OpenSymbol,
+  equation→Asana Math). Discovery fetch (oracle-obs 44 log gate, đủ 4 format + save):
+  chỉ Carlito ×4 được fetch từ root app — xlsx + pptx (theme default Calibri).
+- **Trim engines (T-A12, best-effort):** `engines/editors/sdkjs-plugins` = 38 MB — 0
+  request HTTP trong mọi log gate (serviceworker tham chiếu prefix cũng 0 fetch) → loại
+  khỏi bản copy engines/editors sau (quy trình assembly: `engines/README.md` — local,
+  uncommitted). Local giữ nguyên. Engines tổng ~431 MB (editors 313 = sdkjs 161 +
+  web-apps 114 + plugins 38 · converter 113 · fonts 4.9).
 
 ## Font contract FULL desktop build (mới 27.09 — quyết định cho PH-0)
 

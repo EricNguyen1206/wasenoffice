@@ -8,6 +8,61 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-02 · T-A12: font bundle vào engines/fonts — tham chiếu runtime cuối cùng tới ONLYOFFICE.app rút xong — GREEN (verify.sh exit 0, 5 gates)
+
+- **Kết quả (confirmed):** verify.sh full **exit 0** (`/tmp/verify-ta12.log`) — 4 render gates +
+  save gate chạy với root `app` = `engines/fonts/`. Log mới ADDITIVE `font serve: /fonts/app/…`
+  chỉ rõ nguồn: xlsx + pptx fetch Carlito ×4 từ `…/engines/fonts/crosextra/Carlito-*.ttf`
+  (`/tmp/nanooffice-smoke-8wt8Hj`, `…-NvAmKK`); docx/pdf/save chỉ dùng root sys như trước.
+  0 dòng `font serve … ONLYOFFICE` trong mọi log. Save round-trip marker ×1
+  (`…-save-0uOyXh`, 1962→25570 B); AllFonts.js ghi cho x2t: 355 path — **0 path
+  ONLYOFFICE.app, 15 path engines/fonts** (2 consumer khớp by construction như T-A11).
+- **Discovery font cần bundle (oracle-obs, 02.10):** gom `GET /fonts/app/…` từ 44 smoke log
+  còn sống (29.09–02.10, đủ 4 format + save): duy nhất `crosextra/Carlito-{Regular,Italic,
+  Bold,BoldItalic}.ttf` (xlsx + pptx — theme default Calibri → substitute Carlito);
+  docx/pdf fixture fetch 0 font app (fixture dùng font hệ thống qua root sys). ASC.ttf
+  cũng 0 fetch — consumer thay family "ASCW3" bằng symbol font inline base64
+  (reference.map § AllFonts generator).
+- **Bundle decision:** bundle **toàn bộ root font app** (15 file + 5 license text =
+  4.9 MB du) TRỪ ASC.ttf — không phải chỉ Carlito fixture-fetch: giữ bộ substitute family
+  của app cho tài liệu thật trên máy sạch (Cambria→Caladea, bullet→OpenSymbol,
+  equation→Asana Math, UI→OpenSans). ASC.ttf KHÔNG bundle: license không rõ (name table
+  không có manufacturer/license fields, app không kèm LICENSE riêng) + 0 fetch — S6
+  "không rõ license thì không bundle". Script: `harness/scripts/bundle-fonts.sh`
+  (manifest pinned 20 file, lệch → thoát lỗi; nguồn copy = app cài sẵn, handoff cho phép
+  — font giữ license riêng, không phải AGPL).
+- **License gate S6 từng set (name table + LICENSE.txt kèm):** OpenSans ×5 = Apache 2.0
+  (manufacturer Ascender Corporation, licenseURL apache.org/LICENSE-2.0, LICENSE.txt root);
+  Carlito ×4 = SIL OFL 1.1 (tyPoland Lukasz Dziedzic, scripts.sil.org/OFL); Caladea ×4 =
+  SIL OFL 1.1 (Huerta Tipográfica; name table còn licenseURL Apache 2.0 — dual, bundle
+  theo LICENSE.txt OFL kèm); asana/ASANA.ttc = SIL OFL 1.1; openoffice/opens___.ttf
+  (OpenSymbol) = SIL OFL 1.0. Mỗi set copy kèm LICENSE.txt verbatim. Bảng đầy đủ:
+  reference.map § Font bundle.
+- **Code chạm:** `protocol/mod.rs` — `FONT_ROOTS` const (2 cặp đĩa/URL) → `FONT_URL_ROOTS`
+  ["app","sys"] + `font_root_disk()` (app = `engines/fonts/` qua `engines_root()`, sys =
+  `/System/Library/Fonts`); `rewrite_font_paths` theo pair động (needle thêm trailing
+  slash — không match sibling dir); `handle_engine` font branch qua resolver. `allfonts.rs`
+  — enumerate qua roots động + WARN riêng khi thiếu `engines/fonts` ("run
+  bundle-fonts.sh", mirror triết lý WARN x2t). `filesrv.rs` — `resolve_font_path` qua
+  resolver + 1 dòng log ADDITIVE `font serve:` (log contract gate 9/10 không đổi).
+  2 test mới: rewrite giữ namespace `/fonts/app/` + assert root app không chứa
+  "ONLYOFFICE". Enumeration mới: **355 files / 557 faces / 387 families / 4370 ranges**
+  — đúng bộ số của app sinh (T-A11 gen: 356/558/388; -1 mỗi loại = ASC.ttf bỏ) —
+  deviation mới: family "ASCW3" rời AllFonts (consumer tự thay inline, behavior-tolerant).
+- **Trim best-effort (phụ, không chặn):** `engines/editors/sdkjs-plugins` = **38 MB**
+  (sdkjs 161 + web-apps 114 + plugins 38 = editors 313; + converter 113 + fonts 4.9
+  ≈ engines 431 MB). 0 request HTTP tới `/editors/sdkjs-plugins/…` trong MỌI log gate
+  (4 format + save; serviceworker tham chiếu prefix `sdkjs-plugins/` cũng 0 lần được
+  fetch) → **loại khỏi bản copy engines/editors sau** (ghi `engines/README.md` — local,
+  uncommitted; kiến thức committed ở reference.map), KHÔNG xoá local. Per-app-type build
+  không làm (PH-4). Budget ≤100 MB: soft target đã user phê 30.09 — không re-baseline thêm.
+- **Trạng thái:** T-A12 ✅ — đủ điều kiện T-A13 (gate 11 "sạch ONLYOFFICE" — máy không
+  cài app chạy trọn open→edit→save). Tham chiếu runtime tới ONLYOFFICE.app còn lại:
+  (1) fallback path x2t + hằng số khác (T-046), (2) upstream submodule (D1 — giữ tới A6).
+  Font pipeline: sạch.
+
+---
+
 ## 2026-09-30 · T-A11: tự sinh AllFonts.js bằng Rust — clean-room ĐẦU TIÊN của Track A — GREEN (verify.sh exit 0 + counterfactual data-dir)
 
 - **Kết quả (confirmed):** verify.sh full **exit 0** (5 render gates + save gate) với AllFonts.js do

@@ -65,16 +65,20 @@ nanooffice/
 ## Việc còn treo
 
 Hàng đợi công việc sống ở **`docs/TODO.md`** (QĐ7 — quy tắc + dashboard ở đầu file đó).
-Điểm nổi bật hiện tại: **T-A11 đóng 30.09 — AllFonts.js tự sinh bằng Rust** (`src-tauri/src/protocol/allfonts.rs`:
-enumerate 2 font root + parse sfnt std-thuần, 5 global đúng format oracle-obs; 2 consumer
-filesrv + `save.rs` cùng 1 nhà; xoá `all_fonts_source()` — **runtime hết đọc data-dir của
-app cài sẵn**, counterfactual mv data-dir: render + save vẫn GREEN) — task clean-room ĐẦU
-TIÊN của Track A, phương pháp + deviations ghi `docs/reference.map.md` § AllFonts generator.
-Trước đó: T-A10 đóng 30.09 — x2t bundled vào `engines/converter/<triple>/` (113 MB,
+Điểm nổi bật hiện tại: **T-A12 đóng 02.10 — font bundle vào `engines/fonts/`** (`bundle-fonts.sh`
+manifest pinned + license text kèm từng set S6: OpenSans Apache 2.0, Carlito/Caladea/Asana
+OFL 1.1, OpenSymbol OFL 1.0; ASC.ttf loại — license không rõ + 0 fetch; root `app` →
+`engines/fonts` giữ namespace `/fonts/app/` qua `font_root_disk()` 1 nhà, log ADDITIVE
+"font serve") — **font pipeline hết đọc app cài sẵn** (verify.sh exit 0, 0 path ONLYOFFICE
+trong AllFonts.js + logs; trim: sdkjs-plugins 38 MB 0 fetch → loại khỏi bản copy sau) —
+bảng license + assembly: `docs/reference.map.md` § Font bundle.
+Trước đó: T-A11 đóng 30.09 — AllFonts.js tự sinh bằng Rust (`src-tauri/src/protocol/allfonts.rs`,
+parse sfnt std-thuần, 5 global đúng format oracle-obs; 2 consumer cùng 1 nhà — task clean-room
+ĐẦU TIÊN của Track A); T-A10 đóng 30.09 — x2t bundled vào `engines/converter/<triple>/` (113 MB,
 resolution env→bundled→app-WARN 1 nhà ở `save.rs::x2t_path`); T-048 29.09 mở được cả 4
-định dạng + T-050 30.09 fix gate pptx flaky. Kế tiếp: **T-A12** (font subset theo locale —
-best-effort sau khi user chấp nhận phình size 30.09) hoặc PH-1 còn lại
-(T-046/T-047/T-049 save multi-format); gate "sạch ONLYOFFICE" = T-A13 sau T-A12.
+định dạng + T-050 30.09 fix gate pptx flaky. Kế tiếp: **T-A13** (gate 11 "sạch ONLYOFFICE" —
+đủ điều kiện sau T-A12) hoặc PH-1 còn lại
+(T-046/T-047/T-049 save multi-format).
 - Stack đã chốt: **giữ Rust + Tauri** (re-validate 26.09 — `docs/techstack-analysis.md`).
 
 ## Khi bắt đầu một phiên làm việc
