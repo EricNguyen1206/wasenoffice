@@ -8,6 +8,27 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-03 · Review kiến trúc #5 (T-055) — post-T-A27, pre-slice-A4 (user kéo sớm)
+
+- **Phương pháp:** improve-codebase-architecture + vocabulary codebase-design (user yêu cầu skill cụ thể lần này;
+  ponytail-audit không chạy — T-060 sẽ có ponytail-review pre-commit). Explore subagent đi bộ vùng nóng 2 ngày
+  (T-A27/T-V7/T-059) → **10 friction kèm file:line → 7 candidates** → HTML report `$TMPDIR/architecture-review-
+  20261003-223603.html` (không land repo — tiền lệ các review trước).
+- **User chốt C3/C1/C2 → T-060** (một task tuần tự, hành vi không đổi): C3 hit-seam (`Hit` + cell-identity +
+  caretXY vào layout.ts + round-trip assert gate 14 — click cell hiện trả para chỉ block SAU table, invariant chỉ
+  nằm comment 2 phía; caretXY pure nhưng 0 test vì kẹt editor.ts import __TAURI__) · C1 render.ts (editor.ts copy
+  ~37% viewer.ts verbatim — slice selection sẽ mọc bản sao render thứ 3; gộp C6: evidence emit ×2 + parse python
+  inline ×3, 0 schema) · C2 Rust shared (`render_payload`/`open_surface_window`/`atomic_replace` — nano_light_*
+  clone viewer_* 4 tầng: request-slot + window body + open pipeline dòng-cho-dòng + tmp/rename; kèm C5-mini
+  `EditorSessions::session_mut`).
+- **Defer có trigger:** C4 lib.rs surface-table (5 chỗ sửa/surface + thang probe 5 biến) — chờ surface thứ 4
+  (YAGNI) · C5 phần còn lại (casing unify + type 1 nhà + gate assert shape) — hoàn khi A4 slice chức năng đụng
+  contract tiếp · C7 smoke-lib hằng đơn-consumer — chỉ khi đụng file vì lý do khác (frozen block rủi ro > lợi).
+- **Bài học:** `NanoLightDoc` camelCase vs `QuickView` snake_case tồn tại nguyên 1 NGÀY trước khi review bắt —
+  contract song hành Rust↔TS phải chốt 1 casing ngay slice đầu (pain này T-V2 từng ghi: viewer.ts tự khai báo tay
+  lại model Rust). T-060 không đụng casing (refactor thuần) — C5-full là nhà của việc đó.
+- **Trạng thái:** T-060 land TODO (Track A, ← T-055 #5); T-055 reset ⬜; handoff `docs/handoff/t060.md`.
+
 ## 2026-10-03 · T-A27: A4 mở màn — editor core "Nano Light" vòng edit đầu (không sdkjs/x2t)
 
 - **Bối cảnh:** mở màn rung A4 theo QĐ9/DD L01 (`docs/design/editor-a4/DD.md`,
