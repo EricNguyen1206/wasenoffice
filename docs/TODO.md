@@ -58,6 +58,8 @@ type: queue
 > Rung hiện tại: **A3 — Viewer Rust** (H3; A1 ĐÓNG 02.10, A2 ĐÓNG 03.10). Task Track A bắt buộc đọc
 > `harness/rules/clean-room.md` trước khi làm; roadmap đầy đủ: `docs/vision.md` QĐ9.
 
+- [ ] ⬜ T-058 · Wire **Tailwind v4** (`@tailwindcss/vite`, CSS-first `@theme`) cho own-UI surfaces (start page + viewer chrome; canvas không đụng) + **token-slot structure riêng** (tên slot + placeholder values — KHÔNG copy token ONLYOFFICE; values/theme chọn ở A5 DD) · trigger: **trước T-V5** (migrate muộn hơn = đắt nhất ở A5) · user hỏi 03.10
+
 - [ ] ⬜ T-V3 · C3 trọn — serve `word/media/*` bytes cho viewer (filesrv route an toàn; bytes đã byte-exact nhờ T-A26) + render ảnh theo `wp:extent` EMU · ← T-A26 ← T-V1
 - [ ] ⬜ T-V4 · **Parity render vs oracle** (oracle CDP sdkjs): so viewer render ↔ render engine thật trên corpus — text content exact + số dòng + baseline ±ε; ε chốt sau khi đo sai số nền 2 canvas (OQ-V01-1) · ← T-V2 ← T-V3
 - [ ] ⬜ T-V5 · Wire UX: open docx → quick view (mặc định hay toggle — OQ-V01-3 user quyết), rút trigger env `NANO_OFFICE_QUICK_VIEW`; **RUNG A3 ĐÓNG** khi T-V4 parity + T-V2 gates đạt · ← T-V4
