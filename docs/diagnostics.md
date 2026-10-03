@@ -8,6 +8,70 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-03 · T-060: A4 pre-slice cleanup (C3+C1+C2 review #5) — refactor thuần, hành vi không đổi
+
+- **4 commit**: `1298b02` C3 hit-seam · `e4d7a40` C1 render.ts · `5e874d0` C2 Rust shared ·
+  `b90913a` ponytail cuts. Verify FULL exit 0 **19 ▸ steps sau MỖI commit** (4 lần); gate 12
+  số layout KHÔNG đổi mọi lần (16 dòng · colw 601.7 · maxw 600.5 · metrics 750,-250,220 ·
+  lhs 17.9). **parity-view 6/6 px-identical ×3 lần chạy** (sau C3 ×2 + cuối sau C2) — maxdy
+  0.64/4.07/0.00/6.47/2.73/2.73, maxdx 47.00 đúng bảng DD V01 §5.5. Cargo test 34 shell
+  (+1 mới) + 12 crate. Gate 14 42 → **90 checks**.
+- **C3 (hit seam mang identity bảng):** `TextLine`/`Hit` +`{block, cell:[row,col]|null}`
+  ADDITIVE vào layout.ts (block = index body top-level; line trong cell nhận block của
+  TABLE + cell identity — đệ quy nested table kế thừa table ngoài). Thật ra demo được bug
+  tiềm ẩn: corpus [P0, T(cell 2 para), P-after] → cell para 2 có pi=3 ≠ pi P-after=2, nhưng
+  cell para ĐẦU pi=2 == pi P-after — hit 2 chỗ này trước C3 KHÔNG PHÂN BIỆT ĐƯỢC bằng
+  {para,run,offset}; giờ `block`+`cell` tách (gate 14 test mới assert đúng cặp collision
+  này). `caretXY`+`itemLen` chuyển từ editor.ts vào layout.ts cạnh hitTest (dùng
+  `itemCharLen` có sẵn — xóa bản đúp); round-trip assert `caretXY(hitTest(x,y)) ≈ (x,y)`
+  tại MỌI char boundary (fake measurer 10px/char exact + wrapped line) — mid-char floor
+  về boundary theo rule (không half-char centering) nên chỉ assert tại boundary là đủ.
+  Rust `Caret` +`cell: Option<[usize;2]>` `#[serde(default)]` (payload cũ vẫn parse —
+  additive, không đổi tên/casing/bỏ field nào); `EditorSession::apply` refuse mọi verb
+  mang caret `cell≠null` TRƯỚC khi resolve `para`; `paragraph_at` giữ arm refuse
+  body[para]=Table (chặn stale caret trỏ thẳng vào block table) nhưng bỏ đoán-comment dài.
+- **C1 (gộp C6) render.ts:** measurer/media-load (tag vào log prefix)/columnWidth/draw+
+  overlay/docHeight/toEvidence/mediaInk/resizeRelayout — 1 nhà; viewer.ts/editor.ts còn
+  phần thật sự riêng. **Evidence JSON byte-identical PROVEN bằng diff trực tiếp**: chạy
+  gate 12/15 trước C1 giữ log, chạy lại sau C1, `diff` evidence JSON từng dòng = identical
+  (cả `viewer evidence:` lẫn `nano light evidence:` các cửa sổ). toEvidence giữ key order
+  bằng literal — JSON.stringify theo insertion order là contract ngầm, không reorder.
+  **Python parser 3 gate KHÔNG gộp** (quyết định ponytail): soi 3 heredoc — không có
+  đoạn nào trùng nguyên văn; mỗi parser parse prefix + asserts contract khác nhau
+  (gate 12 = layout số + media + hit-test; gate 15 = edit chain + parse-back marker +
+  reopen evidence; parity = 3-way compare với oracle) — gộp tạo indirection cho code
+  không trùng thật, rủi ro log-contract cao hơn lợi.
+- **C2 (+C5-mini) Rust shared:** `render_payload(registry, owner, path, tag)` ở viewer.rs
+  (read→parse→resolve→metrics→register — tag vào error string để negative gates còn cắn
+  đúng msg); `open_surface_window(app, label, html, title, tag)` focused(false);
+  `atomic_replace(path, bytes, tmp_tag, err_tag)` — **1 caller thật** (save_session; đường
+  engine save KHÔNG gộp: x2t viết tmp trên đĩa chứ không phải bytes-from-memory, và
+  rename-fail của nó KHÔNG dọn tmp — gộp sẽ đổi hành vi); `EditorSessions::with_session`
+  chọn **closure thay vì trả MutexGuard** (guard-return buộc caller get_mut lại → unwrap
+  hoặc match khuôn thứ hai — closure làm poison/no-session error 1 nhà thật sự, 4 command
+  còn 1 dòng). Log line `nano light edit:` giữ byte-identical (undo=undo_len qua tuple).
+- **Ponytail-review toàn diff (mandate 03.10):** 3 findings shrink áp dụng — render.ts bỏ
+  `export` MAX_CANVAS_H/docHeight (0 caller ngoài module); viewer.rs `families()` bỏ
+  `pub(crate)` (editor không còn gọi trực tiếp sau render_payload) + comment stale. Verify
+  FULL lại sau cuts exit 0.
+- **Net LOC code (không docs): +662/−476 = +186**, phân bổ: render.ts +182 vs
+  viewer+editor −242 → **phần gộp C1 thu ÂM −60**; test mới +~96 (gate 14 +46: table
+  identity 9 checks + round-trip 39; Rust in_cell_carets_refused ~50); còn lại ~+90 =
+  C3 plumbing data qua 3 tầng (TS fields + walk params + Rust serde/refuse) + doc comments
+  — tính năng dữ liệu thật thay invariant-by-comment, không phải phần trương vô ích.
+- **Gotchas:** (1) pi-count: cell para THỨ NHẤT đụng pi block sau table (không phải para
+  thứ 2 — test đầu tiên viết nhầm index dòng, gate 14 bắt ngay: got 3 want 2); (2) perl
+  multiline edit tạo BẢN SAO caretXY thứ 2 trong editor.ts thay vì xóa (Edit chèn nhầm
+  hướng) — phải xóa cả 2 bản vì hàm đã chuyển vào layout.ts; (3) `parse_ms` của editor
+  giờ đo đến hết register (payload) thay vì hết session-insert — lệch ns, format 1 chữ
+  số thập phân không đổi; (4) evidence JSON key order = insertion order của object
+  literal — "byte-identical" phụ thuộc thứ tự khai báo field, ghi vào comment load-bearing.
+- **Còn cho slice A4 kế:** selection kéo + arrows (dùng `block`/`cell` để disambiguate
+  click cell khi mở selection); C5-full (casing unify NanoLightDoc snake↔camel, type 1
+  nhà) khi slice chức năng đụng contract; C4 surface-table chờ surface thứ 4.
+
+---
+
 ## 2026-10-03 · Review kiến trúc #5 (T-055) — post-T-A27, pre-slice-A4 (user kéo sớm)
 
 - **Phương pháp:** improve-codebase-architecture + vocabulary codebase-design (user yêu cầu skill cụ thể lần này;
