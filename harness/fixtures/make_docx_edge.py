@@ -8,10 +8,10 @@ stdlib only. The expected-model note per file lives in ONE home:
 
 Usage: make_docx_edge.py [outdir]   (default: harness/fixtures/corpus-a2)
 """
-import struct
 import sys
 import zipfile
-import zlib
+
+from docxgen_common import png_1x1
 
 W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
 R = 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
@@ -19,16 +19,6 @@ WP = 'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingD
 A = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
 PIC = 'xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"'
 ROOT = f"{W} {R} {WP} {A} {PIC}"
-
-
-def png_1x1() -> bytes:
-    def chunk(tag: bytes, data: bytes) -> bytes:
-        return struct.pack(">I", len(data)) + tag + data + struct.pack(
-            ">I", zlib.crc32(tag + data)
-        )
-    ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
-    idat = zlib.compress(b"\x00\x00\x00\xff")  # filter byte + RGB(0,0,255)
-    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", idat) + chunk(b"IEND", b"")
 
 
 def package(parts: dict[str, str | bytes]) -> None:
@@ -210,7 +200,7 @@ def make_image_multi() -> None:
             '<Relationship Id="rIdImg" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/>'
         ),
         "word/styles.xml": f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles {W}/>',
-        "word/media/image1.png": png_1x1(),
+        "word/media/image1.png": png_1x1(0, 0, 255),
         "word/document.xml": document(body),
     })
 
@@ -220,5 +210,3 @@ if __name__ == "__main__":
     make_nested_table()
     make_style_override()
     make_image_multi()
-    out = sys.argv[1] if len(sys.argv) > 1 else "harness/fixtures/corpus-a2"
-    print(out)

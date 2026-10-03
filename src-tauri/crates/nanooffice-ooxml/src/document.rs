@@ -13,7 +13,10 @@
 use quick_xml::events::{BytesStart, Event};
 
 use crate::opc::{self, attr, Rel};
-use crate::{xml_err, Block, ImageRef, NumRef, Paragraph, ParseError, Run, Table, TableCell};
+use crate::{
+    xml_err, Block, ImageRef, Ind, NumRef, Page, Paragraph, ParseError, RFonts, Run, Table,
+    TableCell,
+};
 
 const W_NS: &str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
@@ -24,15 +27,24 @@ struct Parser<'a> {
     reader: quick_xml::Reader<&'a [u8]>,
     rels: &'a RelsList,
     base_dir: &'a str,
+    /// Page size of the body-level `w:sectPr` (§17.6.17) — set while parsing
+    /// the main body stream, left alone for headers/footers.
+    page: Option<Page>,
 }
 
 /// Parse the main document part: check the `w:document` root (§17.2.3) and
-/// return the `w:body` (§17.2.2) block stream.
-pub fn parse_body(xml: &str, rels: &RelsList, base_dir: &str) -> Result<Vec<Block>, ParseError> {
+/// return the `w:body` (§17.2.2) block stream plus the final section's page
+/// size, if declared.
+pub fn parse_body(
+    xml: &str,
+    rels: &RelsList,
+    base_dir: &str,
+) -> Result<(Vec<Block>, Option<Page>), ParseError> {
     let mut parser = Parser {
         reader: quick_xml::Reader::from_str(xml),
         rels,
         base_dir,
+        page: None,
     };
     let mut buf = Vec::new();
     let mut saw_document = false;
@@ -48,7 +60,10 @@ pub fn parse_body(xml: &str, rels: &RelsList, base_dir: &str) -> Result<Vec<Bloc
                         ));
                     }
                 }
-                b"w:body" if saw_document => return parser.parse_blocks(None),
+                b"w:body" if saw_document => {
+                    let blocks = parser.parse_blocks(None)?;
+                    return Ok((blocks, parser.page));
+                }
                 _ => {}
             },
             // a root `w:document` may be self-closing (no body follows)
@@ -84,6 +99,7 @@ pub fn parse_container(
         reader: quick_xml::Reader::from_str(xml),
         rels,
         base_dir,
+        page: None,
     };
     let mut buf = Vec::new();
     loop {
@@ -123,6 +139,10 @@ impl Parser<'_> {
                 Event::Start(e) => match e.name().as_ref() {
                     b"w:p" => blocks.push(Block::Paragraph(self.parse_paragraph()?)),
                     b"w:tbl" => blocks.push(Block::Table(self.parse_table()?)),
+                    // the body-level final section (§17.6.17) — only pgSz is
+                    // modelled; mid-document sections live inside w:pPr and
+                    // are skipped there
+                    b"w:sectPr" => self.parse_sectpr()?,
                     _ => self.skip_element()?,
                 },
                 Event::Empty(e) => match e.name().as_ref() {
@@ -170,9 +190,9 @@ impl Parser<'_> {
         }
     }
 
-    /// `w:pPr` (§17.3.1.25) — S1 models pStyle (§17.3.1.27), jc (§17.3.1.13)
-    /// and numPr (§17.3.1.19). The pPr's own `w:rPr` (§17.3.1.29) styles the
-    /// paragraph MARK, not runs — skipped wholesale.
+    /// `w:pPr` (§17.3.1.25) — S1 models pStyle (§17.3.1.27), jc (§17.3.1.13),
+    /// numPr (§17.3.1.19) and ind (§17.3.1.12). The pPr's own `w:rPr`
+    /// (§17.3.1.29) styles the paragraph MARK, not runs — skipped wholesale.
     fn parse_ppr(&mut self, para: &mut Paragraph) -> Result<(), ParseError> {
         let mut buf = Vec::new();
         loop {
@@ -182,11 +202,13 @@ impl Parser<'_> {
                     b"w:pStyle" => para.style = attr(&e, b"w:val")?,
                     b"w:jc" => para.align = attr(&e, b"w:val")?,
                     b"w:numPr" => para.numbering = Some(self.parse_numpr()?),
+                    b"w:ind" => para.ind = Some(parse_ind(&e)?),
                     _ => self.skip_element()?,
                 },
                 Event::Empty(e) => match e.name().as_ref() {
                     b"w:pStyle" => para.style = attr(&e, b"w:val")?,
                     b"w:jc" => para.align = attr(&e, b"w:val")?,
+                    b"w:ind" => para.ind = Some(parse_ind(&e)?),
                     _ => {} // e.g. <w:numPr/> — carries no reference to model
                 },
                 Event::End(e) if e.name().as_ref() == b"w:pPr" => return Ok(()),
@@ -238,9 +260,26 @@ impl Parser<'_> {
                     b"w:t" => in_t = true, // §17.3.3.31
                     b"w:drawing" => run.images.push(self.parse_drawing()?), // §17.3.3.9
                     b"mc:AlternateContent" => self.parse_alt_content(&mut run)?,
+                    // x2t mixes serializations (a:blip lesson, T-A23) — the
+                    // break elements can arrive Start+End as well as empty;
+                    // neither legally has content, so Start is consumed as a
+                    // subtree after reading its attributes
+                    b"w:tab" => {
+                        run.text.push('\t'); // §17.3.3.34
+                        self.skip_element()?;
+                    }
+                    b"w:br" => {
+                        run.text.push(br_char(&e)?); // §17.3.3.3
+                        self.skip_element()?;
+                    }
                     _ => self.skip_element()?,
                 },
-                Event::Empty(_) => {} // <w:t/>, w:br/, w:tab/ — nothing to model
+                Event::Empty(e) => match e.name().as_ref() {
+                    b"w:tab" => run.text.push('\t'),
+                    b"w:br" => run.text.push(br_char(&e)?),
+                    // <w:t/>, other leaves — nothing to model
+                    _ => {}
+                },
                 Event::Text(t) if in_t => {
                     run.text.push_str(&t.unescape().map_err(xml_err)?);
                 }
@@ -257,21 +296,27 @@ impl Parser<'_> {
         }
     }
 
-    /// `w:rPr` (§17.3.2.27) — S1 models b/i/u/sz; everything else skipped.
+    /// `w:rPr` (§17.3.2.27) — S1 models rStyle (§17.5.2.3), rFonts
+    /// (§17.3.2.26), b/i/u/sz, color (§17.3.2.6), spacing (§17.3.2.33);
+    /// everything else skipped.
     fn parse_rpr(&mut self, run: &mut Run) -> Result<(), ParseError> {
         let mut buf = Vec::new();
         loop {
             buf.clear();
             match self.reader.read_event_into(&mut buf).map_err(xml_err)? {
                 Event::Start(e) | Event::Empty(e) => match e.name().as_ref() {
-                    b"w:b" => run.bold = onoff(&e)?,
-                    b"w:i" => run.italic = onoff(&e)?,
+                    b"w:b" => run.bold = Some(onoff(&e)?),
+                    b"w:i" => run.italic = Some(onoff(&e)?),
                     b"w:u" => {
                         // val default "single" (§17.3.2.40 @val)
                         run.underline =
                             Some(attr(&e, b"w:val")?.unwrap_or_else(|| "single".to_string()));
                     }
                     b"w:sz" => run.size = Some(attr_u32(&e, b"w:val")?), // half-points
+                    b"w:rStyle" => run.rstyle = attr(&e, b"w:val")?,
+                    b"w:rFonts" => run.rfonts = Some(parse_rfonts(&e)?),
+                    b"w:color" => run.color = attr(&e, b"w:val")?,
+                    b"w:spacing" => run.spacing = Some(attr_i32(&e, b"w:val")?), // twips
                     _ => {}
                 },
                 Event::End(e) if e.name().as_ref() == b"w:rPr" => return Ok(()),
@@ -372,10 +417,22 @@ impl Parser<'_> {
                     n if in_choice && n == b"w:rPr" => self.parse_rpr(run)?,
                     n if in_choice && n == b"w:t" => in_t = true, // §17.3.3.31
                     n if in_choice && n == b"w:drawing" => run.images.push(self.parse_drawing()?),
+                    n if in_choice && n == b"w:tab" => {
+                        run.text.push('\t');
+                        self.skip_element()?;
+                    }
+                    n if in_choice && n == b"w:br" => {
+                        run.text.push(br_char(&e)?);
+                        self.skip_element()?;
+                    }
                     _ => self.skip_element()?, // Fallback, unknown Choice content
                 },
                 // leaf content inside the selected branch carries no model data
-                Event::Empty(_) => {}
+                Event::Empty(e) => match e.name().as_ref() {
+                    b"w:tab" if in_choice => run.text.push('\t'),
+                    b"w:br" if in_choice => run.text.push(br_char(&e)?),
+                    _ => {}
+                },
                 Event::Text(t) if in_t => {
                     run.text.push_str(&t.unescape().map_err(xml_err)?);
                 }
@@ -398,20 +455,54 @@ impl Parser<'_> {
         }
     }
 
-    /// `w:tbl` (§17.4.38): `w:tr` rows (§17.4.79); tblPr/tblGrid skipped.
+    /// `w:tbl` (§17.4.38): `w:tblGrid` (§17.4.4) columns then `w:tr` rows
+    /// (§17.4.79); tblPr skipped.
     fn parse_table(&mut self) -> Result<Table, ParseError> {
         let mut buf = Vec::new();
+        let mut grid = Vec::new();
         let mut rows = Vec::new();
         loop {
             buf.clear();
             match self.reader.read_event_into(&mut buf).map_err(xml_err)? {
                 Event::Start(e) => match e.name().as_ref() {
                     b"w:tr" => rows.push(self.parse_row()?),
+                    b"w:tblGrid" => grid = self.parse_grid()?,
                     _ => self.skip_element()?,
                 },
-                Event::Empty(_) => {}
-                Event::End(e) if e.name().as_ref() == b"w:tbl" => return Ok(Table { rows }),
+                Event::Empty(e) if e.name().as_ref() == b"w:tblGrid" => {} // no columns declared
+                Event::End(e) if e.name().as_ref() == b"w:tbl" => return Ok(Table { grid, rows }),
                 Event::Eof => return Err(ParseError("unexpected end of XML inside w:tbl".into())),
+                _ => {}
+            }
+        }
+    }
+
+    /// `w:tblGrid` (§17.4.4): `w:gridCol` (§17.4.17) widths in order —
+    /// `w:w` in twips; a grid column without `w:w` is an auto column (None).
+    fn parse_grid(&mut self) -> Result<Vec<Option<u32>>, ParseError> {
+        let mut buf = Vec::new();
+        let mut cols = Vec::new();
+        loop {
+            buf.clear();
+            match self.reader.read_event_into(&mut buf).map_err(xml_err)? {
+                Event::Start(e) | Event::Empty(e) => {
+                    if e.name().as_ref() == b"w:gridCol" {
+                        // absent w:w = auto column; a present-but-invalid one
+                        // is refused, not guessed
+                        let w = match attr(&e, b"w:w")? {
+                            Some(v) => Some(
+                                v.parse()
+                                    .map_err(|_| ParseError(format!("w:w={v:?} is not a u32")))?,
+                            ),
+                            None => None,
+                        };
+                        cols.push(w);
+                    }
+                }
+                Event::End(e) if e.name().as_ref() == b"w:tblGrid" => return Ok(cols),
+                Event::Eof => {
+                    return Err(ParseError("unexpected end of XML inside w:tblGrid".into()))
+                }
                 _ => {}
             }
         }
@@ -444,6 +535,45 @@ impl Parser<'_> {
         Ok(TableCell {
             blocks: self.parse_blocks(Some(b"w:tc"))?,
         })
+    }
+
+    /// `w:sectPr` (§17.6.17): only `w:pgSz` (§17.6.11) is modelled. Everything
+    /// else (headers references, columns, margins) stays out of the model.
+    fn parse_sectpr(&mut self) -> Result<(), ParseError> {
+        let mut buf = Vec::new();
+        let mut page = Page::default();
+        loop {
+            buf.clear();
+            match self.reader.read_event_into(&mut buf).map_err(xml_err)? {
+                Event::Start(e) | Event::Empty(e) => {
+                    if e.name().as_ref() == b"w:pgSz" {
+                        page.w = match attr(&e, b"w:w")? {
+                            Some(v) => Some(
+                                v.parse()
+                                    .map_err(|_| ParseError(format!("w:w={v:?} is not a u32")))?,
+                            ),
+                            None => None,
+                        };
+                        page.h = match attr(&e, b"w:h")? {
+                            Some(v) => Some(
+                                v.parse()
+                                    .map_err(|_| ParseError(format!("w:h={v:?} is not a u32")))?,
+                            ),
+                            None => None,
+                        };
+                        page.orient = attr(&e, b"w:orient")?;
+                    }
+                }
+                Event::End(e) if e.name().as_ref() == b"w:sectPr" => {
+                    self.page = Some(page);
+                    return Ok(());
+                }
+                Event::Eof => {
+                    return Err(ParseError("unexpected end of XML inside w:sectPr".into()))
+                }
+                _ => {}
+            }
+        }
     }
 
     /// Skip the subtree rooted at a `Start` event just consumed. Depth
@@ -480,6 +610,52 @@ pub(crate) fn onoff(e: &BytesStart<'_>) -> Result<bool, ParseError> {
     })
 }
 
+/// `w:br` (§17.3.3.3) → its control character: no `w:type` or "text" (the
+/// default) = line break `\n`; "page" = `\u{c}`; "column" = `\u{b}`. All
+/// three are illegal inside XML text content, so a `w:t` can never collide
+/// with them. Other type values are refused (ST_BrType §17.18.49 is a closed
+/// enum — parsing an unknown one as a line break would corrupt the model).
+fn br_char(e: &BytesStart<'_>) -> Result<char, ParseError> {
+    Ok(match attr(e, b"w:type")?.as_deref() {
+        None | Some("text") => '\n',
+        Some("page") => '\u{c}',
+        Some("column") => '\u{b}',
+        Some(other) => {
+            return Err(ParseError(format!(
+                "w:br w:type={other:?} is not a ST_BrType value"
+            )))
+        }
+    })
+}
+
+/// `w:ind` (§17.3.1.12) attributes, twips; each is optional as written.
+pub(crate) fn parse_ind(e: &BytesStart<'_>) -> Result<Ind, ParseError> {
+    let signed = |v: Option<String>| -> Result<Option<i64>, ParseError> {
+        v.map(|s| {
+            s.parse::<i64>()
+                .map_err(|_| ParseError(format!("w:ind value {s:?} is not an integer")))
+        })
+        .transpose()
+    };
+    Ok(Ind {
+        left: signed(attr(e, b"w:left")?)?,
+        right: signed(attr(e, b"w:right")?)?,
+        first_line: signed(attr(e, b"w:firstLine")?)?,
+        hanging: signed(attr(e, b"w:hanging")?)?,
+    })
+}
+
+/// `w:rFonts` (§17.3.2.26) literal family attributes; theme attributes
+/// (asciiTheme…) are not modelled.
+pub(crate) fn parse_rfonts(e: &BytesStart<'_>) -> Result<RFonts, ParseError> {
+    Ok(RFonts {
+        ascii: attr(e, b"w:ascii")?,
+        hansi: attr(e, b"w:hAnsi")?,
+        eastasia: attr(e, b"w:eastAsia")?,
+        cs: attr(e, b"w:cs")?,
+    })
+}
+
 fn attr_u32(e: &BytesStart<'_>, key: &[u8]) -> Result<u32, ParseError> {
     let v = attr(e, key)?.ok_or_else(|| {
         ParseError(format!(
@@ -489,6 +665,18 @@ fn attr_u32(e: &BytesStart<'_>, key: &[u8]) -> Result<u32, ParseError> {
     })?;
     v.parse()
         .map_err(|_| ParseError(format!("w:val={v:?} is not a u32")))
+}
+
+/// Signed twips (`w:spacing` §17.3.2.33).
+pub(crate) fn attr_i32(e: &BytesStart<'_>, key: &[u8]) -> Result<i32, ParseError> {
+    let v = attr(e, key)?.ok_or_else(|| {
+        ParseError(format!(
+            "missing w:val on {}",
+            String::from_utf8_lossy(e.name().as_ref())
+        ))
+    })?;
+    v.parse()
+        .map_err(|_| ParseError(format!("w:val={v:?} is not an i32")))
 }
 
 fn attr_i64(e: &BytesStart<'_>, key: &[u8]) -> Result<i64, ParseError> {

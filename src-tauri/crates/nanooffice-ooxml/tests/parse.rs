@@ -14,6 +14,10 @@ const FULL_FIXTURE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/tests/fixtures/nanooffice-full-fixture.docx"
 );
+const V1_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/tests/fixtures/nanooffice-v1-fixture.docx"
+);
 
 /// Fixture chuẩn (sinh bằng `harness/fixtures/make_docx.py` — spec-derived,
 /// cùng file render GREEN trong engine): 5 paragraph, style, bold, tiếng Việt
@@ -27,12 +31,12 @@ fn fixture_parses_to_exact_model() {
     assert_eq!(p.style.as_deref(), Some("Heading1"));
     assert_eq!(p.runs.len(), 1);
     assert_eq!(p.runs[0].text, "NanoOffice PH-0 Fixture");
-    assert!(!p.runs[0].bold);
+    assert_eq!(p.runs[0].bold, None);
 
     let p = para(&doc, 2);
     assert_eq!(p.style, None);
     assert_eq!(p.runs.len(), 1);
-    assert!(p.runs[0].bold, "whole-sentence bold run");
+    assert_eq!(p.runs[0].bold, Some(true), "whole-sentence bold run");
     assert_eq!(
         p.runs[0].text,
         "Bold run check: this whole sentence should be bold."
@@ -79,10 +83,11 @@ fn full_corpus_parses_every_construct() {
     assert_eq!(p.style.as_deref(), Some("Heading1"));
     assert_eq!(p.runs[0].text, "Giới thiệu NanoOffice");
 
-    // run-level bold=false overrides the style chain (raw values kept)
+    // run-level bold=false overrides the style chain (three-state: explicit
+    // off is Some(false), distinguishable from not-set None)
     let p = para(&doc, 1);
     assert_eq!(p.style.as_deref(), Some("Heading1"));
-    assert!(!p.runs[0].bold, "run override w:b w:val=false");
+    assert_eq!(p.runs[0].bold, Some(false), "run override w:b w:val=false");
 
     // paragraph alignment
     let p = para(&doc, 2);
@@ -97,9 +102,11 @@ fn full_corpus_parses_every_construct() {
         &para(&doc, 3).runs[4],
     ];
     assert_eq!(runs[0].text, "bold ");
-    assert!(runs[0].bold && !runs[0].italic);
+    assert_eq!(runs[0].bold, Some(true));
+    assert_eq!(runs[0].italic, None);
     assert_eq!(runs[1].text, "nghiêng ");
-    assert!(runs[1].italic && !runs[1].bold);
+    assert_eq!(runs[1].italic, Some(true));
+    assert_eq!(runs[1].bold, None);
     assert_eq!(runs[2].text, "gạch chân ");
     assert_eq!(runs[2].underline.as_deref(), Some("single"));
     assert_eq!(runs[3].text, "cỡ 14pt ");
@@ -316,11 +323,18 @@ fn construct_semantics() {
     let runs = &para(&doc, 1).runs;
     assert_eq!(runs.len(), 3);
     assert_eq!(runs[0].text, "not bold");
-    assert!(!runs[0].bold && !runs[0].italic);
+    assert_eq!(
+        runs[0].bold,
+        Some(false),
+        "explicit w:b w:val=false is three-state"
+    );
+    assert_eq!(runs[0].italic, None);
     assert_eq!(runs[1].text, "italic");
-    assert!(runs[1].italic && !runs[1].bold);
+    assert_eq!(runs[1].italic, Some(true));
+    assert_eq!(runs[1].bold, None);
     assert_eq!(runs[2].text, "bold only");
-    assert!(runs[2].bold && !runs[2].italic, "w:val=0 must turn w:i off");
+    assert_eq!(runs[2].bold, Some(true));
+    assert_eq!(runs[2].italic, Some(false), "w:val=0 must turn w:i off");
 
     assert_eq!(para(&doc, 2).runs.len(), 0, "<w:p/> = empty paragraph");
     assert_eq!(para(&doc, 3).runs[0].text, "a & b <c>");
@@ -335,7 +349,7 @@ fn construct_semantics() {
         doc.numbering.is_empty(),
         "no numbering part → empty dictionary"
     );
-    assert!(!p.runs[0].bold, "pPr's rPr styles the mark, not runs");
+    assert_eq!(p.runs[0].bold, None, "pPr's rPr styles the mark, not runs");
 
     // w:u without w:val defaults to "single" (§17.3.2.40); w:sz half-points
     let r = &para(&doc, 5).runs[0];
@@ -403,6 +417,271 @@ fn alternate_content_choice_surfaces_image() {
     let out = nanooffice_ooxml::write_docx(&doc, None).unwrap();
     let reparsed = nanooffice_ooxml::parse_docx(&out).unwrap();
     assert_eq!(doc, reparsed, "round-trip bất biến qua AlternateContent");
+}
+
+/// V1 render constructs (DD V01 §3.2): rFonts/rStyle/color/spacing/ind/
+/// tblGrid/pgSz/docDefaults/w:default/3-state/br+tab — PARSE raw + RESOLVED
+/// values đúng thứ bậc §17.7.2 (direct → rStyle → pStyle/default-para-style →
+/// docDefaults), và round-trip bất biến qua writer đối xứng.
+#[test]
+fn v1_render_constructs_parse_resolve_and_round_trip() {
+    let styles = concat!(
+        r#"<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">"#,
+        r#"<w:docDefaults>"#,
+        r#"<w:rPrDefault><w:rPr><w:rFonts w:ascii="Carlito" w:hAnsi="Carlito" w:eastAsia="Noto" w:cs="Mitra"/><w:color w:val="444444"/><w:sz w:val="20"/></w:rPr></w:rPrDefault>"#,
+        r#"<w:pPrDefault><w:pPr><w:jc w:val="left"/></w:pPr></w:pPrDefault>"#,
+        r#"</w:docDefaults>"#,
+        r#"<w:style w:type="paragraph" w:styleId="Normal" w:default="1"><w:name w:val="Normal"/>"#,
+        r#"<w:pPr><w:ind w:left="720"/></w:pPr><w:rPr><w:sz w:val="22"/></w:rPr></w:style>"#,
+        r#"<w:style w:type="paragraph" w:styleId="Head"><w:name w:val="head"/><w:basedOn w:val="Normal"/>"#,
+        r#"<w:rPr><w:b/><w:color w:val="0000FF"/><w:spacing w:val="10"/></w:rPr></w:style>"#,
+        r#"<w:style w:type="character" w:styleId="Emph"><w:name w:val="emph"/>"#,
+        r#"<w:rPr><w:i/><w:color w:val="00FF00"/></w:rPr></w:style>"#,
+        r#"</w:styles>"#,
+    );
+    let doc_rels = r#"<Relationship Id="rIdS" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>"#;
+    let xml = concat!(
+        r#"<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>"#,
+        // p0: no pStyle → the w:default paragraph style backs it
+        r#"<w:p><w:r><w:t>plain</w:t></w:r></w:p>"#,
+        // p1: direct color/spacing beat rStyle; rStyle beats pStyle
+        r#"<w:p><w:pPr><w:pStyle w:val="Head"/></w:pPr>"#,
+        r#"<w:r><w:rPr><w:rStyle w:val="Emph"/><w:color w:val="FF0000"/><w:spacing w:val="-5"/></w:rPr><w:t>direct</w:t></w:r>"#,
+        r#"<w:r><w:rPr><w:rStyle w:val="Emph"/></w:rPr><w:t>rs</w:t></w:r></w:p>"#,
+        // p2: explicit-off overrides the style chain + direct ind overrides the style's
+        r#"<w:p><w:pPr><w:pStyle w:val="Head"/><w:ind w:left="100" w:right="200" w:firstLine="50"/></w:pPr>"#,
+        r#"<w:r><w:rPr><w:b w:val="false"/><w:i w:val="0"/></w:rPr><w:t>off</w:t></w:r></w:p>"#,
+        // p3: run rFonts — ascii wins over hAnsi/eastAsia/cs
+        r#"<w:p><w:r><w:rPr><w:rFonts w:ascii="Asana" w:hAnsi="Carlito" w:cs="Mitra"/></w:rPr><w:t>font</w:t></w:r></w:p>"#,
+        // p4: br/tab (self-closing AND Start+End serializations) + page/column breaks
+        r#"<w:p><w:r><w:t>a</w:t><w:tab/><w:t>b</w:t><w:br/><w:t>c</w:t><w:br w:type="page"/><w:t>d</w:t><w:br w:type="column"/><w:t>e</w:t></w:r></w:p>"#,
+        r#"<w:p><w:r><w:t>x</w:t><w:tab></w:tab><w:br></w:br><w:t>y</w:t></w:r></w:p>"#,
+        // p5: w:u val="none" — explicit no underline collapses to None when resolved
+        r#"<w:p><w:r><w:rPr><w:u w:val="none"/></w:rPr><w:t>nu</w:t></w:r></w:p>"#,
+        // tblGrid: widths + one auto column
+        r#"<w:tbl><w:tblGrid><w:gridCol w:w="4000"/><w:gridCol/><w:gridCol w:w="2000"/></w:tblGrid>"#,
+        r#"<w:tr><w:tc><w:p><w:r><w:t>c</w:t></w:r></w:p></w:tc><w:tc/></w:tr></w:tbl>"#,
+        // final section page size
+        r#"<w:sectPr><w:pgSz w:w="11906" w:h="16838" w:orient="portrait"/></w:sectPr>"#,
+        r#"</w:body></w:document>"#,
+    );
+    let doc = nanooffice_ooxml::parse_docx(&minimal_package_with(
+        xml,
+        doc_rels,
+        &[("word/styles.xml", styles.to_string())],
+    ))
+    .unwrap();
+
+    // ---- raw parse ----
+    assert_eq!(doc.page.as_ref().unwrap().w, Some(11906));
+    assert_eq!(doc.page.as_ref().unwrap().h, Some(16838));
+    assert_eq!(
+        doc.page.as_ref().unwrap().orient.as_deref(),
+        Some("portrait")
+    );
+    let dd = doc.doc_defaults.as_ref().unwrap();
+    assert_eq!(dd.size, Some(20));
+    assert_eq!(dd.color.as_deref(), Some("444444"));
+    assert_eq!(dd.align.as_deref(), Some("left"));
+    assert_eq!(
+        dd.rfonts.as_ref().unwrap().ascii.as_deref(),
+        Some("Carlito")
+    );
+    assert!(doc.styles["Normal"].default, "w:default=\"1\" parsed");
+    assert_eq!(doc.styles["Normal"].ind.as_ref().unwrap().left, Some(720));
+    assert_eq!(doc.styles["Head"].spacing, Some(10));
+    assert_eq!(doc.styles["Head"].color.as_deref(), Some("0000FF"));
+    assert_eq!(doc.styles["Emph"].italic, Some(true));
+
+    let p = para(&doc, 4);
+    assert_eq!(
+        p.runs[0].text, "a\tb\nc\u{c}d\u{b}e",
+        "tab + br + page + column"
+    );
+    assert_eq!(
+        para(&doc, 5).runs[0].text,
+        "x\t\ny",
+        "Start+End serialization"
+    );
+    let tbl = match &doc.body[7] {
+        Block::Table(t) => t,
+        other => panic!("expected table, got {other:?}"),
+    };
+    assert_eq!(
+        tbl.grid,
+        vec![Some(4000), None, Some(2000)],
+        "tblGrid widths + auto column"
+    );
+
+    // ---- resolved (§17.7.2: direct → rStyle → pStyle → docDefaults) ----
+    let r = nanooffice_ooxml::resolve(&doc);
+    let rp = |i: usize| match &r.body[i] {
+        nanooffice_ooxml::RBlock::Paragraph(p) => p,
+        other => panic!("body[{i}] not a paragraph: {other:?}"),
+    };
+
+    // p0: w:default paragraph style + docDefaults fill everything in
+    let run = &rp(0).runs[0];
+    assert_eq!(run.size, Some(22), "size from the default paragraph style");
+    assert_eq!(
+        run.font.as_deref(),
+        Some("Carlito"),
+        "font from docDefaults"
+    );
+    assert_eq!(
+        run.color.as_deref(),
+        Some("444444"),
+        "color from docDefaults"
+    );
+    assert!(!run.bold && !run.italic);
+    assert_eq!(
+        rp(0).ind.as_ref().unwrap().left,
+        Some(720),
+        "ind from the default paragraph style"
+    );
+    assert_eq!(
+        rp(0).align.as_deref(),
+        Some("left"),
+        "align from docDefaults pPr"
+    );
+
+    // p1 run 0: direct beats rStyle beats pStyle; chain fills size via Head→Normal
+    let run = &rp(1).runs[0];
+    assert_eq!(run.color.as_deref(), Some("FF0000"), "direct color wins");
+    assert_eq!(run.spacing, Some(-5), "direct spacing wins (condensed)");
+    assert!(run.italic, "italic from the rStyle");
+    assert!(run.bold, "bold from the paragraph style");
+    assert_eq!(
+        run.size,
+        Some(22),
+        "size through the Head→Normal basedOn chain"
+    );
+    // p1 run 1: rStyle color (00FF00) must beat the paragraph style color (0000FF)
+    let run = &rp(1).runs[1];
+    assert_eq!(
+        run.color.as_deref(),
+        Some("00FF00"),
+        "rStyle wins over pStyle"
+    );
+    assert!(run.italic);
+
+    // p2: explicit-off beats the style chain; direct ind beats the style's
+    let run = &rp(2).runs[0];
+    assert!(!run.bold, "w:b w:val=false overrides the bold style");
+    assert!(!run.italic, "w:i w:val=0 overrides");
+    assert_eq!(
+        run.color.as_deref(),
+        Some("0000FF"),
+        "color still from pStyle"
+    );
+    assert_eq!(
+        rp(2).ind.as_ref().unwrap(),
+        &nanooffice_ooxml::Ind {
+            left: Some(100),
+            right: Some(200),
+            first_line: Some(50),
+            hanging: None
+        },
+        "direct w:ind wins over the style's"
+    );
+
+    // p3: ascii family first
+    let run = &rp(3).runs[0];
+    assert_eq!(
+        run.font.as_deref(),
+        Some("Asana"),
+        "ascii wins over hAnsi/cs"
+    );
+
+    // p6: w:u val="none" collapses to None
+    assert_eq!(
+        rp(6).runs[0].underline,
+        None,
+        "underline none → nothing to draw"
+    );
+
+    // ---- round-trip through the symmetric writer ----
+    let out = nanooffice_ooxml::write_docx(&doc, None).unwrap();
+    let reparsed = nanooffice_ooxml::parse_docx(&out).unwrap();
+    assert_eq!(doc, reparsed, "round-trip bất biến qua mọi construct V1");
+}
+
+/// Corpus V1 (sinh bằng `harness/fixtures/make_docx_v1.py`): construct
+/// render-side DD V01 §3.2 trên file thật — resolved values đúng chuỗi
+/// §17.7.2 (default-para-style / rStyle / docDefaults) + page + grid.
+#[test]
+fn v1_fixture_parses_resolved_values() {
+    let doc = nanooffice_ooxml::parse_docx_file(V1_FIXTURE).unwrap();
+
+    // docDefaults + default paragraph style surface raw
+    let dd = doc.doc_defaults.as_ref().unwrap();
+    assert_eq!(dd.size, Some(20));
+    assert_eq!(
+        dd.rfonts.as_ref().unwrap().ascii.as_deref(),
+        Some("Carlito")
+    );
+    assert!(doc.styles["Normal"].default);
+    assert_eq!(doc.page.as_ref().unwrap().w, Some(12240));
+
+    let r = nanooffice_ooxml::resolve(&doc);
+    let rp = |i: usize| match &r.body[i] {
+        nanooffice_ooxml::RBlock::Paragraph(p) => p,
+        other => panic!("body[{i}] not a paragraph: {other:?}"),
+    };
+
+    // p0: w:default style (ind 720, sz 22) + docDefaults (font, color 333333)
+    let run = &rp(0).runs[0];
+    assert_eq!(run.font.as_deref(), Some("Carlito"));
+    assert_eq!(run.color.as_deref(), Some("333333"));
+    assert_eq!(run.size, Some(22));
+    assert_eq!(rp(0).ind.as_ref().unwrap().left, Some(720));
+
+    // p1 run 0: direct color/spacing win over the rStyle
+    let run = &rp(1).runs[0];
+    assert_eq!(run.color.as_deref(), Some("FF0000"));
+    assert_eq!(run.spacing, Some(-4));
+    assert!(run.italic, "italic via the rStyle layer");
+    assert_eq!(
+        run.underline.as_deref(),
+        Some("single"),
+        "underline via rStyle"
+    );
+    assert!(run.bold, "bold via the Title2 style");
+    // p1 run 1: rStyle color (00AA00) beats pStyle color (0000FF)
+    assert_eq!(rp(1).runs[1].color.as_deref(), Some("00AA00"));
+
+    // p2: explicit-off wins over Title2's bold
+    let run = &rp(2).runs[0];
+    assert!(!run.bold);
+    assert!(!run.italic);
+
+    // p3: run rFonts ascii wins
+    assert_eq!(rp(3).runs[0].font.as_deref(), Some("Caladea"));
+
+    // p4: break controls survive into the resolved text
+    assert_eq!(
+        rp(4).runs[0].text,
+        "trước tab\tsau tab\nsau xuống dòng\u{c}sau ngắt trang\u{b}sau ngắt cột"
+    );
+
+    // p5: u val="none" collapses; direct ind wins over the style's
+    assert_eq!(rp(5).runs[0].underline, None);
+    let ind = rp(5).ind.as_ref().unwrap();
+    assert_eq!(
+        (ind.left, ind.right, ind.first_line),
+        (Some(1134), Some(567), Some(227))
+    );
+
+    // table grid (resolved table keeps the row structure)
+    let tbl = match &r.body[6] {
+        nanooffice_ooxml::RBlock::Table(t) => t,
+        other => panic!("expected table, got {other:?}"),
+    };
+    assert_eq!(tbl.rows.len(), 1);
+
+    // round-trip: writer emits every V1 construct, model invariant
+    let out = nanooffice_ooxml::write_docx(&doc, None).unwrap();
+    assert_eq!(doc, nanooffice_ooxml::parse_docx(&out).unwrap());
 }
 
 /// Fuzz (mutation, seed cố định, không dep): XML mutations + zip mutations —

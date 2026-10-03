@@ -6,11 +6,12 @@
 
 use serde::Serialize;
 
-use nanooffice_ooxml::Document;
+use nanooffice_ooxml::RenderDoc;
 
-/// Parse-only quick view: read the file, parse it with the A2 crate, hand the
-/// model to the viewer window. Anything else (layout, media serving) is a
-/// later V-slice — this command must stay parse-only (DD §3.1).
+/// Parse-only quick view: read the file, parse it with the A2 crate, resolve
+/// the style chains (V1 — the crate's `resolve` module, DD V01 §3.2) and hand
+/// the RENDER model to the viewer window. Anything else (layout, media
+/// serving) is a later V-slice — this command must stay parse-only (DD §3.1).
 #[tauri::command]
 pub fn viewer_open() -> Result<QuickView, String> {
     let path = std::env::var("NANO_OFFICE_QUICK_VIEW")
@@ -21,18 +22,22 @@ pub fn viewer_open() -> Result<QuickView, String> {
     let bytes = std::fs::read(&path).map_err(|e| format!("viewer: read {path}: {e}"))?;
     let doc =
         nanooffice_ooxml::parse_docx(&bytes).map_err(|e| format!("viewer: parse {path}: {e}"))?;
+    let render = nanooffice_ooxml::resolve(&doc);
     let parse_ms = started.elapsed().as_secs_f64() * 1000.0;
     log::info!(
         "viewer: parsed {path} ({} bytes) in {parse_ms:.1} ms",
         bytes.len()
     );
-    Ok(QuickView { parse_ms, doc })
+    Ok(QuickView {
+        parse_ms,
+        doc: render,
+    })
 }
 
-/// The quick-view payload: parse time + the raw A2 model (slice V0; V1 swaps
-/// in the resolved render model — DD §3.4).
+/// The quick-view payload: parse time + the RESOLVED render model (V1 — the
+/// frontend merges nothing, DD §3.4).
 #[derive(Serialize)]
 pub struct QuickView {
     pub parse_ms: f64,
-    pub doc: Document,
+    pub doc: RenderDoc,
 }

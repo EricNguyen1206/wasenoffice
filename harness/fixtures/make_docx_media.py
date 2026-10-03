@@ -12,10 +12,10 @@ Usage: make_docx_media.py [output.docx]
   (default: src-tauri/crates/nanooffice-ooxml/tests/fixtures/nanooffice-media-fixture.docx —
    the crate tests/fixtures dir is globbed into the parity corpus by parity-a2.sh)
 """
-import struct
 import sys
 import zipfile
-import zlib
+
+from docxgen_common import png
 
 W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
 R = 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
@@ -23,19 +23,6 @@ WP = 'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingD
 A = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
 PIC = 'xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"'
 ROOT = f"{W} {R} {WP} {A} {PIC}"
-
-
-def png(rgb_rows: list[list[tuple[int, int, int]]]) -> bytes:
-    # Truecolor PNG, one filter-0 scanline per row (stdlib: struct + zlib CRC).
-    def chunk(tag: bytes, data: bytes) -> bytes:
-        return struct.pack(">I", len(data)) + tag + data + struct.pack(
-            ">I", zlib.crc32(tag + data)
-        )
-    raw = b"".join(
-        b"\x00" + b"".join(struct.pack("BBB", *px) for px in row) for row in rgb_rows
-    )
-    ihdr = struct.pack(">IIBBBBB", len(rgb_rows[0]), len(rgb_rows), 8, 2, 0, 0, 0)
-    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
 
 
 # Body 2×2 and header 3×1: distinct sizes AND colors — byte comparison in the

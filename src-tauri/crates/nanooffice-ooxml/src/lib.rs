@@ -14,9 +14,11 @@
 
 mod document;
 mod opc;
+pub mod resolve;
 mod styles;
 pub mod write;
 
+pub use resolve::{resolve, RBlock, RCell, RParagraph, RRun, RTable, RenderDoc};
 pub use write::{write_docx, write_docx_file};
 
 use std::collections::BTreeMap;
@@ -41,6 +43,42 @@ pub struct Document {
     /// Numbering resolved per numId → ilvl (§17.9: `w:num` §17.9.16 maps to
     /// `w:abstractNum` §17.9.1 whose `w:lvl` §17.9.7 carries the format).
     pub numbering: BTreeMap<u32, BTreeMap<u32, NumLvl>>,
+    /// `w:docDefaults` (§17.7.5.1) — the document-wide property defaults that
+    /// sit at the BOTTOM of every style chain (§17.7.2); `None` = not declared.
+    pub doc_defaults: Option<DocDefaults>,
+    /// `w:pgSz` (§17.6.11) of the final section (`w:sectPr` §17.6.17 at body
+    /// level); `None` = not declared. Mid-document sections (inside `w:pPr`)
+    /// are out of the model.
+    pub page: Option<Page>,
+}
+
+/// `w:pgSz` (§17.6.11) — page size in twips plus the orientation as written.
+#[derive(Debug, Default, PartialEq, Serialize, Clone)]
+pub struct Page {
+    /// `w:w` — page width, twips.
+    pub w: Option<u32>,
+    /// `w:h` — page height, twips.
+    pub h: Option<u32>,
+    /// `w:orient` ("landscape"/"portrait").
+    pub orient: Option<String>,
+}
+
+/// `w:docDefaults` (§17.7.5.1): `w:rPrDefault` (§17.7.5.3) run defaults plus
+/// `w:pPrDefault` (§17.7.5.2) paragraph defaults — the property subset the
+/// model carries (same fields as a style's rPr/pPr).
+#[derive(Debug, Default, PartialEq, Serialize, Clone)]
+pub struct DocDefaults {
+    pub rfonts: Option<RFonts>,
+    pub color: Option<String>,
+    pub spacing: Option<i32>,
+    pub bold: Option<bool>,
+    pub italic: Option<bool>,
+    pub underline: Option<String>,
+    pub size: Option<u32>,
+    /// From `w:pPrDefault/w:pPr/w:jc` (§17.3.1.13).
+    pub align: Option<String>,
+    /// From `w:pPrDefault/w:pPr/w:ind` (§17.3.1.12).
+    pub ind: Option<Ind>,
 }
 
 /// One block-level element of the body/cell content stream.
@@ -61,6 +99,9 @@ pub struct Paragraph {
     /// `w:numPr` (§17.3.1.19) — the numbering definition this paragraph
     /// references (raw values; resolved formats live in `Document.numbering`).
     pub numbering: Option<NumRef>,
+    /// `w:ind` (§17.3.1.12) — direct paragraph indentation; style-chain
+    /// resolution happens in [`crate::resolve`].
+    pub ind: Option<Ind>,
     pub runs: Vec<Run>,
 }
 
@@ -73,23 +114,68 @@ pub struct NumRef {
 }
 
 /// One `w:r` (§17.3.2.25). Text props are the direct `w:rPr` (§17.3.2.27)
-/// values only — style-chain resolution lives on `StyleDef`.
+/// values only — style-chain resolution lives on `StyleDef` and the render
+/// resolver ([`crate::resolve`]).
 #[derive(Debug, Default, PartialEq, Serialize, Clone)]
 pub struct Run {
-    /// Concatenated `w:t` content (§17.3.3.31); empty when the run carries
-    /// non-text content (an image, a break).
+    /// Text content: concatenated `w:t` (§17.3.3.31) plus the break controls —
+    /// `w:tab` (§17.3.3.34) serializes as `\t`, `w:br` (§17.3.3.3) as `\n`
+    /// (text), `\u{c}` (page) or `\u{b}` (column); those three control chars
+    /// are illegal in XML content, so no `w:t` can collide with them.
     pub text: String,
-    /// `w:b` (§17.3.2.1) with OnOff semantics (§17.3.3 val true/1/on, or
-    /// absent = on; false/0/off = off).
-    pub bold: bool,
-    /// `w:i` (§17.3.2.16), same OnOff semantics.
-    pub italic: bool,
+    /// `w:b` (§17.3.2.1) three-state (§17.3.3 ST_OnOff): `None` = not set
+    /// (inherit the style chain), `Some(true)`/`Some(false)` = set on/off —
+    /// including the explicit `<w:b w:val="false"/>` override.
+    pub bold: Option<bool>,
+    /// `w:i` (§17.3.2.16), same three-state semantics.
+    pub italic: Option<bool>,
     /// `w:u w:val` (§17.3.2.40) — underline style; spec default is "single".
     pub underline: Option<String>,
     /// `w:sz w:val` (§17.3.2.38) — font size in half-points.
     pub size: Option<u32>,
+    /// `w:rStyle w:val` (§17.5.2.3) — the character style referenced by this
+    /// run; resolved through `Document.styles` (§17.7.2 hierarchy: direct rPr
+    /// wins over rStyle, rStyle wins over the paragraph style).
+    pub rstyle: Option<String>,
+    /// `w:rFonts` (§17.3.2.26) — font families per script.
+    pub rfonts: Option<RFonts>,
+    /// `w:color w:val` (§17.3.2.6) — hex RGB or "auto", as written.
+    pub color: Option<String>,
+    /// `w:spacing w:val` (§17.3.2.33) — character spacing in twips, signed
+    /// (expanded > 0, condensed < 0).
+    pub spacing: Option<i32>,
     /// `w:drawing` (§17.3.3.9) images, resolved to relationship targets.
     pub images: Vec<ImageRef>,
+}
+
+/// `w:rFonts` (§17.3.2.26) family attributes. Theme references (`asciiTheme`…)
+/// are not modelled — only literal families (the corpus and the viewer's
+/// bundled-font mapping are literal-name based).
+#[derive(Debug, Default, PartialEq, Serialize, Clone)]
+pub struct RFonts {
+    /// `w:ascii` — characters 0x00–0x7F.
+    pub ascii: Option<String>,
+    /// `w:hAnsi` — "high ANSI" (everything else the other slots don't cover).
+    pub hansi: Option<String>,
+    /// `w:eastAsia` — East Asian script.
+    pub eastasia: Option<String>,
+    /// `w:cs` — complex scripts.
+    pub cs: Option<String>,
+}
+
+/// `w:ind` (§17.3.1.12) paragraph indentation, twips. `first_line` and
+/// `hanging` are mutually exclusive by spec (hanging wins when both appear);
+/// both are kept as written so the round-trip stays lossless.
+#[derive(Debug, Default, PartialEq, Serialize, Clone)]
+pub struct Ind {
+    /// `w:left` — left indent (signed: negative outdents).
+    pub left: Option<i64>,
+    /// `w:right` — right indent.
+    pub right: Option<i64>,
+    /// `w:firstLine` — first-line extra indent.
+    pub first_line: Option<i64>,
+    /// `w:hanging` — first-line OUTdent (removes from `left`).
+    pub hanging: Option<i64>,
 }
 
 /// An embedded image reference: `a:blip r:embed` resolved through the part's
@@ -107,10 +193,13 @@ pub struct ImageRef {
     pub cy_emu: i64,
 }
 
-/// One `w:tbl` (§17.4.38) — rows of cells. Row/cell properties (tblPr,
-/// tblGrid, tcPr) are not modelled in S1.
+/// One `w:tbl` (§17.4.38) — rows of cells plus the column grid. Cell
+/// properties (tblPr, tcPr) are not modelled in S1.
 #[derive(Debug, Default, PartialEq, Serialize, Clone)]
 pub struct Table {
+    /// `w:tblGrid` (§17.4.4) column widths, `w:gridCol w:w` (§17.4.17) in
+    /// twips, in order; `None` = the grid column declares no width (auto).
+    pub grid: Vec<Option<u32>>,
     /// `w:tr` rows (§17.4.79) in order; each row's `w:tc` cells (§17.4.66)
     /// in order.
     pub rows: Vec<Vec<TableCell>>,
@@ -141,9 +230,14 @@ pub struct StyleDef {
     /// attribute, so the writer cannot emit styles.xml without it). S1 only
     /// surfaces paragraph + character styles.
     pub kind: StyleKind,
+    /// `w:default` (§17.7.2.4) — this style is the default of its type: the
+    /// default PARAGRAPH style backs every paragraph without a `w:pStyle`.
+    pub default: bool,
     pub name: Option<String>,
     /// From the style's `w:pPr/w:jc` (§17.7.8.2-style pPr, jc §17.3.1.13).
     pub align: Option<String>,
+    /// From the style's `w:pPr/w:ind` (§17.3.1.12).
+    pub ind: Option<Ind>,
     /// From the style's `w:rPr/w:b` (§17.7.9.1-style rPr, b §17.3.2.1).
     pub bold: Option<bool>,
     /// From the style's `w:rPr/w:i` (i §17.3.2.16).
@@ -152,6 +246,12 @@ pub struct StyleDef {
     pub underline: Option<String>,
     /// From the style's `w:rPr/w:sz` (sz §17.3.2.38), half-points.
     pub size: Option<u32>,
+    /// From the style's `w:rPr/w:rFonts` (§17.3.2.26).
+    pub rfonts: Option<RFonts>,
+    /// From the style's `w:rPr/w:color` (§17.3.2.6).
+    pub color: Option<String>,
+    /// From the style's `w:rPr/w:spacing` (§17.3.2.33), twips.
+    pub spacing: Option<i32>,
 }
 
 /// WordprocessingML style type (§17.7.4.17 @w:type): the two S1-modelled
@@ -239,9 +339,9 @@ pub fn parse_docx(zip_bytes: &[u8]) -> Result<Document, ParseError> {
 
     // Accessory parts resolve through the document part's relationships
     // (Part 2: part-level relationships at `<dir>/_rels/<file>.rels`).
-    let styles = match find_target(&rels, opc::RT_STYLES, &dir)? {
+    let (styles, doc_defaults) = match find_target(&rels, opc::RT_STYLES, &dir)? {
         Some(part) => styles::parse_styles_xml(&utf8(opc::part_bytes(zip_bytes, &part)?, &part)?)?,
-        None => BTreeMap::new(),
+        None => (BTreeMap::new(), None),
     };
     let numbering = match find_target(&rels, opc::RT_NUMBERING, &dir)? {
         Some(part) => {
@@ -268,7 +368,7 @@ pub fn parse_docx(zip_bytes: &[u8]) -> Result<Document, ParseError> {
         let _ = id; // relationship id kept out of the model; order is the contract
     }
 
-    let body = document::parse_body(
+    let (body, page) = document::parse_body(
         &utf8(opc::part_bytes(zip_bytes, &doc_part)?, &doc_part)?,
         &rels,
         &dir,
@@ -279,6 +379,8 @@ pub fn parse_docx(zip_bytes: &[u8]) -> Result<Document, ParseError> {
         footers,
         styles,
         numbering,
+        doc_defaults,
+        page,
     })
 }
 

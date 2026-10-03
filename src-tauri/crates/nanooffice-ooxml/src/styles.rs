@@ -9,9 +9,30 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use quick_xml::events::{BytesStart, Event};
 
-use crate::document::onoff;
+use crate::document::{attr_i32, onoff, parse_ind, parse_rfonts};
 use crate::opc::attr;
-use crate::{xml_err, NumLvl, ParseError, StyleDef, StyleKind};
+use crate::{xml_err, DocDefaults, Ind, NumLvl, ParseError, RFonts, StyleDef, StyleKind};
+
+/// Run properties shared by a style's `w:rPr` (§17.7.9.1) and
+/// `w:docDefaults/w:rPrDefault/w:rPr` (§17.7.5.3) — same subset, one parser.
+#[derive(Debug, Default)]
+struct RawProps {
+    bold: Option<bool>,
+    italic: Option<bool>,
+    underline: Option<String>,
+    size: Option<u32>,
+    rfonts: Option<RFonts>,
+    color: Option<String>,
+    spacing: Option<i32>,
+}
+
+/// Paragraph properties shared by a style's `w:pPr` (§17.7.8.2) and
+/// `w:docDefaults/w:pPrDefault/w:pPr` (§17.7.5.2).
+#[derive(Debug, Default)]
+struct RawPPr {
+    align: Option<String>,
+    ind: Option<Ind>,
+}
 
 /// Raw style as written in styles.xml, before chain resolution.
 #[derive(Debug, Default)]
@@ -19,20 +40,23 @@ struct RawStyle {
     kind: StyleKind,
     name: Option<String>,
     based_on: Option<String>,
-    align: Option<String>,
-    bold: Option<bool>,
-    italic: Option<bool>,
-    underline: Option<String>,
-    size: Option<u32>,
+    /// `w:default` (§17.7.2.4) — default style of its type.
+    default: bool,
+    props: RawProps,
+    ppr: RawPPr,
 }
 
-/// Parse styles.xml: `w:style` (§17.7.4.17) entries keyed by styleId. Only
-/// paragraph + character styles are modelled (S1 surface); other style types
-/// (table, numbering) are skipped as out-of-scope rather than half-modelled.
-pub fn parse_styles_xml(xml: &str) -> Result<BTreeMap<String, StyleDef>, ParseError> {
+/// Parse styles.xml: `w:style` (§17.7.4.17) entries keyed by styleId plus the
+/// `w:docDefaults` (§17.7.5.1) block. Only paragraph + character styles are
+/// modelled (S1 surface); other style types (table, numbering) are skipped as
+/// out-of-scope rather than half-modelled.
+pub fn parse_styles_xml(
+    xml: &str,
+) -> Result<(BTreeMap<String, StyleDef>, Option<DocDefaults>), ParseError> {
     let mut reader = quick_xml::Reader::from_str(xml);
     let mut buf = Vec::new();
     let mut raw: BTreeMap<String, RawStyle> = BTreeMap::new();
+    let mut doc_defaults: Option<DocDefaults> = None;
     let mut saw_root = false;
     loop {
         buf.clear();
@@ -42,6 +66,8 @@ pub fn parse_styles_xml(xml: &str) -> Result<BTreeMap<String, StyleDef>, ParseEr
                     saw_root = true;
                 } else if e.name().as_ref() == b"w:style" && saw_root {
                     parse_style(&mut reader, e, &mut raw)?;
+                } else if e.name().as_ref() == b"w:docDefaults" && saw_root {
+                    doc_defaults = Some(parse_doc_defaults(&mut reader)?);
                 } else {
                     skip(&mut reader)?;
                 }
@@ -65,11 +91,104 @@ pub fn parse_styles_xml(xml: &str) -> Result<BTreeMap<String, StyleDef>, ParseEr
         let mut path = BTreeSet::new();
         resolved.insert(id.clone(), resolve_style(&id, &raw, &mut path)?);
     }
-    Ok(resolved)
+    Ok((resolved, doc_defaults))
 }
 
-/// One `w:style` (§17.7.4.17): name (§17.7.4.9), basedOn (§17.7.4.3), and
-/// the pPr/rPr subset S1 models. Non-paragraph/character types are skipped.
+/// `w:docDefaults` (§17.7.5.1): optional `w:rPrDefault/w:rPr` (§17.7.5.3) and
+/// `w:pPrDefault/w:pPr` (§17.7.5.2) — the same property subsets a style
+/// carries, parsed by the same functions.
+fn parse_doc_defaults(reader: &mut quick_xml::Reader<&[u8]>) -> Result<DocDefaults, ParseError> {
+    let mut props = RawProps::default();
+    let mut ppr = RawPPr::default();
+    let mut buf = Vec::new();
+    loop {
+        buf.clear();
+        match reader.read_event_into(&mut buf).map_err(xml_err)? {
+            Event::Start(e) => match e.name().as_ref() {
+                b"w:rPrDefault" => parse_rpr_default(reader, &mut props)?,
+                b"w:pPrDefault" => parse_ppr_default(reader, &mut ppr)?,
+                _ => skip(reader)?,
+            },
+            Event::End(e) if e.name().as_ref() == b"w:docDefaults" => {
+                return Ok(DocDefaults {
+                    bold: props.bold,
+                    italic: props.italic,
+                    underline: props.underline,
+                    size: props.size,
+                    rfonts: props.rfonts,
+                    color: props.color,
+                    spacing: props.spacing,
+                    align: ppr.align,
+                    ind: ppr.ind,
+                })
+            }
+            Event::Eof => {
+                return Err(ParseError(
+                    "unexpected end of XML inside w:docDefaults".into(),
+                ))
+            }
+            _ => {}
+        }
+    }
+}
+
+/// `w:rPrDefault` (§17.7.5.3) → its single `w:rPr` child.
+fn parse_rpr_default(
+    reader: &mut quick_xml::Reader<&[u8]>,
+    props: &mut RawProps,
+) -> Result<(), ParseError> {
+    let mut buf = Vec::new();
+    loop {
+        buf.clear();
+        match reader.read_event_into(&mut buf).map_err(xml_err)? {
+            Event::Start(e) => {
+                if e.name().as_ref() == b"w:rPr" {
+                    parse_props_rpr(reader, props)?;
+                } else {
+                    skip(reader)?;
+                }
+            }
+            Event::End(e) if e.name().as_ref() == b"w:rPrDefault" => return Ok(()),
+            Event::Eof => {
+                return Err(ParseError(
+                    "unexpected end of XML inside w:rPrDefault".into(),
+                ))
+            }
+            _ => {}
+        }
+    }
+}
+
+/// `w:pPrDefault` (§17.7.5.2) → its single `w:pPr` child.
+fn parse_ppr_default(
+    reader: &mut quick_xml::Reader<&[u8]>,
+    ppr: &mut RawPPr,
+) -> Result<(), ParseError> {
+    let mut buf = Vec::new();
+    loop {
+        buf.clear();
+        match reader.read_event_into(&mut buf).map_err(xml_err)? {
+            Event::Start(e) => {
+                if e.name().as_ref() == b"w:pPr" {
+                    parse_props_ppr(reader, ppr)?;
+                } else {
+                    skip(reader)?;
+                }
+            }
+            Event::End(e) if e.name().as_ref() == b"w:pPrDefault" => return Ok(()),
+            Event::Eof => {
+                return Err(ParseError(
+                    "unexpected end of XML inside w:pPrDefault".into(),
+                ))
+            }
+            _ => {}
+        }
+    }
+}
+
+/// One `w:style` (§17.7.4.17): name (§17.7.4.9), basedOn (§17.7.4.3),
+/// `w:default` (§17.7.2.4), and the pPr/rPr subset the model carries.
+/// Non-paragraph/character types are skipped.
 fn parse_style(
     reader: &mut quick_xml::Reader<&[u8]>,
     open: BytesStart<'_>,
@@ -84,8 +203,21 @@ fn parse_style(
     };
     let id =
         attr(&open, b"w:styleId")?.ok_or_else(|| ParseError("w:style missing w:styleId".into()))?;
+    // `w:default` (§17.7.2.4) is an ATTRIBUTE here, not an OnOff element: an
+    // absent attribute means false (unlike `<w:b/>`, where an absent w:val
+    // means on).
+    let default = match attr(&open, b"w:default")?.as_deref() {
+        None | Some("false") | Some("0") | Some("off") => false,
+        Some("true") | Some("1") | Some("on") => true,
+        Some(other) => {
+            return Err(ParseError(format!(
+                "w:default={other:?} is not an OnOff value"
+            )))
+        }
+    };
     let mut style = RawStyle {
         kind,
+        default,
         ..Default::default()
     };
     let mut buf = Vec::new();
@@ -93,21 +225,13 @@ fn parse_style(
         buf.clear();
         match reader.read_event_into(&mut buf).map_err(xml_err)? {
             Event::Start(e) => match e.name().as_ref() {
-                b"w:pPr" => parse_style_ppr(reader, &mut style)?,
-                b"w:rPr" => parse_style_rpr(reader, &mut style)?,
+                b"w:pPr" => parse_props_ppr(reader, &mut style.ppr)?,
+                b"w:rPr" => parse_props_rpr(reader, &mut style.props)?,
                 _ => skip(reader)?,
             },
             Event::Empty(e) => match e.name().as_ref() {
                 b"w:name" => style.name = attr(&e, b"w:val")?,
                 b"w:basedOn" => style.based_on = attr(&e, b"w:val")?,
-                b"w:jc" => style.align = attr(&e, b"w:val")?,
-                b"w:b" => style.bold = Some(onoff(&e)?),
-                b"w:i" => style.italic = Some(onoff(&e)?),
-                b"w:u" => {
-                    style.underline =
-                        Some(attr(&e, b"w:val")?.unwrap_or_else(|| "single".to_string()))
-                }
-                b"w:sz" => style.size = Some(attr_u32(&e, b"w:val")?),
                 _ => {}
             },
             Event::End(e) if e.name().as_ref() == b"w:style" => break,
@@ -119,22 +243,26 @@ fn parse_style(
     Ok(())
 }
 
-/// Style-level `w:pPr` (§17.7.8.2): S1 reads only `w:jc` (§17.3.1.13).
-fn parse_style_ppr(
+/// Style-level and docDefaults-level `w:pPr`: jc (§17.3.1.13) + ind
+/// (§17.3.1.12).
+fn parse_props_ppr(
     reader: &mut quick_xml::Reader<&[u8]>,
-    style: &mut RawStyle,
+    ppr: &mut RawPPr,
 ) -> Result<(), ParseError> {
     let mut buf = Vec::new();
     loop {
         buf.clear();
         match reader.read_event_into(&mut buf).map_err(xml_err)? {
             Event::Start(e) => match e.name().as_ref() {
-                b"w:jc" => style.align = attr(&e, b"w:val")?,
+                b"w:jc" => ppr.align = attr(&e, b"w:val")?,
+                b"w:ind" => ppr.ind = Some(parse_ind(&e)?),
                 _ => skip(reader)?,
             },
-            Event::Empty(e) if e.name().as_ref() == b"w:jc" => {
-                style.align = attr(&e, b"w:val")?;
-            }
+            Event::Empty(e) => match e.name().as_ref() {
+                b"w:jc" => ppr.align = attr(&e, b"w:val")?,
+                b"w:ind" => ppr.ind = Some(parse_ind(&e)?),
+                _ => {}
+            },
             Event::End(e) if e.name().as_ref() == b"w:pPr" => return Ok(()),
             Event::Eof => return Err(ParseError("unexpected end of XML inside style pPr".into())),
             _ => {}
@@ -142,33 +270,27 @@ fn parse_style_ppr(
     }
 }
 
-/// Style-level `w:rPr` (§17.7.9.1): S1 reads b/i/u/sz.
-fn parse_style_rpr(
+/// Style-level and docDefaults-level `w:rPr`: rStyle-less subset — b/i/u/sz,
+/// rFonts (§17.3.2.26), color (§17.3.2.6), spacing (§17.3.2.33).
+fn parse_props_rpr(
     reader: &mut quick_xml::Reader<&[u8]>,
-    style: &mut RawStyle,
+    props: &mut RawProps,
 ) -> Result<(), ParseError> {
     let mut buf = Vec::new();
     loop {
         buf.clear();
         match reader.read_event_into(&mut buf).map_err(xml_err)? {
-            Event::Start(e) => match e.name().as_ref() {
-                b"w:b" => style.bold = Some(onoff(&e)?),
-                b"w:i" => style.italic = Some(onoff(&e)?),
+            Event::Start(e) | Event::Empty(e) => match e.name().as_ref() {
+                b"w:b" => props.bold = Some(onoff(&e)?),
+                b"w:i" => props.italic = Some(onoff(&e)?),
                 b"w:u" => {
-                    style.underline =
+                    props.underline =
                         Some(attr(&e, b"w:val")?.unwrap_or_else(|| "single".to_string()))
                 }
-                b"w:sz" => style.size = Some(attr_u32(&e, b"w:val")?),
-                _ => skip(reader)?,
-            },
-            Event::Empty(e) => match e.name().as_ref() {
-                b"w:b" => style.bold = Some(onoff(&e)?),
-                b"w:i" => style.italic = Some(onoff(&e)?),
-                b"w:u" => {
-                    style.underline =
-                        Some(attr(&e, b"w:val")?.unwrap_or_else(|| "single".to_string()))
-                }
-                b"w:sz" => style.size = Some(attr_u32(&e, b"w:val")?),
+                b"w:sz" => props.size = Some(attr_u32(&e, b"w:val")?),
+                b"w:rFonts" => props.rfonts = Some(parse_rfonts(&e)?),
+                b"w:color" => props.color = attr(&e, b"w:val")?,
+                b"w:spacing" => props.spacing = Some(attr_i32(&e, b"w:val")?),
                 _ => {}
             },
             Event::End(e) if e.name().as_ref() == b"w:rPr" => return Ok(()),
@@ -198,21 +320,46 @@ fn resolve_style(
     path.remove(id);
     Ok(StyleDef {
         kind: style.kind, // the type is identity, not an inherited property
+        default: style.default,
         name: style
             .name
             .clone()
             .or(parent.as_ref().and_then(|p| p.name.clone())),
         align: style
+            .ppr
             .align
             .clone()
             .or(parent.as_ref().and_then(|p| p.align.clone())),
-        bold: style.bold.or(parent.as_ref().and_then(|p| p.bold)),
-        italic: style.italic.or(parent.as_ref().and_then(|p| p.italic)),
+        ind: style
+            .ppr
+            .ind
+            .clone()
+            .or(parent.as_ref().and_then(|p| p.ind.clone())),
+        bold: style.props.bold.or(parent.as_ref().and_then(|p| p.bold)),
+        italic: style
+            .props
+            .italic
+            .or(parent.as_ref().and_then(|p| p.italic)),
         underline: style
+            .props
             .underline
             .clone()
             .or(parent.as_ref().and_then(|p| p.underline.clone())),
-        size: style.size.or(parent.as_ref().and_then(|p| p.size)),
+        size: style.props.size.or(parent.as_ref().and_then(|p| p.size)),
+        rfonts: style
+            .props
+            .rfonts
+            .clone()
+            .or(parent.as_ref().and_then(|p| p.rfonts.clone())),
+        color: style
+            .props
+            .color
+            .clone()
+            .or(parent.as_ref().and_then(|p| p.color.clone())),
+        spacing: style
+            .props
+            .spacing
+            .or(parent.as_ref().and_then(|p| p.spacing)),
     })
 }
 

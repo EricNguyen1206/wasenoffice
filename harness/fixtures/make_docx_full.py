@@ -10,10 +10,10 @@ table 2x2, numbering (decimal + lowerLetter + bullet), embedded 1x1 PNG via
 wp:/a:/pic: with relationship, styles.xml basedOn chain (Heading1 -> Normal,
 run bold=false override), header + footer, Vietnamese diacritics.
 """
-import struct
 import sys
 import zipfile
-import zlib
+
+from docxgen_common import png_1x1
 
 W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
 R = 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
@@ -21,17 +21,6 @@ WP = 'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingD
 A = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
 PIC = 'xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"'
 ROOT = f"{W} {R} {WP} {A} {PIC}"
-
-
-def png_1x1() -> bytes:
-    # Minimal 1x1 truecolor PNG: one red pixel (stdlib: struct + zlib CRC).
-    def chunk(tag: bytes, data: bytes) -> bytes:
-        return struct.pack(">I", len(data)) + tag + data + struct.pack(
-            ">I", zlib.crc32(tag + data)
-        )
-    ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0)
-    idat = zlib.compress(b"\x00\xff\x00\x00")  # filter byte + RGB(255,0,0)
-    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", idat) + chunk(b"IEND", b"")
 
 
 CONTENT_TYPES = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -187,7 +176,7 @@ def main():
         z.writestr("word/numbering.xml", NUMBERING)
         z.writestr("word/header1.xml", HEADER1)
         z.writestr("word/footer1.xml", FOOTER1)
-        z.writestr("word/media/image1.png", png_1x1())
+        z.writestr("word/media/image1.png", png_1x1(255, 0, 0))
         z.writestr("word/document.xml", document_xml())
     print(out)
 

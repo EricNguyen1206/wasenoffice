@@ -489,6 +489,8 @@ mod tests {
             footers: vec![],
             styles: Default::default(),
             numbering: Default::default(),
+            doc_defaults: None,
+            page: None,
         };
         let docx = dir.join("t24.docx");
         nanooffice_ooxml::write_docx_file(&doc, None, &docx).unwrap();

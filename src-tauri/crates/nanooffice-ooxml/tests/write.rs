@@ -130,12 +130,13 @@ fn write_edge_xml_special_and_vietnamese() {
                 style: Some("Head <ing> & \"style\"".to_string()),
                 align: Some("both".to_string()),
                 numbering: Some(NumRef { num_id: 7, ilvl: 3 }),
+                ind: None,
                 runs: vec![
                     Run {
                         text: "a & b <c> \"d\" 'e' — Tiếng Việt có dấu: ẽnghệ ộ lại là là"
                             .to_string(),
-                        bold: true,
-                        italic: true,
+                        bold: Some(true),
+                        italic: Some(true),
                         underline: Some("single".to_string()),
                         size: Some(28),
                         ..Default::default()
@@ -147,6 +148,7 @@ fn write_edge_xml_special_and_vietnamese() {
                 ],
             }),
             Block::Table(Table {
+                grid: Vec::new(),
                 rows: vec![vec![
                     TableCell {
                         blocks: vec![Block::Paragraph(Paragraph {
@@ -172,6 +174,8 @@ fn write_edge_xml_special_and_vietnamese() {
             })],
         }],
         footers: vec![],
+        doc_defaults: None,
+        page: None,
         styles,
         numbering,
     };
@@ -224,13 +228,15 @@ fn fuzz_write_reparse_never_panics_and_preserves_model() {
                 style: Some("H1".to_string()),
                 align: Some("center".to_string()),
                 numbering: Some(NumRef { num_id: 1, ilvl: 0 }),
+                ind: None,
                 runs: vec![Run {
                     text: "Tiếng Việt & <junk> “smart” — base".to_string(),
-                    bold: true,
+                    bold: Some(true),
                     ..Default::default()
                 }],
             }),
             Block::Table(Table {
+                grid: Vec::new(),
                 rows: vec![vec![TableCell {
                     blocks: vec![Block::Paragraph(Paragraph {
                         runs: vec![Run {
@@ -265,6 +271,8 @@ fn fuzz_write_reparse_never_panics_and_preserves_model() {
             })],
         }],
         footers: vec![],
+        doc_defaults: None,
+        page: None,
         styles: BTreeMap::from([(
             "Normal".to_string(),
             StyleDef {
@@ -383,6 +391,8 @@ fn empty_model() -> Document {
         footers: vec![],
         styles: BTreeMap::new(),
         numbering: BTreeMap::new(),
+        doc_defaults: None,
+        page: None,
     }
 }
 
