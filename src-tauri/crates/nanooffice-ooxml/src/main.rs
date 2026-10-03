@@ -10,7 +10,14 @@ fn main() -> ExitCode {
         return ExitCode::from(2);
     };
     let out_path = std::env::args().nth(2);
-    match nanooffice_ooxml::parse_docx_file(&path) {
+    let bytes = match std::fs::read(&path) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("error: read {path}: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    match nanooffice_ooxml::parse_docx(&bytes) {
         Ok(doc) => match out_path {
             None => {
                 println!(
@@ -19,7 +26,9 @@ fn main() -> ExitCode {
                 );
                 ExitCode::SUCCESS
             }
-            Some(out) => match nanooffice_ooxml::write_docx_file(&doc, &out) {
+            // round-trip face passes the source back in: media parts must
+            // survive byte-exact (T-A26)
+            Some(out) => match nanooffice_ooxml::write_docx_file(&doc, Some(&bytes), &out) {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(e) => {
                     eprintln!("error: {e}");

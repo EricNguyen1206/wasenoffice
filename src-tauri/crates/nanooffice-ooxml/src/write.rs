@@ -19,8 +19,10 @@
 //! self-consistent by construction). Relationship ids for images come from
 //! the model (`r:embed` must re-resolve identically or the round-trip breaks);
 //! ids for header/footer references are allocated fresh. Image bytes are not
-//! in the model (S1 is relationship-only), so media parts carry a 1×1 PNG
-//! placeholder — the relationship, part and content type are real OPC data.
+//! in the model — the writer copies each referenced media part byte-exact
+//! from the source package the caller passes (T-A26), falling back to a 1×1
+//! PNG placeholder only when no source is given or the part is missing from
+//! it; the relationship, part and content type are real OPC data either way.
 //! `Run.bold/italic` are the S1 two-state bools: `false` serializes as
 //! absent (the property's default), so an explicit-off override of a bold
 //! style loses its intent in the file — that is a model limitation, not a
@@ -61,8 +63,12 @@ fn esc(s: &str) -> std::borrow::Cow<'_, str> {
     escape(s)
 }
 
-/// Serialize a whole `Document` into a .docx zip container.
-pub fn write_docx(doc: &Document) -> Result<Vec<u8>, WriteError> {
+/// Serialize a whole `Document` into a .docx zip container. `media_src` is
+/// the package the model was parsed from (when there is one): every media
+/// part the model references is copied from it byte-exact (T-A26 — the
+/// placeholder swap was lossy on real files). `None` or a missing part falls
+/// back to the placeholder (synthetic models, tests).
+pub fn write_docx(doc: &Document, media_src: Option<&[u8]>) -> Result<Vec<u8>, WriteError> {
     // The package: every part as (package path, bytes). Content types and
     // relationships are derived from the same data, so the package cannot
     // drift out of OPC conformance.
@@ -150,7 +156,10 @@ pub fn write_docx(doc: &Document) -> Result<Vec<u8>, WriteError> {
         }
     }
     for part in &media_parts {
-        parts.push((part.clone(), placeholder_png()));
+        let bytes = media_src
+            .and_then(|src| opc::try_part_bytes(src, part))
+            .unwrap_or_else(placeholder_png);
+        parts.push((part.clone(), bytes));
     }
 
     for (rel_id, part) in &doc_part.images {
@@ -224,12 +233,14 @@ pub fn write_docx(doc: &Document) -> Result<Vec<u8>, WriteError> {
         .into_inner())
 }
 
-/// Write a `Document` to a file path.
+/// Write a `Document` to a file path (media copied from `media_src`, see
+/// [`write_docx`]).
 pub fn write_docx_file(
     doc: &Document,
+    media_src: Option<&[u8]>,
     path: impl AsRef<std::path::Path>,
 ) -> Result<(), WriteError> {
-    let bytes = write_docx(doc)?;
+    let bytes = write_docx(doc, media_src)?;
     std::fs::write(path, bytes).map_err(|e| WriteError(format!("write file: {e}")))
 }
 
@@ -613,9 +624,10 @@ fn alloc_rel_id(used: &mut BTreeSet<String>) -> String {
     }
 }
 
-/// A valid 1×1 white PNG, std-only (RFC 2083), for media parts. The model
-/// carries image relationships only — the relationship, part and content
-/// type are real; the pixels are the smallest valid stand-in.
+/// A valid 1×1 white PNG, std-only (RFC 2083) — the FALLBACK media payload
+/// when the caller passes no source package (or the part is missing from it):
+/// the relationship, part and content type are real; the pixels are the
+/// smallest valid stand-in.
 fn placeholder_png() -> Vec<u8> {
     fn crc32(data: &[u8]) -> u32 {
         let mut crc = 0xFFFF_FFFFu32;

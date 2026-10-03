@@ -245,10 +245,17 @@ fn rust_canonical(src: &Path, dst: &Path) -> Option<PathBuf> {
     }
     let canonical = dst.with_file_name("canonical.docx");
     let started = Instant::now();
-    let outcome = nanooffice_ooxml::parse_docx_file(src)
-        .map_err(|e| e.to_string())
-        .and_then(|doc| {
-            nanooffice_ooxml::write_docx_file(&doc, &canonical).map_err(|e| e.to_string())
+    let outcome = std::fs::read(src)
+        .map_err(|e| format!("read: {e}"))
+        .and_then(|bytes| {
+            nanooffice_ooxml::parse_docx(&bytes)
+                .map_err(|e| e.to_string())
+                .and_then(|doc| {
+                    // source bytes go back in: media parts must survive the
+                    // canonical re-serialize byte-exact (T-A26)
+                    nanooffice_ooxml::write_docx_file(&doc, Some(&bytes), &canonical)
+                        .map_err(|e| e.to_string())
+                })
         });
     match outcome {
         Ok(()) => {
@@ -484,7 +491,7 @@ mod tests {
             numbering: Default::default(),
         };
         let docx = dir.join("t24.docx");
-        nanooffice_ooxml::write_docx_file(&doc, &docx).unwrap();
+        nanooffice_ooxml::write_docx_file(&doc, None, &docx).unwrap();
         let dst2 = dir.join("Editor2.bin");
         let canonical = dir.join("canonical.docx");
         convert(&ConvertRequest::OpenBinary {
@@ -519,7 +526,7 @@ mod tests {
 
         // (f) kill switch NANO_OFFICE_NO_RUST_CONVERTER → direct path, no
         // canonical copy even for a file the crate would accept
-        nanooffice_ooxml::write_docx_file(&doc, &docx).unwrap();
+        nanooffice_ooxml::write_docx_file(&doc, None, &docx).unwrap();
         let saved_switch = std::env::var("NANO_OFFICE_NO_RUST_CONVERTER").ok();
         std::env::set_var("NANO_OFFICE_NO_RUST_CONVERTER", "1");
         convert(&ConvertRequest::OpenBinary {

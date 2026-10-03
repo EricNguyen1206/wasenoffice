@@ -15,13 +15,18 @@ const FULL_FIXTURE: &str = concat!(
     "/tests/fixtures/nanooffice-full-fixture.docx"
 );
 
+const MEDIA_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/tests/fixtures/nanooffice-media-fixture.docx"
+);
+
 /// Điều kiện XONG (1) của DD §4: `parse → write → parse` trên corpus 10
 /// parts — model bất biến 100% (table/list/image/hdr-ftr refs + tiếng Việt).
 /// Package shape cũng được kiểm: đúng phần OPC chuẩn, media part là PNG.
 #[test]
 fn round_trip_full_corpus_model_invariant() {
     let doc1 = nanooffice_ooxml::parse_docx_file(FULL_FIXTURE).unwrap();
-    let bytes = write_docx(&doc1).unwrap();
+    let bytes = write_docx(&doc1, None).unwrap();
     let doc2 = nanooffice_ooxml::parse_docx(&bytes).unwrap();
     assert_eq!(doc1, doc2);
 
@@ -45,6 +50,51 @@ fn round_trip_full_corpus_model_invariant() {
         "placeholder png size {}",
         png.size()
     );
+}
+
+/// T-A26: media part bytes của package nguồn phải sang qua canonical NGUYÊN
+/// VẸN — so BYTES từng part (body lẫn header), không phải kích thước; model
+/// bất biến qua round-trip có nguồn. Khi không có nguồn (`None`) writer rơi
+/// về placeholder 1×1 (path fallback cho model synthetic) — bytes khác gốc.
+#[test]
+fn media_bytes_copied_byte_exact_from_source_package() {
+    let src = std::fs::read(MEDIA_FIXTURE).unwrap();
+    let doc = nanooffice_ooxml::parse_docx(&src).unwrap();
+    let original = media_parts(&src);
+    assert_eq!(original.len(), 2, "fixture: body + header media");
+
+    let bytes = write_docx(&doc, Some(&src)).unwrap();
+    assert_eq!(
+        doc,
+        nanooffice_ooxml::parse_docx(&bytes).unwrap(),
+        "model invariant through the round-trip with a source"
+    );
+    assert_eq!(
+        media_parts(&bytes),
+        original,
+        "media bytes changed through canonical"
+    );
+
+    assert_ne!(
+        media_parts(&write_docx(&doc, None).unwrap()),
+        original,
+        "None must fall back to the placeholder"
+    );
+}
+
+/// Every `word/media/*` part of a package, name → bytes.
+fn media_parts(zip_bytes: &[u8]) -> BTreeMap<String, Vec<u8>> {
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(zip_bytes)).unwrap();
+    let mut out = BTreeMap::new();
+    for i in 0..zip.len() {
+        let mut f = zip.by_index(i).unwrap();
+        if f.name().starts_with("word/media/") {
+            let mut bytes = Vec::new();
+            f.read_to_end(&mut bytes).unwrap();
+            out.insert(f.name().to_string(), bytes);
+        }
+    }
+    out
 }
 
 /// Trust boundary phía write: ký tự XML đặc biệt + tiếng Việt + whitespace
@@ -126,7 +176,7 @@ fn write_edge_xml_special_and_vietnamese() {
         numbering,
     };
 
-    let bytes = write_docx(&doc).unwrap();
+    let bytes = write_docx(&doc, None).unwrap();
     let doc2 = nanooffice_ooxml::parse_docx(&bytes).unwrap();
     assert_eq!(doc, doc2);
 
@@ -160,7 +210,7 @@ fn write_edge_xml_special_and_vietnamese() {
         })],
         ..empty_model()
     };
-    let err = write_docx(&bad).unwrap_err();
+    let err = write_docx(&bad, None).unwrap_err();
     assert!(err.0.contains("webp"), "unexpected: {err:?}");
 }
 
@@ -235,7 +285,7 @@ fn fuzz_write_reparse_never_panics_and_preserves_model() {
             )]),
         )]),
     };
-    let bytes = write_docx(&base).unwrap();
+    let bytes = write_docx(&base, None).unwrap();
     assert_eq!(nanooffice_ooxml::parse_docx(&bytes).unwrap(), base);
 
     const JUNK: &[char] = &[
@@ -306,7 +356,7 @@ fn fuzz_write_reparse_never_panics_and_preserves_model() {
             }
         }
         let bytes =
-            write_docx(&m).unwrap_or_else(|e| panic!("fuzz round {i}: write failed: {e:?}"));
+            write_docx(&m, None).unwrap_or_else(|e| panic!("fuzz round {i}: write failed: {e:?}"));
         let back = nanooffice_ooxml::parse_docx(&bytes)
             .unwrap_or_else(|e| panic!("fuzz round {i}: reparse failed: {e:?}"));
         assert_eq!(

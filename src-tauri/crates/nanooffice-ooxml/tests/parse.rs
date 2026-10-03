@@ -400,7 +400,7 @@ fn alternate_content_choice_surfaces_image() {
     assert_eq!((img.cx_emu, img.cy_emu), (9525, 19050));
 
     // round-trip: writer ghi plain w:drawing, re-parse vẫn đủ image
-    let out = nanooffice_ooxml::write_docx(&doc).unwrap();
+    let out = nanooffice_ooxml::write_docx(&doc, None).unwrap();
     let reparsed = nanooffice_ooxml::parse_docx(&out).unwrap();
     assert_eq!(doc, reparsed, "round-trip bất biến qua AlternateContent");
 }

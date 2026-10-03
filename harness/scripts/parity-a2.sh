@@ -17,6 +17,11 @@
 #       PARITY     m-crate vs m-x2t   — the parity measurement; every diff must
 #                                       be classified (bug crate / limitation /
 #                                       harmless x2t) in DD §5 + diagnostics.
+#   (d) media byte-exactness (T-A26): every media part the model references
+#       must survive the crate round-trip byte-identical — the CLI round-trip
+#       face passes the source package back in, so a placeholder swap or any
+#       re-encode is a regression. The x2t side is the oracle's own
+#       serialization and is not gated here.
 #
 # Corpus: crate fixtures (tests/fixtures/*.docx) + harness/fixtures/corpus-a2
 # (NOTES.md carries the per-file expected-model notes). Fuzz stays in the crate
@@ -50,6 +55,18 @@ WORK="$(mktemp -d /tmp/nanooffice-parity-a2-XXXXXX)"
 FORMAT_TO_DOCX=65   # src-tauri/src/formats.rs — docx save code (65 = Wired)
 
 row() { printf '%-34s %-9s %-10s %s\n' "$1" "$2" "$3" "$4"; }
+
+# sha256 of one part of a docx (python3 stdlib — no unzip/jq dependency);
+# prints MISSING when the part is absent.
+part_sha() {
+  python3 - "$1" "$2" <<'EOF'
+import hashlib, sys, zipfile
+try:
+    print(hashlib.sha256(zipfile.ZipFile(sys.argv[1]).read(sys.argv[2])).hexdigest())
+except KeyError:
+    print("MISSING")
+EOF
+}
 row "file" "parse" "invariant" "parity-diff (crate-rt vs x2t-rt)"
 FAILS=0
 PARITY_CLEAN=0
@@ -98,6 +115,18 @@ for f in "${CORPUS[@]}"; do
   else
     INV="BROKEN"; FAILS=$((FAILS + 1))
     diff "$dir/m-orig.json" "$dir/m-crate.json" > "$dir/INVARIANT.diff"
+  fi
+
+  # (d) media byte-exactness through the crate round-trip (T-A26): the parts
+  # the model references are exactly the word/media/* names in the model JSON
+  changed=""
+  for p in $(grep -o 'word/media/[A-Za-z0-9._-]*' "$dir/m-orig.json" | sort -u); do
+    [ "$(part_sha "$f" "$p")" = "$(part_sha "$dir/crate-rt.docx" "$p")" ] \
+      || changed="$changed $p"
+  done
+  if [ -n "$changed" ]; then
+    row "$name" "media FAIL" "$INV" "bytes changed:$changed"
+    FAILS=$((FAILS + 1))
   fi
 
   # PARITY: crate round-trip model vs x2t round-trip model
