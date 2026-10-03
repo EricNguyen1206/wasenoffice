@@ -3,26 +3,25 @@
  * side of the A3 viewer surface: the SAME pure layout module
  * (`src/viewer/layout.ts`, consumed VERBATIM — never forked), plus a caret
  * drawn from the hit-test coordinate system and a command-layer edit loop.
- * The `Document` model lives Rust-side in window-scoped sessions; every
+ * The canvas/media/evidence machinery lives in `src/viewer/render.ts`
+ * (shared with the viewer since T-060 C1); this entry owns the session
+ * state, the edit commands, the caret overlay and the save button. The
+ * `Document` model lives Rust-side in window-scoped sessions; every
  * mutation re-resolves server-side and returns a fresh render model to
  * redraw. Typing is plain `keydown` (no synthetic keystrokes anywhere —
  * rule 6b); the gate-15 probe (NANO_OFFICE_NL_PROBE) drives the SAME edit()
  * the keydown handler uses. No engine shim is loaded on this page.
  */
 import {
-  caretXY,
-  hitTest,
-  layoutBlocks,
-  MARGIN,
-  PT_PX,
-  runFont,
-  twip,
-  type Block,
-  type FontMetrics,
-  type LineModel,
-  type Measurer,
-  type Run,
-} from './viewer/layout';
+  canvasMeasurer,
+  columnWidth,
+  drawModel,
+  loadMedia,
+  mediaInk,
+  resizeRelayout,
+  toEvidence,
+} from './viewer/render';
+import { caretXY, hitTest, layoutBlocks, MARGIN, type Block, type FontMetrics, type LineModel } from './viewer/layout';
 
 interface Caret {
   para: number;
@@ -62,43 +61,6 @@ type EditCmd =
 
 const { invoke } = (window as unknown as { __TAURI__: { core: { invoke: <T>(cmd: string, args?: unknown) => Promise<T> } } }).__TAURI__.core;
 
-// V5 scroll ceiling inherited: WebKit caps canvas at 16384 device px (8192
-// logical @dpr2). Pagination is post-A3 work.
-const MAX_CANVAS_H = 8192;
-
-/** Image OPC parts in document order (deduped) — same walk as the shell's. */
-function imageParts(blocks: Block[], out: Set<string>): void {
-  for (const block of blocks) {
-    if ('Paragraph' in block) {
-      for (const r of block.Paragraph.runs) {
-        for (const img of r.images) out.add(img.part);
-      }
-    } else {
-      for (const row of block.Table.rows) {
-        for (const cell of row) imageParts(cell.blocks, out);
-      }
-    }
-  }
-}
-
-/** Fetch every image part once (loopback filesrv, keyed by fileId — no disk
- * paths in URLs). Failures log and leave the part absent. */
-async function loadMedia(blocks: Block[], base: string, bitmaps: Map<string, ImageBitmap>): Promise<void> {
-  const parts = new Set<string>();
-  imageParts(blocks, parts);
-  await Promise.all(
-    [...parts].map(async (part) => {
-      try {
-        const resp = await fetch(`${base}/${encodeURI(part)}`);
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        bitmaps.set(part, await createImageBitmap(await resp.blob()));
-      } catch (e) {
-        await invoke('frontend_log', { level: 'warn', message: `nano light media-failed: part=${part} err=${e}` });
-      }
-    }),
-  );
-}
-
 async function main(): Promise<void> {
   const t0 = performance.now();
   const cv = document.getElementById('cv') as HTMLCanvasElement;
@@ -118,18 +80,14 @@ async function main(): Promise<void> {
     let model: LineModel | null = null;
     let colW = 0;
     const bitmaps = new Map<string, ImageBitmap>();
-    if (nl.mediaBase) await loadMedia(body, nl.mediaBase, bitmaps);
-    const measure: Measurer = (r: Run, text: string): number => {
-      ctx.font = runFont(r);
-      return ctx.measureText(text).width;
-    };
+    if (nl.mediaBase) await loadMedia(body, nl.mediaBase, bitmaps, 'nano light', invoke);
+    const measure = canvasMeasurer(ctx);
     const updateStatus = (): void => {
       dotEl.classList.toggle('hidden', !dirty);
     };
 
     const render = (): LineModel => {
-      const pageW = nl.page?.w ? twip(nl.page.w) : box.clientWidth;
-      colW = Math.min(pageW, box.clientWidth) - 2 * MARGIN;
+      colW = columnWidth(nl.page, box.clientWidth);
       const m = layoutBlocks({
         blocks: body,
         x0: MARGIN,
@@ -138,45 +96,16 @@ async function main(): Promise<void> {
         fonts: nl.fonts,
         measure,
       });
-      const docH = Math.min(Math.max(Math.ceil(m.bottom) + MARGIN, box.clientHeight), MAX_CANVAS_H);
-      cv.width = box.clientWidth * dpr;
-      cv.height = docH * dpr;
-      cv.style.width = `${box.clientWidth}px`;
-      cv.style.height = `${docH}px`;
-      ctx.scale(dpr, dpr);
-      draw(m);
+      // the caret overlay: a static rect (blink is a later slice, DD L01 §2)
+      drawModel(m, cv, ctx, dpr, box.clientWidth, box.clientHeight, bitmaps, () => {
+        const c = caretXY(m, measure, caret);
+        if (c) {
+          ctx.fillStyle = '#000';
+          ctx.fillRect(c.x - 0.75, c.y - c.lh + 2, 1.5, c.lh - 1);
+        }
+      });
       model = m;
       return m;
-    };
-
-    /** Draw the model + the caret (a static rect — blink is a later slice,
-     * DD L01 §2). Same per-item sequence as the viewer's draw. */
-    const draw = (m: LineModel): void => {
-      for (const media of m.media) {
-        if (bitmaps.has(media.part)) {
-          ctx.drawImage(bitmaps.get(media.part)!, media.x, media.y, media.w, media.h);
-        } else {
-          ctx.strokeStyle = '#bbb';
-          ctx.strokeRect(media.x, media.y, media.w, media.h);
-        }
-      }
-      for (const line of m.lines) {
-        let x = line.x;
-        for (const it of line.items) {
-          ctx.font = runFont(it.r);
-          ctx.fillStyle = it.r.color ? `#${it.r.color}` : '#000';
-          if (it.r.spacing != null) ctx.letterSpacing = `${(it.r.spacing / 20) * PT_PX}px`;
-          if (it.text) ctx.fillText(it.text, x, line.baseline);
-          if (it.r.spacing != null) ctx.letterSpacing = '0px';
-          if (it.r.underline && it.text) ctx.fillRect(x, line.baseline + 2, it.w, 1);
-          x += it.w;
-        }
-      }
-      const c = caretXY(m, measure, caret);
-      if (c) {
-        ctx.fillStyle = '#000';
-        ctx.fillRect(c.x - 0.75, c.y - c.lh + 2, 1.5, c.lh - 1);
-      }
     };
 
     /** Layout + evidence lines (ADDITIVE log contract with
@@ -193,21 +122,7 @@ async function main(): Promise<void> {
       });
       void invoke('frontend_log', {
         level: 'info',
-        message: `nano light evidence: ${JSON.stringify({
-          colw: colW,
-          page_w: nl.page?.w ?? null,
-          lines: model.lines.map((l) => {
-            const ev: { pi: number; x: number; y: number; t: string; al: string | null; c?: number } = {
-              pi: l.para,
-              x: l.x,
-              y: l.baseline,
-              t: l.items.map((it) => (it.tab ? '\t' : it.text)).join(''),
-              al: l.align,
-            };
-            if (l.inCell) ev.c = 1;
-            return ev;
-          }),
-        })}`,
+        message: `nano light evidence: ${JSON.stringify(toEvidence(model, colW, nl.page))}`,
       }).catch(() => {});
     };
 
@@ -281,12 +196,7 @@ async function main(): Promise<void> {
           }
       }
     });
-    // resize re-layout (the canvas used to go stale) — rAF coalesces
-    let raf = 0;
-    window.addEventListener('resize', () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => render());
-    });
+    resizeRelayout(() => render());
 
     model = render();
     const ms = performance.now() - t0;
@@ -297,16 +207,9 @@ async function main(): Promise<void> {
     logLayoutEvidence();
     // media evidence from the first render only (text edits never move them)
     for (const media of model.media) {
-      const d = Math.max(1, Math.round(media.w * dpr));
-      const dv = Math.max(1, Math.round(media.h * dpr));
-      const px = ctx.getImageData(Math.round(media.x * dpr), Math.round(media.y * dpr), d, dv).data;
-      let ink = 0;
-      for (let i = 0; i < px.length; i += 4) {
-        if (px[i + 3] > 0 && !(px[i] > 250 && px[i + 1] > 250 && px[i + 2] > 250)) ink++;
-      }
       await invoke('frontend_log', {
         level: 'info',
-        message: `nano light media: part=${media.part} emu=${media.emu[0]}x${media.emu[1]} drawn=${media.w.toFixed(1)}x${media.h.toFixed(1)} at=${media.x.toFixed(1)},${media.y.toFixed(1)} ink=${ink}`,
+        message: `nano light media: part=${media.part} emu=${media.emu[0]}x${media.emu[1]} drawn=${media.w.toFixed(1)}x${media.h.toFixed(1)} at=${media.x.toFixed(1)},${media.y.toFixed(1)} ink=${mediaInk(ctx, media, dpr)}`,
       });
     }
 

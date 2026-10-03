@@ -1,30 +1,23 @@
 /**
- * V01 quick-view slice (DD docs/design/viewer-a3/DD.md §3.4) — the DRAW side.
- * T-V7: layout lives in the pure module `src/viewer/layout.ts` (wrap pgSz +
- * tab + OS/2 line height + media flow, ported verbatim; parity asset
- * OQ-V01-1 ε=2.0px) — this page only feeds it a canvas-backed measurer,
- * draws the LineModel it returns and logs the gate evidence. The same module
- * answers `hitTest` (the A4 caret foundation); a gate-12 env probe
- * (`NANO_OFFICE_QV_HITTEST`) round-trips every line through it.
- * V3 media: images fetch by fileId from the loopback filesrv
- * (`/media/<id>/<part>`). V5 UX: the canvas is the page — sized to the
- * laid-out content so the body scrolls the whole document; window resizes
- * re-layout + redraw (the canvas used to go stale). No engine shim is
- * loaded on this page (see viewer.html).
+ * V01 quick-view slice (DD docs/design/viewer-a3/DD.md §3.4) — the READ-ONLY
+ * entry: feed the pure layout module a canvas measurer, draw its LineModel,
+ * log the gate evidence, round-trip every line through `hitTest` (gate-12
+ * probe). The canvas/media/evidence machinery lives in `src/viewer/render.ts`
+ * (shared with the Nano Light editor since T-060 C1); the layout itself is
+ * `src/viewer/layout.ts` (parity asset — consumed, never forked). V5 UX: the
+ * canvas is the page — sized to the laid-out content so the body scrolls the
+ * whole document. No engine shim is loaded on this page (see viewer.html).
  */
 import {
-  hitTest,
-  layoutBlocks,
-  MARGIN,
-  PT_PX,
-  runFont,
-  twip,
-  type Block,
-  type FontMetrics,
-  type LineModel,
-  type Measurer,
-  type Run,
-} from './viewer/layout';
+  canvasMeasurer,
+  columnWidth,
+  drawModel,
+  loadMedia,
+  mediaInk,
+  resizeRelayout,
+  toEvidence,
+} from './viewer/render';
+import { hitTest, layoutBlocks, MARGIN, type Block, type FontMetrics, type LineModel } from './viewer/layout';
 
 interface QuickView {
   parse_ms: number;
@@ -39,44 +32,6 @@ interface QuickView {
 
 const { invoke } = (window as unknown as { __TAURI__: { core: { invoke: <T>(cmd: string, args?: unknown) => Promise<T> } } }).__TAURI__.core;
 
-// V5 scroll: WebKit caps canvas dimensions at 16384 device px — at dpr 2 that
-// is 8192 logical px. Taller documents clip (no pagination yet — post-A3).
-const MAX_CANVAS_H = 8192;
-
-/** Image OPC parts in document order (deduped) — same walk as the shell's. */
-function imageParts(blocks: Block[], out: Set<string>): void {
-  for (const block of blocks) {
-    if ('Paragraph' in block) {
-      for (const r of block.Paragraph.runs) {
-        for (const img of r.images) out.add(img.part);
-      }
-    } else {
-      for (const row of block.Table.rows) {
-        for (const cell of row) imageParts(cell.blocks, out);
-      }
-    }
-  }
-}
-
-/** Fetch every image part once (loopback filesrv, keyed by fileId — no disk
- * paths in URLs). Failures log and leave the part absent: the draw pass
- * reserves its extent box, the view never refuses to render. */
-async function loadMedia(blocks: Block[], base: string, bitmaps: Map<string, ImageBitmap>): Promise<void> {
-  const parts = new Set<string>();
-  imageParts(blocks, parts);
-  await Promise.all(
-    [...parts].map(async (part) => {
-      try {
-        const resp = await fetch(`${base}/${encodeURI(part)}`);
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        bitmaps.set(part, await createImageBitmap(await resp.blob()));
-      } catch (e) {
-        await invoke('frontend_log', { level: 'warn', message: `viewer media-failed: part=${part} err=${e}` });
-      }
-    }),
-  );
-}
-
 async function main(): Promise<void> {
   const t0 = performance.now();
   const cv = document.getElementById('cv') as HTMLCanvasElement;
@@ -86,21 +41,10 @@ async function main(): Promise<void> {
   try {
     const qv = await invoke<QuickView>('viewer_open');
     const bitmaps = new Map<string, ImageBitmap>();
-    if (qv.media_base) await loadMedia(qv.doc.body, qv.media_base, bitmaps);
-    // The measurer is the ONLY canvas touch in the layout pipeline (C4-b).
-    const measure: Measurer = (r: Run, text: string): number => {
-      ctx.font = runFont(r);
-      return ctx.measureText(text).width;
-    };
-    // V5 scroll: the canvas is the page — its height follows the laid-out
-    // content (never smaller than the viewport) so the body scrolls the whole
-    // document. Resizing the canvas clears it, so size FIRST, then draw once
-    // (T-V7: layout no longer needs a measure pass — it is pure input→model).
+    if (qv.media_base) await loadMedia(qv.doc.body, qv.media_base, bitmaps, 'viewer', invoke);
+    const measure = canvasMeasurer(ctx);
     const render = (): { colW: number; model: LineModel; docH: number } => {
-      // text column: pgSz when declared (twips → px), clamped to the window —
-      // the wrap width the greedy line breaker works against
-      const pageW = qv.page?.w ? twip(qv.page.w) : innerWidth;
-      const colW = Math.min(pageW, innerWidth) - 2 * MARGIN;
+      const colW = columnWidth(qv.page, innerWidth);
       const model = layoutBlocks({
         blocks: qv.doc.body,
         x0: MARGIN,
@@ -109,40 +53,8 @@ async function main(): Promise<void> {
         fonts: qv.fonts,
         measure,
       });
-      const docH = Math.min(Math.max(Math.ceil(model.bottom) + MARGIN, innerHeight), MAX_CANVAS_H);
-      cv.width = innerWidth * dpr;
-      cv.height = docH * dpr;
-      cv.style.width = `${innerWidth}px`;
-      cv.style.height = `${docH}px`;
-      ctx.scale(dpr, dpr);
-      draw(model);
+      const docH = drawModel(model, cv, ctx, dpr, innerWidth, innerHeight, bitmaps);
       return { colW, model, docH };
-    };
-    /** Draw the model. Same per-item sequence as the pre-T-V7 interleaved
-     * draw — pixel-identical output (nothing overlaps in flow layout). */
-    const draw = (model: LineModel): void => {
-      for (const m of model.media) {
-        if (bitmaps.has(m.part)) {
-          ctx.drawImage(bitmaps.get(m.part)!, m.x, m.y, m.w, m.h);
-        } else {
-          // bytes unavailable (fetch failed): reserved box so the flow
-          // position is still evidenced
-          ctx.strokeStyle = '#bbb';
-          ctx.strokeRect(m.x, m.y, m.w, m.h);
-        }
-      }
-      for (const line of model.lines) {
-        let x = line.x;
-        for (const it of line.items) {
-          ctx.font = runFont(it.r);
-          ctx.fillStyle = it.r.color ? `#${it.r.color}` : '#000';
-          if (it.r.spacing != null) ctx.letterSpacing = `${(it.r.spacing / 20) * PT_PX}px`;
-          if (it.text) ctx.fillText(it.text, x, line.baseline);
-          if (it.r.spacing != null) ctx.letterSpacing = '0px';
-          if (it.r.underline && it.text) ctx.fillRect(x, line.baseline + 2, it.w, 1);
-          x += it.w;
-        }
-      }
     };
 
     const { colW, model, docH } = render();
@@ -167,39 +79,16 @@ async function main(): Promise<void> {
     // both in the SAME commit. Same shape as the pre-T-V7 Stats.lines.
     await invoke('frontend_log', {
       level: 'info',
-      message: `viewer evidence: ${JSON.stringify({
-        colw: colW,
-        page_w: qv.page?.w ?? null,
-        lines: model.lines.map((l) => {
-          const ev: { pi: number; x: number; y: number; t: string; al: string | null; c?: number } = {
-            pi: l.para,
-            x: l.x,
-            y: l.baseline,
-            t: l.items.map((it) => (it.tab ? '\t' : it.text)).join(''),
-            al: l.align,
-          };
-          if (l.inCell) ev.c = 1;
-          return ev;
-        }),
-      })}`,
+      message: `viewer evidence: ${JSON.stringify(toEvidence(model, colW, qv.page))}`,
     });
     // ADDITIVE log contract with harness/scripts/smoke-quick-view.sh (gate 12):
     // the gate parses `viewer media:` / `viewer media-failed:` — change both
     // in the SAME commit. Per drawn image: the rect the gate re-derives from
-    // EMU (drawn size + flow position) + the inked-pixel count inside it
-    // (real bytes hit the canvas — the T-A26 placeholder is white, which
-    // never counts as ink).
-    for (const m of model.media) {
-      const d = Math.max(1, Math.round(m.w * dpr));
-      const dv = Math.max(1, Math.round(m.h * dpr));
-      const px = ctx.getImageData(Math.round(m.x * dpr), Math.round(m.y * dpr), d, dv).data;
-      let ink = 0;
-      for (let i = 0; i < px.length; i += 4) {
-        if (px[i + 3] > 0 && !(px[i] > 250 && px[i + 1] > 250 && px[i + 2] > 250)) ink++;
-      }
+    // EMU (drawn size + flow position) + the inked-pixel count inside it.
+    for (const media of model.media) {
       await invoke('frontend_log', {
         level: 'info',
-        message: `viewer media: part=${m.part} emu=${m.emu[0]}x${m.emu[1]} drawn=${m.w.toFixed(1)}x${m.h.toFixed(1)} at=${m.x.toFixed(1)},${m.y.toFixed(1)} ink=${ink}`,
+        message: `viewer media: part=${media.part} emu=${media.emu[0]}x${media.emu[1]} drawn=${media.w.toFixed(1)}x${media.h.toFixed(1)} at=${media.x.toFixed(1)},${media.y.toFixed(1)} ink=${mediaInk(ctx, media, dpr)}`,
       });
     }
     // T-V7 gate-12 probe: round-trip every text line through hitTest (mid →
@@ -235,13 +124,7 @@ async function main(): Promise<void> {
         await invoke('frontend_log', { level: 'error', message: `viewer hit-test FAIL: ${bad.join(' | ')}` });
       }
     }
-    // T-V7: re-layout on resize (the canvas used to go stale). Layout is
-    // cheap and pure; rAF coalesces the per-pixel resize bursts.
-    let raf = 0;
-    window.addEventListener('resize', () => {
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => render());
-    });
+    resizeRelayout(() => render());
   } catch (e) {
     cv.width = innerWidth * dpr;
     cv.height = innerHeight * dpr;
