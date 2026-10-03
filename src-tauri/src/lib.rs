@@ -231,6 +231,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(Arc::new(FileRegistry::default()))
+        .manage(Arc::new(viewer::QuickViewRequest::default()))
         .register_uri_scheme_protocol(protocol::ENGINE_SCHEME, protocol::handle_engine)
         .register_uri_scheme_protocol(protocol::FILE_SCHEME, protocol::handle_file)
         .on_page_load(|_webview, payload| {
@@ -243,7 +244,8 @@ pub fn run() {
             get_engine_base,
             get_document_for_delivery,
             frontend_log,
-            viewer::viewer_open
+            viewer::viewer_open,
+            viewer::viewer_view
         ])
         .setup(|app| {
             // Engine-facing document URLs must be loopback HTTP (see filesrv docs).
@@ -274,6 +276,20 @@ pub fn run() {
                 }
                 _ => String::new(),
             };
+            // V5 UX E2E driver (gate 13, pattern NANO_OFFICE_SAVE_PROBE): env
+            // holds a .docx path the START PAGE fills into its path input and
+            // clicks Quick view with — the real UI handler chain runs
+            // (viewer_view → viewer window → viewer_open). No synthetic
+            // keystrokes, no focus taken; product default (no env) untouched.
+            let ux_probe_js = match std::env::var("NANO_OFFICE_UX_PROBE") {
+                Ok(path) if !path.is_empty() => {
+                    format!(
+                        "window.__NANO_OFFICE_UX_PROBE__ = {};",
+                        serde_json::json!(path)
+                    )
+                }
+                _ => String::new(),
+            };
             // V01 quick-view slice (DD docs/design/viewer-a3/DD.md §3.1): env
             // trigger opens the dedicated viewer entry — no shim, no engine
             // iframe. The normal boot path below is untouched.
@@ -290,22 +306,27 @@ pub fn run() {
                 let _ = win;
                 return Ok(());
             }
-            let win = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
+            // Shim load order is load-bearing (BRIDGE_JS before DELIVERY_JS —
+            // module doc); probe scripts + flag only publish globals.
+            let mut win = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
                 .title("NanoOffice")
                 .inner_size(1280.0, 800.0)
                 .min_inner_size(940.0, 560.0)
                 .visible(true)
-                .focused(false)
-                .initialization_script_for_all_frames(&probe_flag_js);
-            let win = if save_probe_js.is_empty() {
-                win.initialization_script_for_all_frames(BRIDGE_JS)
-            } else {
-                win.initialization_script_for_all_frames(&save_probe_js)
-                    .initialization_script_for_all_frames(BRIDGE_JS)
-            };
-            let win = win
-                .initialization_script_for_all_frames(DELIVERY_JS)
-                .build()?;
+                .focused(false);
+            for js in [
+                ux_probe_js.as_str(),
+                save_probe_js.as_str(),
+                probe_flag_js.as_str(),
+                BRIDGE_JS,
+                DELIVERY_JS,
+            ] {
+                if js.is_empty() {
+                    continue;
+                }
+                win = win.initialization_script_for_all_frames(js);
+            }
+            let win = win.build()?;
             // Debug builds: engine console opt-in only (rule 6b — devtools default OFF;
             // the docked panel also skews layout/render verification).
             #[cfg(debug_assertions)]

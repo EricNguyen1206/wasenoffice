@@ -60,7 +60,7 @@ nanooffice/
 | Phase | Trạng thái | Ghi chú |
 |---|---|---|
 | PH-0 Spike (load editor + render DOCX trong WKWebView) | ✅ ĐÓNG 27.09 — verdict **GO WITH CAVEAT** | render GREEN tự động (verify.sh gate 9, TC-D01-06); baseline debug 27.09: RAM 1 doc ~561–579 MB vs ONLYOFFICE 570 MB (start page); caveat duy nhất: scroll/edit keyboard chờ user xác nhận thủ công ~30s — `docs/diagnostics.md` 27.09 T-003 |
-| Track A rung A0–A3 (QĐ9 — tự chủ shell + phân phối + converter + viewer) | ✅ A1 ĐÓNG 02.10 · A2 ĐÓNG 03.10 · **A3 MỞ MÀN 03.10** | **A1 — phân phối độc lập**: chạy trọn open→edit→save KHÔNG cần ONLYOFFICE.app cài sẵn — x2t bundled (T-A10, 113 MB) + AllFonts tự sinh (T-A11) + fonts bundled có license (T-A12) + gate 11 "sạch ONLYOFFICE" thường trụ verify.sh (T-A13: strict clean-machine + negative proven + test tích thể mv app → verify FULL exit 0 khi app ẨN); **A2 — converter Rust**: T-A20 chốt P2 "OOXML core trước" bằng probe số liệu + crate slice `nanooffice-ooxml`; T-A21 S1 docx READ đầy đủ (OPC chuẩn + table/list/image + styles resolve, fuzz 0 panic); T-A22 S2 docx WRITE + round-trip model bất biến 100% + file ghi ra render GREEN; T-A23 S3 parity harness 15/15 construct + 0 diff không phân loại; T-A24 S4 adapter vào runtime — open-side pre-normalize (docx → canonical.docx qua crate → x2t) trong seam `sidecar::convert`, kill switch `NANO_OFFICE_NO_RUST_CONVERTER`, gates 9/10/11 GREEN cả ON lẫn OFF; **A3 mở màn — T-A25 (03.10, design-first)**: DD V01 `docs/design/viewer-a3/DD.md` (render R1 canvas 2D PDF-style webview riêng; C4 chốt accessor OS/2 không hmtx; C3 command layer song song delivery) + slice V0 chạy thật — `viewer_open` parse-only qua crate + `viewer.html` canvas không shim/engine, parse 2.9 ms · first-draw 14 ms · app RSS 117.8 MB (WC engine ~370→~46 MB; công thức RAM gate = OQ-V01-2, T-V2 chốt) — hàng đợi A3: **T-V1** model render-side → T-V2 layout+gates → T-V3 media → T-V4 parity render → T-V5 UX + đóng rung |
+| Track A rung A0–A3 (QĐ9 — tự chủ shell + phân phối + converter + viewer) | ✅ A1 ĐÓNG 02.10 · A2 ĐÓNG 03.10 · **A3 ĐÓNG 03.10** | **A1 — phân phối độc lập**: chạy trọn open→edit→save KHÔNG cần ONLYOFFICE.app cài sẵn — x2t bundled (T-A10, 113 MB) + AllFonts tự sinh (T-A11) + fonts bundled có license (T-A12) + gate 11 "sạch ONLYOFFICE" thường trụ verify.sh (T-A13: strict clean-machine + negative proven + test tích thể mv app → verify FULL exit 0 khi app ẨN); **A2 — converter Rust**: T-A20 chốt P2 "OOXML core trước" bằng probe số liệu + crate slice `nanooffice-ooxml`; T-A21 S1 docx READ đầy đủ (OPC chuẩn + table/list/image + styles resolve, fuzz 0 panic); T-A22 S2 docx WRITE + round-trip model bất biến 100% + file ghi ra render GREEN; T-A23 S3 parity harness 15/15 construct + 0 diff không phân loại; T-A24 S4 adapter vào runtime — open-side pre-normalize (docx → canonical.docx qua crate → x2t) trong seam `sidecar::convert`, kill switch `NANO_OFFICE_NO_RUST_CONVERTER`, gates 9/10/11 GREEN cả ON lẫn OFF; **A3 — viewer Rust đọc-only ĐÓNG 03.10 (T-A25 design-first + T-V1→T-V5)**: DD V01 `docs/design/viewer-a3/DD.md` (R1 canvas 2D webview riêng không shim/engine; C3 command layer song song delivery; C4 OS/2 không hmtx); T-V1 model render-side + resolve về Rust (round-trip + parity-a2 bất biến); T-V2 layout pgSz + tab + OS/2 line metrics + **gate 12** số liệu (OQ-V01-2 chốt RAM = TREE, tripwire debug 300 MB); T-V3 media route `/media/<id>/<part>` + render ảnh EMU→px; **T-V4 parity render vs oracle CDP — 6/6 corpus ×2 deterministic + negative cắn, ε=2.0px (OQ-V01-1 chốt)**; T-V5 wire UX: nút Quick view trên start page (`viewer_view` — OQ-V01-3 chốt toggle) + scroll cơ bản (canvas cao bằng nội dung, 2-pass draw) + **gate 13 UI E2E**; mở <500 ms GREEN debug (18–89 ms); RAM tree debug 265 MB — **đích <150 MB = criterion RELEASE, T-057 (PH-4) chặn đo, ceiling ghi DD V01 §10**; ceiling parity → seed T-V6 |
 | PH-1 Vòng đời file (open/save/convert qua x2t sidecar) | ⬜ | |
 | PH-2 Trải nghiệm desktop (print/clipboard/fonts/tabs) | ⬜ | |
 | PH-3 Tùy chọn (crypto/signature/cloud) | ⬜ | có thể cắt vĩnh viễn |
@@ -77,7 +77,21 @@ negative proven exit 1) — bằng chứng đóng rung: test tích thể mv app 
 khi app ẨN (`harness/scripts/clean-machine-proof.sh`, diagnostics 02.10). Runtime dependency
 bắt buộc lên app: **0** (fallback x2t = WARN dev-only, bị strict mode chặn; upstream submodule
 = reference theo D1 tới A6).
-Mới nhất 03.10 (**T-A24 — A2/S4 adapter, ĐÓNG RUNG A2**, ponytail ULTRA chuỗi A2 — verify FULL
+Mới nhất 03.10 (**T-V5 — wire UX quick-view, ĐÓNG RUNG A3**): quick view ra khỏi dev-env
+thành UX thật — nút **Quick view** trên start page → command `viewer_view` (stash path
+Rust-side `QuickViewRequest`, window `quickview-<n>` focused(false) rule 6b không shim;
+env `NANO_OFFICE_QUICK_VIEW` giữ cho dev/gate 12) + **scroll cơ bản** (canvas cao bằng nội
+dung, 2-pass draw, cap 8192px logic — pagination post-A3); OQ-V01-3 CHỐT = toggle (chỉ thị
+user). **Gate 13** `smoke-quick-view-ui.sh` thường trụ verify.sh — driver
+`NANO_OFFICE_UX_PROBE` (pattern SAVE_PROBE: điền input + click nút thật, không keystroke)
+→ positive exit 0 (view → first-draw 30 ms → layout 16 dòng) + negative exit 1 (.docx rác
+cắn). Bằng chứng đóng rung: parity-view (T-V4) 6/6 PASS không đổi + gate 12 không thoái hóa
+(265 MB tree debug ≤ 300 tripwire; first-draw 89 ms) + scroll E2E canvas 2232 px; đích mở
+<500 ms GREEN; **đích RAM <150 MB = criterion RELEASE — T-057 (release boot stall, PH-4)
+chặn đo release, ceiling ghi thẳng không fake số (DD V01 §10)**. Kế tiếp: **T-055 #4
+(review kiến trúc post-A3)** rồi A4 mở màn — seed **T-A27** (editor core "Nano Light",
+design-first khi claim).
+Trước đó 03.10 (**T-A24 — A2/S4 adapter, ĐÓNG RUNG A2**, ponytail ULTRA chuỗi A2 — verify FULL
 exit 0): crate `nanooffice-ooxml` vào đường runtime qua seam `sidecar::convert` — **open-side
 pre-normalize**: open docx → crate parse+write `canonical.docx` trong workdir → x2t chuyển
 canonical ra Editor.bin (save-side KHÔNG thay được — x2t fromChanges làm việc trực tiếp trên
@@ -87,7 +101,6 @@ Log ADDITIVE `converter: rust-canonical → x2t (…, normalize …)` — không
 gates 9/10/11. Bằng chứng: verify.sh FULL exit 0 (ON) + gate 9/10 counterfactual OFF exit 0
 (Editor.bin 1586 B đường cũ vs 1495 B canonical) + parity-a2.sh exit 0 (7/7 invariant) +
 cargo test 23 shell + 9 crate (test seam thêm case ON/refuse/kill-switch); overhead ~2 ms/open.
-Kế tiếp: **T-V1 (C2 — model render-side mở + resolve về Rust, DD V01 §3.2)**.
 Trước đó 03.10 (**T-A23 — A2/S3 parity harness**, ponytail ULTRA chuỗi A2 — verify FULL exit 0):
 `harness/scripts/parity-a2.sh` mỏng + CLI có sẵn — mỗi corpus file chạy x2t roundtrip (2 call
 shape của seam: docx→Editor.bin positional + params XML→docx) + crate roundtrip, 3-way model

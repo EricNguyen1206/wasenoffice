@@ -9,8 +9,9 @@
  * from `w:br`, `\t` from `w:tab`) force a new visual line / tab jump.
  * V3 media: images from the run's `ImageRef`s draw on their OWN line at the
  * `wp:extent` size (EMU → px), fetched by fileId from the loopback filesrv
- * (`/media/<id>/<part>`). No engine shim is loaded on this page (see
- * viewer.html).
+ * (`/media/<id>/<part>`). V5 UX: the canvas is the page — sized to the
+ * laid-out content so the body scrolls the whole document. No engine shim is
+ * loaded on this page (see viewer.html).
  */
 
 interface ImageRef {
@@ -85,6 +86,21 @@ const EMU_PX = 9525;
 
 const twip = (t: number): number => (t / 20) * PT_PX;
 const imgPx = (emu: number): number => emu / EMU_PX;
+
+// V5 scroll: WebKit caps canvas dimensions at 16384 device px — at dpr 2 that
+// is 8192 logical px. Taller documents clip (no pagination yet — post-A3).
+const MAX_CANVAS_H = 8192;
+
+/** Bottom of everything laid out (text baselines + image rects) — the canvas
+ * height the scroll view needs. */
+function contentBottom(stats: Stats): number {
+  let bottom = 0;
+  stats.baselines.forEach((y, i) => {
+    bottom = Math.max(bottom, y + stats.lhs[i]);
+  });
+  for (const m of stats.media) bottom = Math.max(bottom, m.y + m.h);
+  return bottom;
+}
 
 /** Line height in px: ascent + |descent| + lineGap from OS/2 (C4-a). */
 function lineHeight(r: Run, fonts: QuickView['fonts']): number {
@@ -388,6 +404,21 @@ async function main(): Promise<void> {
     const colW = Math.min(pageW, innerWidth) - 2 * MARGIN;
     const bitmaps = new Map<string, ImageBitmap>();
     if (qv.media_base) await loadMedia(qv.doc.body, qv.media_base, bitmaps);
+    // V5 scroll: the canvas is the page — its height follows the laid-out
+    // content (never smaller than the viewport) so the body scrolls the whole
+    // document. Resizing clears the canvas, so draw once to measure, then
+    // redraw the identical inputs (same layout, same coordinates).
+    const measure: Stats = { baselines: [], lhs: [], maxw: 0, metrics: null, media: [], lines: [] };
+    drawBlocks(ctx, qv.doc.body, MARGIN, colW, MARGIN + 16, qv.fonts, bitmaps, measure);
+    const docH = Math.min(
+      Math.max(Math.ceil(contentBottom(measure)) + MARGIN, innerHeight),
+      MAX_CANVAS_H,
+    );
+    cv.width = innerWidth * dpr;
+    cv.height = docH * dpr;
+    cv.style.height = `${docH}px`;
+    ctx.scale(dpr, dpr);
+    ctx.fillStyle = '#000';
     const stats: Stats = { baselines: [], lhs: [], maxw: 0, metrics: null, media: [], lines: [] };
     drawBlocks(ctx, qv.doc.body, MARGIN, colW, MARGIN + 16, qv.fonts, bitmaps, stats);
     const ms = performance.now() - t0;
@@ -397,7 +428,7 @@ async function main(): Promise<void> {
     for (let i = 0; i < img.length; i += 4 * 97) {
       if (img[i] < 128) inked++; // red channel of every 97th pixel
     }
-    const msg = `viewer first-draw ${ms.toFixed(1)} ms (parse ${qv.parse_ms.toFixed(1)} ms, body blocks ${qv.doc.body.length}, inked ${inked})`;
+    const msg = `viewer first-draw ${ms.toFixed(1)} ms (parse ${qv.parse_ms.toFixed(1)} ms, body blocks ${qv.doc.body.length}, inked ${inked}, canvas ${docH}px)`;
     await invoke('frontend_log', { level: 'info', message: msg });
     const m = stats.metrics;
     const baselines = stats.baselines.slice(0, 40).map((y) => y.toFixed(1)).join(',');

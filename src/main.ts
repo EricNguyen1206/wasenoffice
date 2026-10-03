@@ -99,6 +99,25 @@ async function openPath(path: string): Promise<void> {
   }
 }
 
+/**
+ * Quick view (V5, DD docs/design/viewer-a3/DD.md §4): opens the docx in the
+ * read-only viewer window via `viewer_view` — no engine boot. A3 scope is
+ * docx-only; everything else keeps going through Open (editor).
+ */
+async function quickView(path: string): Promise<void> {
+  const ext = path.includes('.') ? path.split('.').pop()!.toLowerCase() : '';
+  if (ext !== 'docx') {
+    logLine(`ERROR: quick view supports .docx (got ".${ext}") — use Open for the editor`);
+    return;
+  }
+  logLine(`quick view: ${path}`);
+  try {
+    await invoke('viewer_view', { path });
+  } catch (err) {
+    logLine(`ERROR: ${err}`);
+  }
+}
+
 function logLine(text: string): void {
   const el = document.createElement('div');
   el.textContent = text;
@@ -127,17 +146,30 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         class="flex-1 ${CONTROL_SKIN}"
       />
       <button type="submit" class="cursor-pointer hover:border-edge active:border-edge active:bg-panel-active ${CONTROL_SKIN}">Open</button>
+      <button type="button" id="quick-view-btn" class="cursor-pointer hover:border-edge active:border-edge active:bg-panel-active ${CONTROL_SKIN}">Quick view</button>
     </form>
   </header>
   <main id="editor-root" class="relative flex-1"></main>
 `;
 document.querySelector<HTMLDivElement>('#app')!.appendChild(log);
 
+const pathInput = document.querySelector<HTMLInputElement>('#doc-path')!;
 document.querySelector<HTMLFormElement>('#open-form')!.addEventListener('submit', (ev) => {
   ev.preventDefault();
-  const input = document.querySelector<HTMLInputElement>('#doc-path')!;
-  if (input.value.trim()) void openPath(input.value.trim());
+  if (pathInput.value.trim()) void openPath(pathInput.value.trim());
 });
+document.querySelector<HTMLButtonElement>('#quick-view-btn')!.addEventListener('click', () => {
+  if (pathInput.value.trim()) void quickView(pathInput.value.trim());
+});
+
+// V5 UX E2E driver (gate 13; NANO_OFFICE_UX_PROBE, pattern SAVE_PROBE): fill
+// the input and click the real Quick view button — the genuine handler chain
+// runs. No env → this block never does anything (product default untouched).
+const uxProbe = (window as unknown as { __NANO_OFFICE_UX_PROBE__?: string }).__NANO_OFFICE_UX_PROBE__;
+if (uxProbe) {
+  pathInput.value = uxProbe;
+  document.querySelector<HTMLButtonElement>('#quick-view-btn')!.click();
+}
 
 // PH-0 observability: nothing DOM-side may fail silently — forward to stdout.
 // capture=true so RESOURCE load errors (script/img) also surface here.

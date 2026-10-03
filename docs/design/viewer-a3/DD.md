@@ -3,7 +3,8 @@ type: design
 ---
 # Detail Design (DD) — V01 · Viewer Rust đọc-only "quick view" (Track A, rung A3)
 
-> Trạng thái: **draft** (mở màn A3 — T-A25, 03.10.2026, design-first như T-A20). Tài liệu
+> Trạng thái: **đóng theo rung A3** (T-V5, 03.10.2026 — V0→V5 đủ; ceiling parity → T-V6).
+> Mở màn T-A25 design-first 03.10.2026. Tài liệu
 > kiến trúc component-level (không phải màn UI): TEST không tách file — kế hoạch kiểm thử
 > ở §7, sống trong code + gates + harness. Mã nhóm **V** cấp cho viewer (quy tắc
 > `[Chữ][2 số]`; folder giữ `viewer-a3/` theo handoff T-A25 — tiền lệ K01/converter-a2).
@@ -54,7 +55,8 @@ Editor.bin hoàn toàn (parse trực tiếp file gốc bằng crate — đúng n
 và không đụng converter). `viewer_open` = parse-only: đọc file → `nanooffice_ooxml::parse_docx`
 → JSON model trả frontend. Không đụng FileRegistry (nhà của delivery), không đụng
 delivery.js, log contract gates 9/10/11 nguyên vẹn. Trigger slice: env
-`NANO_OFFICE_QUICK_VIEW=<path>` (dev-only; UX wiring thật = V5) — window viewer mở bằng
+`NANO_OFFICE_QUICK_VIEW=<path>` (dev-only + gate 12; UX wiring thật = V5 —
+`viewer_view` từ start page, §4 V5/§5.6) — window viewer mở bằng
 entry `viewer.html` riêng, shim bridge/delivery KHÔNG inject (điểm của quick view: không
 engine, không bridge). *(V3 amendment: `viewer_open` ĐĂNG KÝ file vào FileRegistry để
 keying route media `/media/<id>/<part>` — handoff T-V3 đòi fileId; luồng delivery không
@@ -114,7 +116,7 @@ line height từ C4-a; advances từ `measureText`.
 | **V2** (T-V2, 03.10) ✅ | wrap greedy theo cột từ `pgSz` + tab stop + line-height C4-a; **gate 12** `smoke-quick-view.sh` | gate GREEN (positive exit 0 + negative ×2 exit 1); OQ-V01-2 chốt §10 |
 | **V3** (T-V3, 03.10) ✅ | route filesrv `/media/<fileId>/<part>` (exact-name zip lookup, 403 traversal — bytes byte-exact nhờ T-A26) + render ảnh dòng riêng theo `wp:extent` EMU→px | gate 12 assert drawn == EMU→px (gate tự tính lại) + ink thật trên fixture media; E2E fixture T-A26 |
 | **V4** (T-V4, 03.10) ✅ | parity render vs oracle: so viewer render với render sdkjs (oracle CDP app thật) — text content + vị trí dòng | **`harness/scripts/parity-view.sh` 6/6 corpus PASS ×2 deterministic exit 0 + negative (tiêm 3 diff giả) 3/3 cắn exit 1; OQ-V01-1 chốt §5.5** |
-| V5 | wire UX: open docx → quick view (mặc định hoặc toggle — user quyết), rút trigger env | **rung A3 đóng** khi V4 parity + V2 gates đạt |
+| **V5** (T-V5, 03.10) ✅ | wire UX: nút **Quick view** trên start page → `viewer_view` (stash path Rust-side → window `quickview-<n>`, focused(false), không shim) + **scroll cơ bản** (canvas cao bằng nội dung, 2-pass draw); env giữ làm trigger dev/gate 12 | **rung A3 ĐÓNG**: gate 13 UI E2E positive exit 0 + negative exit 1; gate 12 không thoái hóa; parity-view 6/6 không đổi — §5.6 |
 
 ## 5. Tiêu chí đo
 
@@ -274,6 +276,42 @@ numbering mark) khi parity đòi sắc hơn.
 
 ---
 
+### 5.6 Kết quả slice V5 (03.10.2026 — T-V5, wire UX + ĐÓNG RUNG A3)
+
+UX (**OQ-V01-3 CHỐT = toggle** — chỉ thị user 03.10: "chọn file từ UI mở quick-view thay
+env"; quick-view KHÔNG thành mặc định cho docx — quyết định "mặc định" thuộc A4 Nano
+Light): start page thêm nút **Quick view** cạnh Open → command `viewer_view`: validate
+file tồn tại → stash path vào state `QuickViewRequest` (Mutex, take-once) → mở window
+`quickview-<n>` (focused(false) rule 6b, KHÔNG inject shim/bridge — §3.1); `viewer_open`
+consume stash, **env `NANO_OFFICE_QUICK_VIEW` giữ nguyên làm trigger dev/gate 12**. Disk
+path không bao giờ vào URL (stash Rust-side — nguyên tắc filesrv). Đóng cửa sổ = close
+native (Cmd-W) — không thêm phím tắt riêng (ponytail: platform feature). **Scroll cơ
+bản:** canvas = trang — cao bằng nội dung đã layout (min = viewport; cap 8192px logic =
+WebKit 16384 device px @dpr2 — cao hơn clip, pagination là việc post-A3, ceiling ponytail);
+resize clears canvas → **2-pass draw**: measure → resize → re-scale ctx (context state
+reset — bẫy) → redraw CÙNG input, cùng tọa độ; evidence lấy từ pass 2.
+
+**Gate 13** `harness/scripts/smoke-quick-view-ui.sh` (thường trụ verify.sh, consumer
+smoke-lib): boot app THƯỜNG (không env quick-view) với driver **`NANO_OFFICE_UX_PROBE`**
+(pattern `NANO_OFFICE_SAVE_PROBE` — init JS điền input + click nút THẬT, không keystroke,
+không focus) → assert `viewer view:` (command = UI wiring) → `viewer first-draw` <
+QUICK_VIEW_MAX_MS → `viewer layout:`, cấm `viewer failed:`. Hằng `SMOKE_RE_QV_VIEW` vào
+khối đóng băng smoke-lib; coordinate/media asserts không nhân bản — vẫn ở gate 12, gate
+13 sở hữu WIRING.
+
+| Bằng chứng | Kết quả | Ghi |
+|---|---|---|
+| Gate 13 positive | exit 0 — `viewer view:` → first-draw **30.0 ms** → layout 16 dòng (lhs 17.9, inked 27392) | chuỗi UI E2E thật, số không đổi so T-V3 |
+| Gate 13 negative | exit 1 — .docx rác: chain chạy hết tới parse, `viewer failed:` cắn nhanh | assert proven, không timeout |
+| Gate 12 (regression env) | exit 0 — first-draw 89 ms, layout giống hệt, RSS tree **265 MB** ≤ 300 tripwire | đường dev/gate nguyên |
+| parity-view (T-V4) | exit 0 — 6/6 PASS, từng px giống bảng §5.5 | scroll 2-pass không lệch render |
+| Scroll E2E (doc 60 paragraph, qua UI probe) | first-draw 23.0 ms, **canvas 2232 px** > viewport 700 | body scroll trọn document |
+
+**Đóng rung A3 — ceiling RAM ghi thẳng (đúng §10, không fake số):** đích rung **< 150 MB
+là criterion cho RELEASE build** — T-057 (release boot stall, PH-4) chặn đo release; số
+debug = tripwire gate 12 300 MB (đo 265 MB). Đích mở < 500 ms GREEN trên debug (18–89 ms).
+Parity (T-V4) 6/6 corpus PASS — criterion thứ ba của rung đạt.
+
 ## 6. Rủi ro + mitigations
 
 | Rủi ro | Mitigation |
@@ -298,8 +336,10 @@ numbering mark) khi parity đòi sắc hơn.
   0.64 px); ε_x = 2.0 px (đo 0.00 px); drift ranh-giới-paragraph / numbering = phân loại
   ceiling, không gate.
 - **OQ-V01-2: CHỐT ở V2 — xem §10.**
-- **OQ-V01-3:** UX quick view (V5) — viewer là mặc định cho docx hay toggle user chọn?
-  User quyết khi V4 đạt (sản phẩm mở <500 ms mới đáng mặc định).
+- **OQ-V01-3: CHỐT ở V5 — toggle.** Chỉ thị user 03.10: chọn file từ UI mở quick view
+  (nút Quick view trên start page → `viewer_view`); quick view KHÔNG thành mặc định cho
+  docx — quyết định "mặc định" thuộc A4 (Nano Light). Env `NANO_OFFICE_QUICK_VIEW` giữ
+  làm trigger dev/gate 12.
 
 ## 10. OQ-V01-2 — công thức RAM đã chốt (T-V2, 03.10)
 

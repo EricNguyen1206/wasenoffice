@@ -8,6 +8,52 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-03 · T-V5: A3/V5 — wire UX quick-view + ĐÓNG RUNG A3
+
+- **Bối cảnh:** slice cuối rung A3 — quick view ra khỏi dev-env thành UX thật: chọn file
+  từ UI mở quick view (chỉ thị user 03.10 — **OQ-V01-3 CHỐT = toggle**, "mặc định cho
+  docx" thuộc A4 Nano Light), scroll cơ bản, không tự thêm tính năng. Style mới qua
+  token-slot Tailwind T-058 (utility classes trong markup, không đụng canvas scope #app —
+  bẫy T-058). Chi tiết: DD V01 §4 V5 + §5.6.
+- **Wire UX (`viewer_view`):** nút Quick view cạnh Open trên start page (`main.ts`,
+  dùng lại `CONTROL_SKIN` — 0 CSS mới) → command `viewer_view` (`viewer.rs`): validate
+  file tồn tại (lỗi trả về start page thay vì mở window chỉ để báo lỗi) → stash path vào
+  state `QuickViewRequest` (Mutex, take-once) → mở window `quickview-<n>`
+  (WebviewWindowBuilder, focused(false) rule 6b, KHÔNG inject shim/bridge/delivery);
+  `viewer_open` consume stash, fallback env `NANO_OFFICE_QUICK_VIEW` (dev + gate 12 giữ
+  nguyên). Disk path không vào URL — stash Rust-side (nguyên tắc filesrv). Đóng window =
+  Cmd-W/close native — không thêm phím tắt riêng (ponytail: platform feature).
+- **Scroll cơ bản:** canvas = trang — cao bằng nội dung đã layout (min = viewport; cap
+  **8192px logic = WebKit 16384 device px @dpr2** — cao hơn clip, pagination là việc
+  post-A3, ceiling ponytail). **Bẫy context:** resize canvas CLEAR canvas + reset context
+  state (kể cả transform `scale(dpr)`) → **2-pass draw**: pass 1 measure (`contentBottom`
+  từ baselines+lhs và media rects) → resize → **re-scale ctx + set lại fillStyle** →
+  pass 2 redraw CÙNG input → cùng tọa độ; evidence/`viewer evidence:` lấy từ pass 2.
+  body `overflow-auto` (viewer.html).
+- **Gate 13** `smoke-quick-view-ui.sh` (thường trụ verify.sh, consumer smoke-lib —
+  `SMOKE_RE_QV_VIEW` vào khối đóng băng): boot app THƯỜNG (không env quick-view) với
+  driver **`NANO_OFFICE_UX_PROBE`** (pattern `NANO_OFFICE_SAVE_PROBE` — init JS điền
+  input + click nút THẬT `button.click()`, không keystroke, không focus) → assert chuỗi
+  `viewer view:` (command layer = UI wiring) → `viewer first-draw` < QUICK_VIEW_MAX_MS →
+  `viewer layout:`, cấm `viewer failed:`. Coordinate/media asserts không nhân bản — vẫn
+  ở gate 12; gate 13 sở hữu WIRING. Log `viewer first-draw … canvas <H>px` thêm đuôi
+  (ADDITIVE — regex gate 12/13 không neo cuối dòng).
+- **Bằng chứng:** gate 13 positive exit 0 (view → first-draw **30.0 ms** → layout 16
+  dòng lhs 17.9 inked 27392 — số không đổi so T-V3) + negative exit 1 (.docx rác: chain
+  chạy hết tới parse, `viewer failed:` cắn nhanh, không timeout) + gate 12 exit 0
+  (first-draw 89 ms, layout giống hệt, RSS tree **265 MB** ≤ 300) + **parity-view exit 0
+  — 6/6 PASS từng px giống bảng DD §5.5** (2-pass draw không lệch render) + scroll E2E
+  doc 60 paragraph qua UI probe: `canvas 2232px` > viewport 700, first-draw 23.0 ms.
+- **Đóng rung A3 (ceiling ghi thẳng):** đích RAM <150 MB là criterion cho **RELEASE
+  build** (OQ-V01-2/DD V01 §10) — T-057 (release boot stall, PH-4) chặn đo release; số
+  debug = tripwire gate 12 (300 MB, đo 265 MB). Không fake số RELEASE. Vision QĐ9 A3 ✅;
+  ▶ = T-055 #4 (review kiến trúc post-A3) rồi seed **T-A27** (A4 "Nano Light").
+- **Trạng thái:** confirmed — verify.sh FULL exit 0 (17 ▸ steps, gates 9a–d/10/11/12/13
+  GREEN) trên cây sắp commit; `viewer view:` là log contract mới (smoke-lib khối đóng
+  băng, emitting end `viewer.rs::viewer_view` — đổi phải cùng commit).
+
+---
+
 ## 2026-10-03 · T-058: Tailwind v4 cho own-UI — 3 bẫy pixel-level (refactor style-infra, visual không đổi)
 
 - **Bối cảnh:** T-058 migrate start page + viewer chrome sang Tailwind v4 CSS-first (`@tailwindcss/vite`,

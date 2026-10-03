@@ -48,6 +48,9 @@ harness/scripts/smoke-clean-machine.sh || fail=1
 echo "▸ smoke quick-view metrics (gate 12: layout asserts + <500 ms + RAM tree — T-V2)"
 harness/scripts/smoke-quick-view.sh || fail=1
 
+echo "▸ smoke quick-view UX wiring E2E (gate 13: start-page probe → viewer_view → render — T-V5)"
+harness/scripts/smoke-quick-view-ui.sh || fail=1
+
 echo "▸ upstream submodules clean?"
 if [ -n "$(git submodule status | grep '^[+MU]')" ]; then
   echo "  ✗ submodules dirty/different:"; git submodule status; fail=1
