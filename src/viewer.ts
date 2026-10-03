@@ -19,15 +19,18 @@ import {
 } from './viewer/render';
 import { hitTest, layoutBlocks, MARGIN, type Block, type FontMetrics, type LineModel } from './viewer/layout';
 
+/** T-A28 C5: mirrors the Rust `QuickView` payload (src-tauri/src/viewer.rs)
+ * in the ONE camelCase casing — every Rust→JS payload struct is
+ * `#[serde(rename_all = "camelCase")]` (lesson T-059). */
 interface QuickView {
-  parse_ms: number;
+  parseMs: number;
   doc: { body: Block[] };
   fonts: FontMetrics;
   /** `w:pgSz` of the final section, twips (§17.6.11). */
   page: { w: number | null; h: number | null; orient: string | null } | null;
   /** V3: `<origin>/media/<fileId>` prefix — append the OPC part name to
    * fetch image bytes from the loopback filesrv; null = media disabled. */
-  media_base: string | null;
+  mediaBase: string | null;
 }
 
 const { invoke } = (window as unknown as { __TAURI__: { core: { invoke: <T>(cmd: string, args?: unknown) => Promise<T> } } }).__TAURI__.core;
@@ -41,7 +44,7 @@ async function main(): Promise<void> {
   try {
     const qv = await invoke<QuickView>('viewer_open');
     const bitmaps = new Map<string, ImageBitmap>();
-    if (qv.media_base) await loadMedia(qv.doc.body, qv.media_base, bitmaps, 'viewer', invoke);
+    if (qv.mediaBase) await loadMedia(qv.doc.body, qv.mediaBase, bitmaps, 'viewer', invoke);
     const measure = canvasMeasurer(ctx);
     const render = (): { colW: number; model: LineModel; docH: number } => {
       const colW = columnWidth(qv.page, innerWidth);
@@ -65,7 +68,7 @@ async function main(): Promise<void> {
     for (let i = 0; i < img.length; i += 4 * 97) {
       if (img[i] < 128) inked++; // red channel of every 97th pixel
     }
-    const msg = `viewer first-draw ${ms.toFixed(1)} ms (parse ${qv.parse_ms.toFixed(1)} ms, body blocks ${qv.doc.body.length}, inked ${inked}, canvas ${docH}px)`;
+    const msg = `viewer first-draw ${ms.toFixed(1)} ms (parse ${qv.parseMs.toFixed(1)} ms, body blocks ${qv.doc.body.length}, inked ${inked}, canvas ${docH}px)`;
     await invoke('frontend_log', { level: 'info', message: msg });
     const m = model.metrics;
     const baselines = model.lines.slice(0, 40).map((l) => l.baseline.toFixed(1)).join(',');

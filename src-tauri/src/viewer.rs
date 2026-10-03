@@ -187,8 +187,12 @@ pub fn viewer_open(
 }
 
 /// The quick-view payload: parse time + the RESOLVED render model (V1 — the
-/// frontend merges nothing, DD §3.4) + the V2 layout inputs.
+/// frontend merges nothing, DD §3.4) + the V2 layout inputs. T-A28 C5: the
+/// payload contract is camelCase across surfaces (matches `NanoLightDoc` /
+/// `EditOutcome`; the `nano light evidence:` log lines are UNAFFECTED —
+/// those keep their frozen gate-12/15 shape).
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct QuickView {
     pub parse_ms: f64,
     pub doc: RenderDoc,
