@@ -38,25 +38,43 @@ pub struct Caret {
     pub cell: Option<[usize; 2]>,
 }
 
+/// A text selection: `anchor` (where the gesture started) + `focus` (the
+/// moving end) — UNORDERED, Rust orders the pair at use time by
+/// `(para, run, offset)` (total order over top-level carets, DD L01 §5.3a).
+/// `anchor == focus` ≡ plain caret. T-A28 slice A4 #1.
+/// TS mirror: `src/editor.ts` `SelRange` (C5 — one camelCase contract home).
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SelRange {
+    pub anchor: Caret,
+    pub focus: Caret,
+}
+
 /// Snapshot-clone undo bound (DD L01 §2): the model is small, clones are
 /// cheap; the oldest snapshot drops beyond this.
 const UNDO_CAP: usize = 100;
+
+/// Undo/redo snapshot: model + caret + selection OF THE MOMENT (DD L01
+/// §5.3a — undo restores the highlight, not just the text).
+type Snapshot = (Document, Caret, Option<SelRange>);
 
 /// One Nano Light session, owned by its window label (pattern T-059 — every
 /// command resolves its session by the calling window, never "the latest").
 /// Holds the UNRESOLVED `Document` (the write-back-able model — `RenderDoc`
 /// has flattened the §17.7.2 style chain and cannot round-trip), the original
 /// package bytes (media parts are copied byte-exact on save, T-A26),
-/// snapshot-clone undo/redo stacks carrying the caret of their moment, and
-/// the last-saved snapshot (`dirty = doc != saved` — undoing back to the
-/// save point clears it for free).
+/// snapshot-clone undo/redo stacks carrying the caret+selection of their
+/// moment, the live selection (`None` = plain caret), and the last-saved
+/// snapshot (`dirty = doc != saved` — undoing back to the save point clears
+/// it for free).
 pub struct EditorSession {
     doc: Document,
     media_src: Vec<u8>,
-    undo: Vec<(Document, Caret)>,
-    redo: Vec<(Document, Caret)>,
+    undo: Vec<Snapshot>,
+    redo: Vec<Snapshot>,
     saved: Option<Document>,
     caret: Caret,
+    sel: Option<SelRange>,
     path: PathBuf,
 }
 
@@ -72,38 +90,74 @@ impl EditorSession {
     /// apply the mutation, keep the undo/redo bookkeeping, return the new
     /// caret. Mutations push the pre-command snapshot only when they actually
     /// changed the model (a no-op backspace at the document start must not
-    /// pollute the stack); undo/redo manage their own stacks.
+    /// pollute the stack); undo/redo manage their own stacks. Range-aware
+    /// verbs (DD L01 §5.3c) delete the selection FIRST, then mutate at the
+    /// range start; the selection collapses on any model change.
     fn apply(&mut self, cmd: EditCmd) -> Result<Caret, String> {
-        // Round-1 scope (DD L01 §2): in-cell carets are refused on the hit's
-        // `cell` identity (T-060 C3) — the `para` index alone is ambiguous
-        // inside tables (cell content shares `pi` with the following block).
-        if let Some(c) = cmd.caret() {
-            if c.cell.is_some() {
-                return Err(
-                    "nano light: editing inside a table cell is out of scope for round 1 (DD L01 §2)"
-                        .to_string(),
-                );
-            }
+        // Round-1 scope (DD L01 §2/§5.3a): in-cell carets are refused on the
+        // hit's `cell` identity (T-060 C3) — the `para` index alone is
+        // ambiguous inside tables (cell content shares `pi` with the block
+        // after the table). A selection's endpoints ride the same identity.
+        let in_cell = |c: Caret| c.cell.is_some();
+        if cmd.caret().is_some_and(in_cell)
+            || cmd
+                .sel()
+                .is_some_and(|r| in_cell(r.anchor) || in_cell(r.focus))
+        {
+            return Err(
+                "nano light: editing inside a table cell is out of scope for round 1 (DD L01 §2)"
+                    .to_string(),
+            );
         }
         let is_mutation = !matches!(cmd, EditCmd::Undo | EditCmd::Redo);
-        let before = (self.doc.clone(), self.caret);
+        // The snapshot carries the caret+selection the COMMAND acted at —
+        // TS-side caret movement (arrows/clicks) between commands never syncs
+        // back to the session (DD L01 §5.3g ceiling), so `self.caret` would
+        // be stale exactly when it matters.
+        let before = (
+            self.doc.clone(),
+            cmd.caret().unwrap_or(self.caret),
+            cmd.sel().or(self.sel),
+        );
         let caret = match cmd {
-            EditCmd::Insert { text, caret } => apply_insert(&mut self.doc, caret, &text),
-            EditCmd::Backspace { caret } => apply_backspace(&mut self.doc, caret),
-            EditCmd::Delete { caret } => apply_delete(&mut self.doc, caret),
-            EditCmd::Enter { caret } => apply_enter(&mut self.doc, caret),
+            EditCmd::Insert { text, caret, sel } => {
+                let (caret, _) = collapse_range(&mut self.doc, caret, sel)?;
+                apply_insert(&mut self.doc, caret, &text)
+            }
+            EditCmd::Backspace { caret, sel } => {
+                let (caret, ranged) = collapse_range(&mut self.doc, caret, sel)?;
+                if ranged {
+                    Ok(caret) // the range delete WAS the deletion
+                } else {
+                    apply_backspace(&mut self.doc, caret)
+                }
+            }
+            EditCmd::Delete { caret, sel } => {
+                let (caret, ranged) = collapse_range(&mut self.doc, caret, sel)?;
+                if ranged {
+                    Ok(caret)
+                } else {
+                    apply_delete(&mut self.doc, caret)
+                }
+            }
+            EditCmd::Enter { caret, sel } => {
+                let (caret, _) = collapse_range(&mut self.doc, caret, sel)?;
+                apply_enter(&mut self.doc, caret)
+            }
             EditCmd::Undo => match self.undo.pop() {
-                Some((doc, caret)) => {
+                Some((doc, caret, sel)) => {
                     self.redo
-                        .push((std::mem::replace(&mut self.doc, doc), self.caret));
+                        .push((std::mem::replace(&mut self.doc, doc), self.caret, self.sel));
+                    self.sel = sel;
                     Ok(caret)
                 }
                 None => Ok(self.caret), // empty stack — no-op
             },
             EditCmd::Redo => match self.redo.pop() {
-                Some((doc, caret)) => {
+                Some((doc, caret, sel)) => {
                     self.undo
-                        .push((std::mem::replace(&mut self.doc, doc), self.caret));
+                        .push((std::mem::replace(&mut self.doc, doc), self.caret, self.sel));
+                    self.sel = sel;
                     Ok(caret)
                 }
                 None => Ok(self.caret),
@@ -115,6 +169,7 @@ impl EditorSession {
             if self.undo.len() > UNDO_CAP {
                 self.undo.remove(0);
             }
+            self.sel = None; // a mutation collapses the selection to a caret
         }
         self.caret = caret;
         Ok(caret)
@@ -286,6 +341,7 @@ pub fn nano_light_open(
         undo: Vec::new(),
         redo: Vec::new(),
         caret,
+        sel: None,
         path: PathBuf::from(&path),
     };
     sessions
@@ -310,13 +366,32 @@ pub fn nano_light_open(
 }
 
 /// One mutation command — `caret` fields only where the command needs them.
+/// T-A28 §5.3c: the mutating verbs carry the live selection (`sel`) — a
+/// non-empty one is deleted BEFORE the verb mutates at the range start.
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum EditCmd {
-    Insert { text: String, caret: Caret },
-    Backspace { caret: Caret },
-    Delete { caret: Caret },
-    Enter { caret: Caret },
+    Insert {
+        text: String,
+        caret: Caret,
+        #[serde(default)]
+        sel: Option<SelRange>,
+    },
+    Backspace {
+        caret: Caret,
+        #[serde(default)]
+        sel: Option<SelRange>,
+    },
+    Delete {
+        caret: Caret,
+        #[serde(default)]
+        sel: Option<SelRange>,
+    },
+    Enter {
+        caret: Caret,
+        #[serde(default)]
+        sel: Option<SelRange>,
+    },
     Undo,
     Redo,
 }
@@ -338,22 +413,36 @@ impl EditCmd {
     fn caret(&self) -> Option<Caret> {
         match self {
             EditCmd::Insert { caret, .. }
-            | EditCmd::Backspace { caret }
-            | EditCmd::Delete { caret }
-            | EditCmd::Enter { caret } => Some(*caret),
+            | EditCmd::Backspace { caret, .. }
+            | EditCmd::Delete { caret, .. }
+            | EditCmd::Enter { caret, .. } => Some(*caret),
+            EditCmd::Undo | EditCmd::Redo => None,
+        }
+    }
+
+    /// The selection the command acts on (None for undo/redo).
+    fn sel(&self) -> Option<SelRange> {
+        match self {
+            EditCmd::Insert { sel, .. }
+            | EditCmd::Backspace { sel, .. }
+            | EditCmd::Delete { sel, .. }
+            | EditCmd::Enter { sel, .. } => *sel,
             EditCmd::Undo | EditCmd::Redo => None,
         }
     }
 }
 
 /// What every edit returns: the re-resolved render model (the frontend draws
-/// from this — it merges nothing), the new caret and dirty.
+/// from this — it merges nothing), the new caret, dirty, and the live
+/// selection (collapsed after a mutation; restored by undo/redo — DD L01
+/// §5.3a).
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EditOutcome {
     pub doc: RenderDoc,
     pub caret: Caret,
     pub dirty: bool,
+    pub sel: Option<SelRange>,
 }
 
 #[tauri::command]
@@ -363,12 +452,13 @@ pub fn nano_light_edit(
     cmd: EditCmd,
 ) -> Result<EditOutcome, String> {
     let label = cmd.label();
-    let (caret, dirty, undo_len, render) = sessions.with_session(window.label(), |s| {
+    let (caret, dirty, undo_len, sel, render) = sessions.with_session(window.label(), |s| {
         let caret = s.apply(cmd)?;
         Ok((
             caret,
             s.dirty(),
             s.undo.len(),
+            s.sel,
             nanooffice_ooxml::resolve(&s.doc),
         ))
     })?;
@@ -382,6 +472,7 @@ pub fn nano_light_edit(
         doc: render,
         caret,
         dirty,
+        sel,
     })
 }
 
@@ -479,6 +570,153 @@ fn byte_to_utf16(s: &str, byte: usize) -> usize {
         .take_while(|(b, _)| *b < byte)
         .map(|(_, c)| c.len_utf16())
         .sum()
+}
+
+/// Document-order key of a caret — the total order over top-level carets the
+/// selection ordering uses (DD L01 §5.3a; cell carets are refused upstream).
+fn caret_key(c: &Caret) -> (usize, usize, usize) {
+    (c.para, c.run, c.offset)
+}
+
+/// A non-empty selection collapses to: delete the range, mutate at the range
+/// start. Returns `(caret, ranged)` — `ranged` tells the single-char verbs to
+/// skip their own step (the range delete WAS the deletion, DD L01 §5.3c).
+fn collapse_range(
+    doc: &mut Document,
+    caret: Caret,
+    sel: Option<SelRange>,
+) -> Result<(Caret, bool), String> {
+    match sel {
+        Some(r) if r.anchor != r.focus => Ok((apply_delete_range(doc, r.anchor, r.focus)?, true)),
+        _ => Ok((caret, false)),
+    }
+}
+
+/// Delete everything between two carets (ordered) — cross run AND cross
+/// paragraph (DD L01 §5.3c). Semantics: the FIRST paragraph's properties
+/// survive the merge (Word mark-deletion direction); a run's images sit at
+/// the END of its text (parser flatten, DD §3.1), so a run's images die
+/// exactly when the range covers that run's text end. Any table inside the
+/// span refuses the WHOLE command — a silent table drop would be data loss.
+/// Empty runs are kept (no splicing) so the returned caret
+/// `(start.para, start.run, start.offset)` always addresses a valid spot.
+fn apply_delete_range(doc: &mut Document, a: Caret, b: Caret) -> Result<Caret, String> {
+    let (start, end) = if caret_key(&a) <= caret_key(&b) {
+        (a, b)
+    } else {
+        (b, a)
+    };
+    if start.para >= doc.body.len() || end.para >= doc.body.len() {
+        return Err(format!(
+            "nano light: range endpoints {}..{} outside the document ({} blocks)",
+            start.para,
+            end.para,
+            doc.body.len()
+        ));
+    }
+    if doc.body[start.para..=end.para]
+        .iter()
+        .any(|blk| matches!(blk, Block::Table(_)))
+    {
+        return Err(format!(
+            "nano light: range {}..{} spans a table — selection cannot enter tables (round 1, DD L01 §5.3)",
+            start.para, end.para
+        ));
+    }
+    if start.para == end.para {
+        let p = paragraph_at(doc, start.para)?;
+        if end.run >= p.runs.len() {
+            return Err(format!(
+                "nano light: no run {} in paragraph {}",
+                end.run, start.para
+            ));
+        }
+        let end_len = p.runs[end.run].text.encode_utf16().count();
+        if start.run == end.run {
+            let run = &mut p.runs[start.run];
+            let sb = utf16_to_byte(&run.text, start.offset)?;
+            let eb = utf16_to_byte(&run.text, end.offset)?;
+            run.text.replace_range(sb..eb, "");
+            if end.offset == end_len {
+                run.images.clear(); // the range reached the run's text end
+            }
+        } else {
+            {
+                let head = &mut p.runs[start.run];
+                let sb = utf16_to_byte(&head.text, start.offset)?;
+                head.text.truncate(sb);
+                head.images.clear(); // the range runs past this run's text
+            }
+            {
+                let tail = &mut p.runs[end.run];
+                let eb = utf16_to_byte(&tail.text, end.offset)?;
+                tail.text.replace_range(0..eb, "");
+                if end.offset == end_len {
+                    tail.images.clear();
+                }
+            }
+            p.runs.drain(start.run + 1..end.run);
+        }
+        return Ok(Caret {
+            para: start.para,
+            run: start.run,
+            offset: start.offset,
+            cell: None,
+        });
+    }
+    // head paragraph: keep its prefix (its pPr wins the merge), drop the runs
+    // after the caret run — they are inside the range. An empty head
+    // paragraph (selection starting at a `w:p` with no runs) has nothing to
+    // truncate; it survives with its pPr and adopts the tail runs.
+    {
+        let p = paragraph_at(doc, start.para)?;
+        if p.runs.is_empty() {
+            // nothing to truncate — the paragraph mark merge only
+        } else {
+            let head = p.runs.get_mut(start.run).ok_or_else(|| {
+                format!(
+                    "nano light: no run {} in paragraph {}",
+                    start.run, start.para
+                )
+            })?;
+            let sb = utf16_to_byte(&head.text, start.offset)?;
+            head.text.truncate(sb);
+            head.images.clear(); // the range runs past this run's text
+            p.runs.truncate(start.run + 1);
+        }
+    }
+    // tail paragraph: keep from end.offset on (its images sit past the cut —
+    // kept unless the cut reaches the text end); the runs before end.run die
+    // with the paragraph's own pPr.
+    let tail_runs: Vec<Run> = {
+        let p = paragraph_at(doc, end.para)?;
+        if p.runs.is_empty() {
+            Vec::new() // empty tail paragraph: only its block mark is deleted
+        } else {
+            let tail = p.runs.get_mut(end.run).ok_or_else(|| {
+                format!("nano light: no run {} in paragraph {}", end.run, end.para)
+            })?;
+            let eb = utf16_to_byte(&tail.text, end.offset)?;
+            let keep_images = end.offset < tail.text.encode_utf16().count();
+            tail.text.replace_range(0..eb, "");
+            if !keep_images {
+                tail.images.clear();
+            }
+            p.runs.split_off(end.run)
+        }
+    };
+    // the blocks strictly between (head exclusive, tail inclusive) go away;
+    // the tail's surviving runs join the head paragraph
+    doc.body.drain(start.para + 1..=end.para);
+    if let Some(Block::Paragraph(p)) = doc.body.get_mut(start.para) {
+        p.runs.extend(tail_runs);
+    }
+    Ok(Caret {
+        para: start.para,
+        run: start.run,
+        offset: start.offset,
+        cell: None,
+    })
 }
 
 fn apply_insert(doc: &mut Document, caret: Caret, text: &str) -> Result<Caret, String> {
@@ -682,6 +920,7 @@ fn apply_enter(doc: &mut Document, caret: Caret) -> Result<Caret, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nanooffice_ooxml::ImageRef;
 
     fn document(body: Vec<Block>) -> Document {
         Document {
@@ -725,6 +964,7 @@ mod tests {
                 offset: 0,
                 cell: None,
             },
+            sel: None,
             path: std::env::temp_dir().join("nanooffice-test-nl-unused.docx"),
         }
     }
@@ -912,14 +1152,39 @@ mod tests {
             offset: 1,
             cell: Some([0, 1]),
         };
+        let top_caret = Caret {
+            para: 0,
+            run: 0,
+            offset: 0,
+            cell: None,
+        };
         for cmd in [
             EditCmd::Insert {
                 text: "x".into(),
                 caret: in_cell,
+                sel: None,
             },
-            EditCmd::Backspace { caret: in_cell },
-            EditCmd::Delete { caret: in_cell },
-            EditCmd::Enter { caret: in_cell },
+            EditCmd::Backspace {
+                caret: in_cell,
+                sel: None,
+            },
+            EditCmd::Delete {
+                caret: in_cell,
+                sel: None,
+            },
+            EditCmd::Enter {
+                caret: in_cell,
+                sel: None,
+            },
+            // a selection endpoint inside a cell refuses the same way
+            EditCmd::Insert {
+                text: "x".into(),
+                caret: top_caret,
+                sel: Some(SelRange {
+                    anchor: top_caret,
+                    focus: in_cell,
+                }),
+            },
         ] {
             let err = s.apply(cmd).unwrap_err();
             assert!(
@@ -945,6 +1210,7 @@ mod tests {
             .apply(EditCmd::Insert {
                 text: "Z".into(),
                 caret: c0,
+                sel: None,
             })
             .unwrap();
         assert_eq!((c.para, c.run, c.offset), (0, 0, 1));
@@ -973,6 +1239,7 @@ mod tests {
                     offset: 0,
                     cell: None,
                 },
+                sel: None,
             })
             .unwrap();
         assert_eq!(s.undo.len(), depth, "no-op did not pollute the undo stack");
@@ -1013,6 +1280,7 @@ mod tests {
                 offset: 0,
                 cell: None,
             },
+            sel: None,
             path: path.clone(),
         };
         let c = apply_insert(&mut s.doc, s.caret, "MARKER-NL-01 ").unwrap();
@@ -1029,5 +1297,361 @@ mod tests {
         // the tmp sibling is gone (rename, not a copy)
         assert!(!path.with_extension("nanooffice-nl.docx").exists());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── T-A28 §5.3c: range-aware mutations ────────────────────────────────
+
+    fn img(rel: &str) -> ImageRef {
+        ImageRef {
+            rel_id: rel.into(),
+            part: format!("word/media/{rel}.png"),
+            cx_emu: 95250,
+            cy_emu: 47625,
+        }
+    }
+
+    fn run_text(doc: &Document, para: usize) -> String {
+        match &doc.body[para] {
+            Block::Paragraph(p) => p.runs.iter().map(|r| r.text.clone()).collect(),
+            _ => unreachable!("test docs are paragraphs"),
+        }
+    }
+
+    /// Same-paragraph range deletion: per-run formatting survives, only the
+    /// covered text dies; the image rule (a run's images sit at its text END)
+    /// drops the head's covered images and keeps the tail's when the cut
+    /// stops before its text end.
+    #[test]
+    fn range_delete_same_para() {
+        let mut s = session(document(vec![Block::Paragraph(Paragraph {
+            runs: vec![
+                Run {
+                    text: "hello ".into(),
+                    images: vec![img("head")],
+                    ..Default::default()
+                },
+                Run {
+                    text: "world".into(),
+                    bold: Some(true),
+                    images: vec![img("tail")],
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        })]));
+        // delete (0,0,2)..(0,1,3) = "llo wor" → "he" + "ld"
+        let c = apply_delete_range(
+            &mut s.doc,
+            Caret {
+                para: 0,
+                run: 0,
+                offset: 2,
+                cell: None,
+            },
+            Caret {
+                para: 0,
+                run: 1,
+                offset: 3,
+                cell: None,
+            },
+        )
+        .unwrap();
+        assert_eq!((c.para, c.run, c.offset), (0, 0, 2), "caret = range start");
+        let p = match &s.doc.body[0] {
+            Block::Paragraph(p) => p,
+            _ => unreachable!(),
+        };
+        assert_eq!(
+            p.runs.len(),
+            2,
+            "middle-less range keeps both boundary runs"
+        );
+        assert_eq!(p.runs[0].text, "he");
+        assert!(
+            p.runs[0].images.is_empty(),
+            "head images die with its covered text end"
+        );
+        assert_eq!(p.runs[1].text, "ld");
+        assert_eq!(p.runs[1].bold, Some(true), "tail keeps its own formatting");
+        assert_eq!(
+            p.runs[1].images,
+            vec![img("tail")],
+            "tail cut stops before its text end — images live"
+        );
+
+        // same-run cut [1..4) of "ld"... (fresh doc): "world" → "wd", images live
+        let mut s2 = session(doc_one_para());
+        let c = apply_delete_range(
+            &mut s2.doc,
+            Caret {
+                para: 0,
+                run: 1,
+                offset: 1,
+                cell: None,
+            },
+            Caret {
+                para: 0,
+                run: 1,
+                offset: 4,
+                cell: None,
+            },
+        )
+        .unwrap();
+        assert_eq!((c.para, c.run, c.offset), (0, 1, 1));
+        assert_eq!(run_text(&s2.doc, 0), "hello wd");
+    }
+
+    /// Cross-paragraph range deletion: the FIRST paragraph's properties win
+    /// the merge, the tail's runs (with their own run formatting) join it,
+    /// middle blocks vanish — and a table anywhere in the span refuses the
+    /// whole command with the model untouched.
+    #[test]
+    fn range_delete_cross_para() {
+        let para_with = |text: &str, style: &str, images: Vec<ImageRef>| {
+            Block::Paragraph(Paragraph {
+                style: Some(style.into()),
+                runs: vec![Run {
+                    text: text.into(),
+                    images,
+                    ..Default::default()
+                }],
+                ..Default::default()
+            })
+        };
+        let mut s = session(document(vec![
+            para_with("AB", "P0", vec![img("h")]),
+            para_with("CD", "P1", Vec::new()),
+            para_with("EF", "P2", vec![img("t")]),
+        ]));
+        // delete (0,0,1)..(2,0,1) → "A" + "F" merged into para 0 (style P0)
+        let c = apply_delete_range(
+            &mut s.doc,
+            Caret {
+                para: 0,
+                run: 0,
+                offset: 1,
+                cell: None,
+            },
+            Caret {
+                para: 2,
+                run: 0,
+                offset: 1,
+                cell: None,
+            },
+        )
+        .unwrap();
+        assert_eq!((c.para, c.run, c.offset), (0, 0, 1));
+        assert_eq!(s.doc.body.len(), 1, "middle + tail blocks vanished");
+        match &s.doc.body[0] {
+            Block::Paragraph(p) => {
+                assert_eq!(
+                    p.style.as_deref(),
+                    Some("P0"),
+                    "the FIRST paragraph's pPr wins"
+                );
+                assert_eq!(p.runs.len(), 2, "head prefix + tail suffix");
+                assert_eq!(p.runs[0].text, "A");
+                assert!(
+                    p.runs[0].images.is_empty(),
+                    "head images die (range runs past)"
+                );
+                assert_eq!(p.runs[1].text, "F");
+                assert_eq!(
+                    p.runs[1].images,
+                    vec![img("t")],
+                    "tail images live (cut before text end)"
+                );
+            }
+            _ => unreachable!(),
+        }
+
+        // a table anywhere in the span refuses the WHOLE range (data loss guard)
+        let mut s2 = session(document(vec![
+            para_with("AB", "P0", Vec::new()),
+            Block::Table(Default::default()),
+            para_with("EF", "P2", Vec::new()),
+        ]));
+        let before = s2.doc.clone();
+        let err = apply_delete_range(
+            &mut s2.doc,
+            Caret {
+                para: 0,
+                run: 0,
+                offset: 1,
+                cell: None,
+            },
+            Caret {
+                para: 2,
+                run: 0,
+                offset: 1,
+                cell: None,
+            },
+        )
+        .unwrap_err();
+        assert!(err.contains("table"), "refusal names the table: {err}");
+        assert_eq!(s2.doc, before, "refused range left the model untouched");
+    }
+
+    /// The mutating verbs through `apply` with a selection: insert replaces
+    /// the range, backspace/delete delete the WHOLE range (not one char),
+    /// enter deletes the range then splits — every returned caret is the
+    /// range start (advanced by the verb's own action).
+    #[test]
+    fn verbs_replace_selection() {
+        let mut s = session(doc_one_para()); // "hello " + "world"(bold)
+        let sel = |so: usize, fo: usize| {
+            Some(SelRange {
+                anchor: Caret {
+                    para: 0,
+                    run: 1,
+                    offset: so,
+                    cell: None,
+                },
+                focus: Caret {
+                    para: 0,
+                    run: 1,
+                    offset: fo,
+                    cell: None,
+                },
+            })
+        };
+        // unordered anchor/focus (anchor AFTER focus) — ordering must handle it
+        let c = s
+            .apply(EditCmd::Insert {
+                text: "X".into(),
+                caret: Caret {
+                    para: 0,
+                    run: 1,
+                    offset: 1,
+                    cell: None,
+                },
+                sel: sel(4, 1), // covers "orl"
+            })
+            .unwrap();
+        assert_eq!((c.para, c.run, c.offset), (0, 1, 2), "start + len(X)");
+        assert_eq!(run_text(&s.doc, 0), "hello wXd");
+
+        // backspace with a range deletes the range, not one char
+        let c = s
+            .apply(EditCmd::Backspace {
+                caret: c,
+                sel: sel(2, 1), // "X"
+            })
+            .unwrap();
+        assert_eq!((c.para, c.run, c.offset), (0, 1, 1));
+        assert_eq!(run_text(&s.doc, 0), "hello wd");
+
+        // delete with a range behaves identically forward
+        let c = s
+            .apply(EditCmd::Delete {
+                caret: c,
+                sel: sel(0, 1), // "w"
+            })
+            .unwrap();
+        assert_eq!((c.para, c.run, c.offset), (0, 1, 0));
+        assert_eq!(run_text(&s.doc, 0), "hello d");
+
+        // enter with a range: range gone, paragraph split at its start
+        let c = s
+            .apply(EditCmd::Enter {
+                caret: Caret {
+                    para: 0,
+                    run: 0,
+                    offset: 3,
+                    cell: None,
+                },
+                sel: Some(SelRange {
+                    anchor: Caret {
+                        para: 0,
+                        run: 0,
+                        offset: 1,
+                        cell: None,
+                    },
+                    focus: Caret {
+                        para: 0,
+                        run: 1,
+                        offset: 1,
+                        cell: None,
+                    },
+                }), // "ello " + "d"
+            })
+            .unwrap();
+        assert_eq!((c.para, c.run, c.offset), (1, 0, 0));
+        assert_eq!(run_text(&s.doc, 0), "h");
+        assert_eq!(run_text(&s.doc, 1), "");
+        assert_eq!(s.doc.body.len(), 2);
+    }
+
+    /// Undo/redo restore BOTH model and the selection+caret of the moment —
+    /// and the snapshot records the CMD's caret/sel, not the session's stale
+    /// ones (TS-side caret movement between commands never syncs back —
+    /// DD L01 §5.3a/g).
+    #[test]
+    fn undo_restores_selection_and_cmd_state() {
+        let mut s = session(doc_one_para());
+        let anchor = Caret {
+            para: 0,
+            run: 1,
+            offset: 4,
+            cell: None,
+        };
+        let focus = Caret {
+            para: 0,
+            run: 1,
+            offset: 1,
+            cell: None,
+        };
+        let sel = Some(SelRange { anchor, focus });
+        let c = s
+            .apply(EditCmd::Insert {
+                text: "XY".into(),
+                caret: focus,
+                sel,
+            })
+            .unwrap();
+        assert_eq!((c.para, c.run, c.offset), (0, 1, 3));
+        assert!(s.sel.is_none(), "a mutation collapses the selection");
+
+        let c = s.apply(EditCmd::Undo).unwrap();
+        assert_eq!(c, focus, "undo restores the caret the command acted at");
+        assert_eq!(
+            s.sel, sel,
+            "undo restores the selection (highlight comes back)"
+        );
+        assert!(!s.dirty(), "undo to the save point is clean");
+
+        s.apply(EditCmd::Redo).unwrap();
+        assert!(
+            s.sel.is_none(),
+            "redo returns to the collapsed post-mutation state"
+        );
+
+        // a mutation whose cmd caret differs from the session caret snapshots
+        // the CMD's state — the next undo jumps to the mutate position
+        let c = s
+            .apply(EditCmd::Insert {
+                text: "Q".into(),
+                caret: Caret {
+                    para: 0,
+                    run: 0,
+                    offset: 0,
+                    cell: None,
+                },
+                sel: None,
+            })
+            .unwrap();
+        assert_eq!((c.para, c.run, c.offset), (0, 0, 1));
+        assert_eq!(s.caret, c, "session caret follows the outcome");
+        let c = s.apply(EditCmd::Undo).unwrap();
+        assert_eq!(
+            c,
+            Caret {
+                para: 0,
+                run: 0,
+                offset: 0,
+                cell: None,
+            },
+            "undo returns to the cmd's caret, not the stale session one"
+        );
     }
 }
