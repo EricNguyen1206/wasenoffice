@@ -8,6 +8,63 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-03 · T-A27: A4 mở màn — editor core "Nano Light" vòng edit đầu (không sdkjs/x2t)
+
+- **Bối cảnh:** mở màn rung A4 theo QĐ9/DD L01 (`docs/design/editor-a4/DD.md`,
+  design-first commit 8b5356e TRƯỚC code 6e63399). Vòng 1: caret → gõ → xoá →
+  enter → undo/redo → dirty → **save thẳng `write_docx`** — KHÔNG Editor.bin,
+  KHÔNG x2t trên đường Nano Light; mặc định mở file vẫn engine (D1), Nano Light
+  vào qua nút start page + env `NANO_OFFICE_NANO_LIGHT` (pattern V5). Consume
+  `src/viewer/layout.ts` + `hitTest` NGUYÊN VẸN — **không đụng layout.ts/viewer.ts
+  (0 diff)**: parity-view không cần chạy lại; vite tự gom layout thành chunk dùng
+  chung viewer/editor (by-construction không fork được).
+- **Kiến trúc land:** `src-tauri/src/editor.rs` — `EditorSessions` map
+  window-label → `EditorSession` (giữ `Document` CHƯA-resolve + bytes gốc
+  `media_src` + undo/redo snapshot-clone kèm caret, cap 100 + `saved` clone cho
+  dirty = `doc != saved`); commands `nano_light_view/open/edit/save/reopen`
+  song song delivery (tiền lệ C3), session drop cùng hook `WindowEvent::Destroyed`
+  của T-059. Toạ độ mutation = hệ hitTest T-V7 `{para, run, offset}` — **offset
+  là utf-16 code units** (JS string indexing; surrogate pair = 2 units — utf16↔byte
+  map 2 chiều, backspace bớt đúng số units của ký tự bị xoá). Frontend
+  `src/editor.ts` + `editor.html` (entry vite thứ 3 ở ROOT — gotcha V01):
+  re-render sau mỗi edit từ RenderDoc re-resolve, caret forward-map thuần
+  (walk item `ri`/`charStart` + measurer — mirror hitTest, KHÔNG sửa layout.ts).
+- **Gate 15** `smoke-nano-light.sh` (pattern smoke-lib, thường trụ verify.sh):
+  boot env + probe `NANO_OFFICE_NL_PROBE` chạy CÙNG `edit()` handler keydown dùng
+  (không keystroke, rule 6b) → chuỗi insert/backspace×3/enter/undo/redo → save →
+  **parse lại bằng crate CLI chứa marker** + **media part sha256 byte-exact** vs
+  snapshot trước save + **reopen window 2 evidence chứa marker** ("mở lại render
+  đúng nội dung đã edit"). Positive exit 0 ×3 (27–39 ms first-draw, save 1.6–2.3
+  ms/2681 B); negative ×2 exit 1: garbage docx → `nano light failed:` cắn nhanh
+  (pattern gate 13) + **doctor** (parse PRE-SAVE snapshot không marker → assert
+  parse-back cắn — chứng minh assert đọc file đã save, không chỉ vắng mặt).
+  Verify FULL exit 0 **19 ▸ steps** ×2 (trước + sau ponytail cuts); gate 12 số
+  layout không đổi (16 dòng · 601.7 · lhs 17.9); cargo test 33 shell (+5 editor)
+  + 12 crate.
+- **Parity matrix ngoài-`Document`** (DD L01 §5.1, trung thực không nâng model
+  mù): GIỮ — paragraph/run props + bảng grid + numbering + ảnh byte-exact +
+  hdr/ftr + pgSz cuối · MẤT khi save Nano Light — **hyperlink (mất cả text —
+  parser skip subtree theo policy S1, data loss thật phải biết)**, sectPr giữa
+  tài liệu, pgMar + con sectPr khác, settings.xml, theme fonts, docProps,
+  tracked changes/footnotes/fields. Mỗi mục có criterion nâng; edit bảng refuse
+  (pi cell đụng độ block kế — ceiling T-V7).
+- **Gotchas phiên:** (1) TS narrowing — `model` gán trong closure `render()`
+  không tính cho main flow (`Property 'media' does not exist on type 'never'`)
+  → `render()` trả model, gán ở call site; (2) `Document` không impl Default —
+  test builder `document(body)` riêng; (3) test session semantics đầu tiên tự
+  replay logic command (test-of-the-test) → refactor logic vào
+  `EditorSession::apply()` (command thành vỏ mỏng) rồi test đường thật;
+  (4) ponytail cuts bắt được: `NanoLightSaved{bytes,saveMs}` struct chết
+  (frontend bỏ qua kết quả — số đã trong log Rust), `undoDepth` chết, 5 hằng
+  `SMOKE_RE_NL_*` không gate bash nào grep.
+- **Kế tiếp (slice A4 sau):** selection kéo + arrows (ceiling §10 L01) · IME
+  tiếng Việt composite (OQ-L01-3) · hyperlink/sectPr-giữa vào model hoặc
+  refuse-mở (OQ-L01-2) · T-V6 pgMar/spacing khi parity đòi · parity matrix từng
+  lớp = criterion đóng rung A4.
+- **Trạng thái:** confirmed — bằng chứng trong DD L01 §5.2 + báo cáo phiên.
+
+---
+
 ## 2026-10-03 · T-059 + T-V7 — registry keying + layout core/hit-test (2 điều kiện trước A4)
 
 - **T-059 (review #4 C3, bug shell chạy được hôm nay) — CONFIRMED + FIXED (4a12d00):**

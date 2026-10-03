@@ -60,7 +60,7 @@ nanooffice/
 | Phase | Trạng thái | Ghi chú |
 |---|---|---|
 | PH-0 Spike (load editor + render DOCX trong WKWebView) | ✅ ĐÓNG 27.09 — verdict **GO WITH CAVEAT** | render GREEN tự động (verify.sh gate 9, TC-D01-06); baseline debug 27.09: RAM 1 doc ~561–579 MB vs ONLYOFFICE 570 MB (start page); caveat duy nhất: scroll/edit keyboard chờ user xác nhận thủ công ~30s — `docs/diagnostics.md` 27.09 T-003 |
-| Track A rung A0–A3 (QĐ9 — tự chủ shell + phân phối + converter + viewer) | ✅ A1 ĐÓNG 02.10 · A2 ĐÓNG 03.10 · **A3 ĐÓNG 03.10** | **A1 — phân phối độc lập**: chạy trọn open→edit→save KHÔNG cần ONLYOFFICE.app cài sẵn — x2t bundled (T-A10, 113 MB) + AllFonts tự sinh (T-A11) + fonts bundled có license (T-A12) + gate 11 "sạch ONLYOFFICE" thường trụ verify.sh (T-A13: strict clean-machine + negative proven + test tích thể mv app → verify FULL exit 0 khi app ẨN); **A2 — converter Rust**: T-A20 chốt P2 "OOXML core trước" bằng probe số liệu + crate slice `nanooffice-ooxml`; T-A21 S1 docx READ đầy đủ (OPC chuẩn + table/list/image + styles resolve, fuzz 0 panic); T-A22 S2 docx WRITE + round-trip model bất biến 100% + file ghi ra render GREEN; T-A23 S3 parity harness 15/15 construct + 0 diff không phân loại; T-A24 S4 adapter vào runtime — open-side pre-normalize (docx → canonical.docx qua crate → x2t) trong seam `sidecar::convert`, kill switch `NANO_OFFICE_NO_RUST_CONVERTER`, gates 9/10/11 GREEN cả ON lẫn OFF; **A3 — viewer Rust đọc-only ĐÓNG 03.10 (T-A25 design-first + T-V1→T-V5)**: DD V01 `docs/design/viewer-a3/DD.md` (R1 canvas 2D webview riêng không shim/engine; C3 command layer song song delivery; C4 OS/2 không hmtx); T-V1 model render-side + resolve về Rust (round-trip + parity-a2 bất biến); T-V2 layout pgSz + tab + OS/2 line metrics + **gate 12** số liệu (OQ-V01-2 chốt RAM = TREE, tripwire debug 300 MB); T-V3 media route `/media/<id>/<part>` + render ảnh EMU→px; **T-V4 parity render vs oracle CDP — 6/6 corpus ×2 deterministic + negative cắn, ε=2.0px (OQ-V01-1 chốt)**; T-V5 wire UX: nút Quick view trên start page (`viewer_view` — OQ-V01-3 chốt toggle) + scroll cơ bản (canvas cao bằng nội dung, 2-pass draw) + **gate 13 UI E2E**; mở <500 ms GREEN debug (18–89 ms); RAM tree debug 265 MB — **đích <150 MB = criterion RELEASE, T-057 (PH-4) chặn đo, ceiling ghi DD V01 §10**; ceiling parity → seed T-V6 |
+| Track A rung A0–A3 (QĐ9 — tự chủ shell + phân phối + converter + viewer) | ✅ A1 ĐÓNG 02.10 · A2 ĐÓNG 03.10 · **A3 ĐÓNG 03.10** · **A4 MỞ MÀN 03.10 (T-A27)** | **A1 — phân phối độc lập**: chạy trọn open→edit→save KHÔNG cần ONLYOFFICE.app cài sẵn — x2t bundled (T-A10, 113 MB) + AllFonts tự sinh (T-A11) + fonts bundled có license (T-A12) + gate 11 "sạch ONLYOFFICE" thường trụ verify.sh (T-A13: strict clean-machine + negative proven + test tích thể mv app → verify FULL exit 0 khi app ẨN); **A2 — converter Rust**: T-A20 chốt P2 "OOXML core trước" bằng probe số liệu + crate slice `nanooffice-ooxml`; T-A21 S1 docx READ đầy đủ (OPC chuẩn + table/list/image + styles resolve, fuzz 0 panic); T-A22 S2 docx WRITE + round-trip model bất biến 100% + file ghi ra render GREEN; T-A23 S3 parity harness 15/15 construct + 0 diff không phân loại; T-A24 S4 adapter vào runtime — open-side pre-normalize (docx → canonical.docx qua crate → x2t) trong seam `sidecar::convert`, kill switch `NANO_OFFICE_NO_RUST_CONVERTER`, gates 9/10/11 GREEN cả ON lẫn OFF; **A3 — viewer Rust đọc-only ĐÓNG 03.10 (T-A25 design-first + T-V1→T-V5)**: DD V01 `docs/design/viewer-a3/DD.md` (R1 canvas 2D webview riêng không shim/engine; C3 command layer song song delivery; C4 OS/2 không hmtx); T-V1 model render-side + resolve về Rust (round-trip + parity-a2 bất biến); T-V2 layout pgSz + tab + OS/2 line metrics + **gate 12** số liệu (OQ-V01-2 chốt RAM = TREE, tripwire debug 300 MB); T-V3 media route `/media/<id>/<part>` + render ảnh EMU→px; **T-V4 parity render vs oracle CDP — 6/6 corpus ×2 deterministic + negative cắn, ε=2.0px (OQ-V01-1 chốt)**; T-V5 wire UX: nút Quick view trên start page (`viewer_view` — OQ-V01-3 chốt toggle) + scroll cơ bản (canvas cao bằng nội dung, 2-pass draw) + **gate 13 UI E2E**; mở <500 ms GREEN debug (18–89 ms); RAM tree debug 265 MB — **đích <150 MB = criterion RELEASE, T-057 (PH-4) chặn đo, ceiling ghi DD V01 §10**; ceiling parity → seed T-V6; **A4 — Nano Light T-A27 03.10** (chưa đóng rung — criterion đóng = parity matrix theo lớp, DD L01 §5.1): vòng edit đầu KHÔNG sdkjs/x2t — DocSession window-scoped + mutation commands hệ hitTest + caret canvas + undo snapshot + save `write_docx` atomic + gate 15, verify FULL 19 ▸ steps |
 | PH-1 Vòng đời file (open/save/convert qua x2t sidecar) | ⬜ | |
 | PH-2 Trải nghiệm desktop (print/clipboard/fonts/tabs) | ⬜ | |
 | PH-3 Tùy chọn (crypto/signature/cloud) | ⬜ | có thể cắt vĩnh viễn |
@@ -69,8 +69,27 @@ nanooffice/
 ## Việc còn treo
 
 Hàng đợi công việc sống ở **`docs/TODO.md`** (QĐ7 — quy tắc + dashboard ở đầu file đó).
-Điểm nổi bật hiện tại: **RUNG A1 ĐÓNG 02.10 (T-A10→T-A13) — NanoOffice phân phối độc lập**:
-chạy trọn open→edit→save KHÔNG cần ONLYOFFICE.app cài sẵn — x2t bundled (113 MB) +
+Điểm nổi bật hiện tại: **T-A27 ĐÓNG 03.10 (8b5356e + 6e63399) — A4 MỞ MÀN, editor core
+"Nano Light" vòng edit đầu KHÔNG sdkjs/x2t**: design-first DD **L01**
+`docs/design/editor-a4/DD.md` (commit trước code) → `src-tauri/src/editor.rs`
+**DocSession window-scoped** (`EditorSessions` map window-label → session: `Document`
+CHƯA-resolve + bytes gốc làm `media_src` + undo/redo snapshot-clone kèm caret cap 100 +
+dirty = `doc != saved`) + **mutation command layer** song song delivery (insert/backspace/
+delete/enter/undo/redo, toạ độ = hệ hitTest T-V7, offset utf-16; edit bảng refuse) +
+caret forward-map thuần `src/editor.ts` consume `layout.ts` **nguyên vẹn 0 diff**
+(parity-view không cần chạy lại) + entry `editor.html` ROOT + nút Nano Light start page +
+env `NANO_OFFICE_NANO_LIGHT` (**mặc định mở vẫn engine — D1**) + **save = `write_docx` +
+tmp/rename atomic, KHÔNG Editor.bin/x2t** + **parity matrix ngoài-model trung thực**
+(DD §5.1: mất hyperlink-cả-text/sectPr giữa/pgMar/settings/theme/docProps — mỗi mục
+criterion nâng) + **gate 15** `smoke-nano-light.sh` thường trụ verify.sh (probe chạy cùng
+edit() của phím → save → crate parse chứa marker + media sha256 byte-exact + reopen window
+2 render marker; positive ×3 exit 0, first-draw 27–39 ms, negative garbage/doctor exit 1) —
+verify FULL exit 0 **19 ▸ steps** ×2. Kế tiếp: slice sau của A4 theo parity matrix
+(selection/arrows, IME composite, hyperlink/sectPr refuse, T-V6 khi parity đòi).
+Trước đó 03.10: **T-059 + T-V7 ĐÓNG** (4a12d00 + f7a887f — registry keying 4 consumer
+bỏ `latest()` + layout module thuần/hit-test: parity 6/6 ×2 từng px, gate 14 + probe
+gate 12, serde camelCase). Trước đó: **RUNG A1 ĐÓNG 02.10 (T-A10→T-A13) — phân phối
+độc lập**: chạy trọn open→edit→save KHÔNG cần ONLYOFFICE.app cài sẵn — x2t bundled (113 MB) +
 AllFonts.js tự sinh + fonts bundled có license + **gate 11 "sạch ONLYOFFICE" thường trụ**
 trong verify.sh (strict clean-machine mode `NANO_OFFICE_NO_APP_FALLBACK`; positive exit 0 +
 negative proven exit 1) — bằng chứng đóng rung: test tích thể mv app → verify.sh FULL exit 0
