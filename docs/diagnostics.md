@@ -8,6 +8,53 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-03 · T-059 + T-V7 — registry keying + layout core/hit-test (2 điều kiện trước A4)
+
+- **T-059 (review #4 C3, bug shell chạy được hôm nay) — CONFIRMED + FIXED (4a12d00):**
+  `FileRegistry::latest()` = max id được 4 consumer dùng (review #4 liệt kê 3 — tự tìm thấy
+  consumer thứ 4 khi mổ code: `LocalFileSetOpenChangesCount` ở `bridge/mod.rs:83`, ghi
+  open-changes-count cho save truncation — cùng lớp race) trong khi `viewer_open` đăng ký
+  file quick-view vào CÙNG registry → Open A rồi Quick view B = delivery nhận nhầm B /
+  save A hit workdir id B. **Fix:** xoá `latest()`; `register(owner=window-label)` +
+  `unregister_owner` (hook `WindowEvent::Destroyed` — registry hết chỉ phình); 4 consumer
+  keying theo fileId tường minh: `get_document_for_delivery(file_id)` + `flow_file_id`
+  (payload.fileId) cho `LocalFileSaveChanges`/`LocalFileSave` + match bridge cho
+  SetOpenChangesCount. JS: `open_document` trả `fileId` → `main.ts` stamp
+  `window.__nanooffice_file_id__` trong `mountEditor` (choke point duy nhất) → relay
+  `mainFrameInvoke` đính `payload.fileId` + `delivery.js` truyền `{fileId}`. Thiếu/unknown
+  id = lỗi TO (fail loudly). Test race ×2: 2 register + consume chéo đúng file (A < B —
+  B là "latest" giả định) + deltas A land đúng workdir A; counterfactual missing/unknown.
+- **Bài học T-059 (bắt bằng gate 9):** Tauri command `#[derive(Serialize)]` KHÔNG tự
+  camelCase — Rust `file_id` serialize thành `file_id`, TS đọc `doc.fileId` = `undefined`
+  → delivery lỗi "no fileId". Fix = `#[serde(rename_all = "camelCase")]` trên
+  `OpenedDocument`. Triệu chứng lần đầu: gate 9 timeout 240s với đúng 1 dòng ERROR
+  `document delivery failed: delivery: no fileId` — mổ log app thật
+  (`/tmp/nanooffice-smoke-*`) thay vì log tail của smoke script.
+- **T-V7 (review #4 C1, điều kiện mở T-A27) — CONFIRMED:** layout tách thành module thuần
+  `src/viewer/layout.ts` (không DOM/canvas; measurer tiêm vào; `LineModel` + `hitTest`);
+  wrap/tab/OS-2/media port VERBATIM (pi counting, row[0], +4 giữ nguyên); viewer.ts thành
+  consumer vẽ + evidence (shape `viewer evidence:` byte-identical). **Parity KHÔNG fork:**
+  parity-view 6/6 PASS ×2, từng px giống bảng DD V01 §5.5. **Hit-test:** y = baseline gần
+  nhất (biên midpoint), x = binary-search biên ký tự bằng chính measurer forward; offset
+  run-relative (`ri`+`charStart` thêm vào tokenize, thứ tự token không đổi); tab = 1 ký tự
+  (nửa rộng); dòng rỗng (br kép) → placeholder đầu paragraph (A4 refine); x trong advance
+  ký tự i → caret trước ký tự i (không half-char centering — ceiling ghi DD §5.7, A4 có
+  thể lớp centering trên cùng model). 2 tầng test: **gate 14** `test-layout.sh` (tsc →
+  node, 42 checks tọa độ tay, measurer fake 10px/char) + probe E2E gate 12
+  (`NANO_OFFICE_QV_HITTEST=1` → init script → round-trip mọi dòng → `viewer hit-test:
+  16/16 lines ok`; negative doctor `15/16` cắn exit 1). Resize re-layout: listener → rAF
+  → render() lại (cùng đường code first-draw; không gate riêng).
+- **Bài học T-V7 (tsc 6.0):** truyền file trực tiếp cho `tsc` khi repo có tsconfig.json
+  → error TS5112, phải `--ignoreConfig`; không muốn dep `@types/node` cho gate → test
+  tự viết assert/deepEqual 15 dòng (không import node).
+- **Trạng thái:** confirmed — verify.sh FULL exit 0 ×2 (T-059: 17 ▸ steps, gates
+  9a–d/10/11/12/13 GREEN; T-V7: + gate 14, trên cây sắp commit). `viewer hit-test:` là
+  log contract mới (khối đóng băng smoke-lib, emitting end viewer.ts — cùng commit).
+  ⚠ Ghi cho T-A27: gate 12 hiện boot kèm `NANO_OFFICE_QV_HITTEST=1` — probe là gate food,
+  không đụng product default.
+
+---
+
 ## 2026-10-03 · Review kiến trúc #4 (T-055) — post-A3, focus cản A4 "Nano Light"
 
 - **Phương pháp:** bộ đôi improve-codebase-architecture + ponytail-audit (codebase-design từ

@@ -88,12 +88,26 @@ user). **Gate 13** `smoke-quick-view-ui.sh` thường trụ verify.sh — driver
 cắn). Bằng chứng đóng rung: parity-view (T-V4) 6/6 PASS không đổi + gate 12 không thoái hóa
 (265 MB tree debug ≤ 300 tripwire; first-draw 89 ms) + scroll E2E canvas 2232 px; đích mở
 <500 ms GREEN; **đích RAM <150 MB = criterion RELEASE — T-057 (release boot stall, PH-4)
-chặn đo release, ceiling ghi thẳng không fake số (DD V01 §10)**. Mới nhất 03.10 (**T-055 #4 —
+chặn đo release, ceiling ghi thẳng không fake số (DD V01 §10)**. Mới nhất 03.10 (**T-059 +
+T-V7 — 2 điều kiện trước A4, ĐÓNG**): **T-059** (4a12d00) xoá `FileRegistry::latest()` —
+keying tường minh theo fileId: `register(owner=window-label)` + `unregister_owner` khi
+window Destroyed; 4 consumer keying rõ (review #4 liệt kê 3 — consumer thứ 4
+`LocalFileSetOpenChangesCount` tự lộ khi mổ); shim stamp `window.__nanooffice_file_id__`
+từ `open_document` → relay + delivery truyền `{fileId}`; thiếu/unknown = lỗi to; test
+race ×2 + gates 9/10/12/13 GREEN; bài học: serde không tự camelCase (gate 9 bắt
+`doc.fileId` undefined). **T-V7** tách layout viewer thành module thuần
+`src/viewer/layout.ts` (không DOM/canvas, measurer tiêm vào, `LineModel`) + **hit-test
+ngược** `hitTest(x,y) → {para,line,run,offset}` cho caret A4 — parity KHÔNG fork
+(parity-view 6/6 ×2 từng px); 2 tầng test: **gate 14** `test-layout.sh` (42 checks tọa độ
+tay) + probe E2E gate 12 (`NANO_OFFICE_QV_HITTEST` → `viewer hit-test: 16/16`, negative
+proven) + resize re-layout. Chi tiết DD V01 §5.7. Kế tiếp: **T-A27** mở màn A4 (editor
+core "Nano Light", design-first khi claim — nạp deps review #4).
+Trước đó cùng ngày (**T-055 #4 —
 review kiến trúc post-A3**): candidates land — **T-059** (registry keying bỏ `latest()`: quick-view
 đăng ký vào cùng registry với delivery/save = wrong-open/save-fail trong cửa sổ race; bug nhỏ,
 trước A4) + **T-V7** (layout core tách module + hit-test ngược — điều kiện A4: layout parity
 ε=2.0px không được fork) + **deps C2 vào T-A27** (DocSession giữ Document chưa-resolve + undo +
-mutation commands + save = write_docx không qua Editor.bin). Kế tiếp: **T-059 + T-V7** rồi
+mutation commands + save = write_docx không qua Editor.bin). Kế tiếp khi đó: **T-059 + T-V7** rồi
 **T-A27** mở màn A4 (editor core "Nano Light", design-first khi claim).
 Trước đó 03.10 (**T-A24 — A2/S4 adapter, ĐÓNG RUNG A2**, ponytail ULTRA chuỗi A2 — verify FULL
 exit 0): crate `nanooffice-ooxml` vào đường runtime qua seam `sidecar::convert` — **open-side

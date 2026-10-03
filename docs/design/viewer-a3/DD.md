@@ -312,6 +312,41 @@ là criterion cho RELEASE build** — T-057 (release boot stall, PH-4) chặn đ
 debug = tripwire gate 12 300 MB (đo 265 MB). Đích mở < 500 ms GREEN trên debug (18–89 ms).
 Parity (T-V4) 6/6 corpus PASS — criterion thứ ba của rung đạt.
 
+### 5.7 Kết quả slice V7 (03.10.2026 — T-V7, layout core tách module + hit-test)
+
+Layout rời `viewer.ts` thành **module thuần `src/viewer/layout.ts`** — không DOM, không
+canvas: in `blocks + fonts + (x0,w,y)` + **measurer tiêm vào** (viewer bind canvas
+`measureText`; test dùng fake 10px/ký tự) → `LineModel` (`lines`/`media`/`maxw`/`metrics`/
+`bottom` — `TextLine` giữ nguyên shape evidence `Stats.lines` nên parity JSON không đổi).
+Logic wrap/tab/line-height/media **port verbatim** từ draw cũ (pi counting, row[0], +4 —
+các ceiling giữ nguyên); viewer.ts chỉ còn: measurer, vẽ từ model, evidence, resize.
+Regression **không fork parity**: parity-view **6/6 PASS ×2, từng px giống bảng §5.5**
+(maxdy 0.64/4.07/0.00/6.47/2.73/2.73, maxdx 47.00) + gate 12 layout asserts số không đổi
+(16 dòng · 601.7 · 600.5 · 750,-250,220 · lhs 17.9).
+
+**Hit-test ngược** (`hitTest(model, measure, x, y) → {para, line, run, offset}`) — nền
+caret A4: y = dòng có baseline GẦN NHẤT (biên tại midpoint, ngoài đầu/cuối clamp); x =
+item chứa x rồi binary-search biên ký tự bằng CHÍNH measurer của layout forward; x trong
+advance ký tự i → caret TRƯỚC ký tự i (không half-char centering — advance đo được là
+chuẩn thật duy nhất, A4 có thể lớp centering trên cùng model); offset là **run-relative**
+(`charStart` theo dõi vị trí item trong run text từ tokenize); tab = 1 ký tự điều khiển
+(nửa rộng trước/sau); dòng rỗng (w:br kép) → placeholder đầu paragraph (A4 refine).
+Tokenize mang thêm `ri` + `charStart` — thứ tự token KHÔNG đổi.
+
+**Kiểm chứng (2 tầng, sở hữu riêng từng tầng):**
+- **Gate 14** `harness/scripts/test-layout.sh` (thường trụ verify.sh, sau check-bridge):
+  tsc-compile module + `layout.test.ts` → node thuần, **42 checks tọa độ tính tay** với
+  fake measurer chính xác (mid-line → đúng run/offset; mép dòng → offset biên;
+  y-band midpoint; tab; para index; image line; dòng rỗng). Gate 14 sở hữu SEMANTICS.
+- **Gate 12** thêm probe E2E `NANO_OFFICE_QV_HITTEST=1` (env → init script
+  `window.__NANO_OFFICE_QV_HITTEST__` trong lib.rs nhánh quick-view): sau first-draw,
+  viewer round-trip MỌI dòng qua `hitTest` (mid → trong dòng; 2 mép → biên) → log
+  `viewer hit-test: 16/16 lines ok` (SMOKE_RE_QV_HIT vào khối đóng băng smoke-lib);
+  assert `ok == total == lines` của layout + cấm `viewer hit-test FAIL`. **Negative
+  proven**: doctor log `15/16` → exit 1 ("inverse mapping regressed"). Gate 12 sở hữu
+  WIRING E2E. **Resize re-layout**: window resize → rAF coalesce → render() lại (layout
+  thuần rẻ; canvas hết stale — không gate riêng, cùng đường code first-draw).
+
 ## 6. Rủi ro + mitigations
 
 | Rủi ro | Mitigation |
@@ -329,6 +364,7 @@ Parity (T-V4) 6/6 corpus PASS — criterion thứ ba của rung đạt.
 - V2: gate behavioral verify.sh — boot quick-view + poll first-draw + đo RSS tree
   (pattern smoke-lib, log ADDITIVE riêng viewer, không đụng contract 9/10/11).
 - V4: parity harness riêng (pattern parity-a2.sh: oracle CDP, so content + vị trí).
+- V7: gate 14 (unit tọa độ, module thuần) + probe hit-test trong gate 12 (E2E) — §5.7.
 
 ## 8. Câu hỏi mở
 
