@@ -8,6 +8,44 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-03 · T-A25: A3 mở màn — viewer Rust đọc-only, slice V0 chạy thật + số đo ms/MB đầu tiên (design-first như T-A20)
+
+- **Bối cảnh:** mở màn rung A3 (QĐ9 — "quick view" không boot sdkjs; đích rung mở <500 ms,
+  RAM <150 MB, parity render vs oracle). DD **V01** `docs/design/viewer-a3/DD.md` (mã nhóm V
+  mới, folder giữ `viewer-a3/` theo handoff — tiền lệ K01): render = **R1 canvas 2D
+  "PDF-style"** trong webview riêng (R2 DOM-flow và R3 qua-PDF bị loại — không mở đường A4);
+  deps review #3 nạp hết: **C3** viewer cắm COMMAND LAYER song song delivery (`viewer.rs`
+  parse-only, không sidecar seam/FileRegistry/delivery.js) · **C4 chốt (a)** accessor OS/2
+  line metrics cho V2, KHÔNG parser hmtx (canvas `measureText` đo advance font thật — native
+  platform; trigger mở lại (b) ghi rõ) · **C2** bảng construct render-side + spec-ref từng
+  mục → task T-V1.
+- **Slice V0 (chạy thật, không layout):** `src-tauri/src/viewer.rs` — command
+  `viewer_open` đọc file từ env `NANO_OFFICE_QUICK_VIEW` → `nanooffice_ooxml::parse_docx`
+  (in-process, không CLI) → JSON model; `viewer.html` + `src/viewer.ts` — entry vite riêng
+  (không shim, không engine iframe), canvas 2D vẽ 1 dòng/paragraph (align center/right,
+  underline, style chain + run override, table = cell text theo cột); window quick-view mở
+  bằng return-sớm trong setup — đường boot engine nguyên văn. Log ADDITIVE
+  `viewer: parsed … in N ms` + `[web] viewer first-draw … ms (…, inked N)` — log contract
+  gates 9/10/11 không đụng.
+- **Số đo đầu tiên** (fixture `make_docx_full.py` 3794 B, debug build, ×2 run nhất quán;
+  lệnh: `NANO_OFFICE_QUICK_VIEW=/tmp/ta25-quickview.docx pnpm tauri dev`, poll log):
+  - **parse 2.9 ms** (crate A2) · **invoke→first text pixel 14.0 ms** (run1 17.0 ms).
+  - **Render evidence:** `inked 27547` — sample pixel tối trên canvas, text thật sự vẽ.
+  - **RAM (method PH-0 diagnostics 27.09: `ps -o rss=` app + 3 WebKit XPC):** app process
+    **117.8 MB** ổn định 2 run; +helpers (WC 46.5/GPU 49.3/Net 22.7) ≈ **236 MB**.
+  - **Đọc:** "không boot sdkjs" hiện thực — WebContent rớt ~370 MB (engine 1-doc 561–579 MB)
+    → ~46 MB; app-only 117.8 MB < 150 MB đích ✓, nhưng +helpers 236 MB > 150 MB → **T-V2
+    phải chốt công thức RAM (OQ-V01-2) + đo lại release build** trước khi đặt gate. Idle
+    start page debug cũng ~203 MB cùng method — đích rung không thể tính tree trên debug.
+- **Bằng chứng verify:** `cargo check/test --workspace` exit 0 (23 shell + 10 crate) ·
+  `pnpm build` exit 0 (2 entry vite: main + viewer) · `cargo fmt --check` clean ·
+  `verify.sh` FULL exit 0 (kết quả trong báo cáo phiên) · đường boot thường không đụng
+  (verify smoke gates boot app KHÔNG env quick-view vẫn GREEN).
+- **Trạng thái:** T-A25 ✅ — A3 MỞ MÀN (không đóng rung: parity + gates + UX là T-V1..T-V5);
+  ▶ = T-V1.
+
+---
+
 ## 2026-10-03 · T-A26: fix canonical lossy media bytes (review #3 C1) — writer copy media part từ zip nguồn
 
 - **Triệu chứng (C1, confirmed bởi review #3):** adapter open-side (T-A24) thay MỌI ảnh thật

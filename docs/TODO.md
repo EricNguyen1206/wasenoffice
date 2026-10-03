@@ -15,14 +15,14 @@ type: queue
 
 ## Tình hình nhanh
 
-▶ Kế tiếp: **T-A25 (A3 mở màn — viewer Rust đọc-only "quick view" không boot sdkjs; DD sinh khi mở màn, mang deps review #3)** — T-A26 ĐÓNG 03.10 (3eee231)
+▶ Kế tiếp: **T-V1 (C2 — model render-side mở + resolve về Rust, bảng construct + spec-ref: DD V01 §3.2)** — T-A25 ĐÓNG 03.10 (e17ca5b + 3573c69): A3 MỞ MÀN, slice V0 quick-view chạy thật (parse 2.9 ms · first-draw 14 ms · app RSS 117.8 MB)
 
 | Phase | Tổng | ✅ | 🟨 | ⏸ | ⬜ |
 |---|---|---|---|---|---|
 | PH-0 — ĐÃ ĐÓNG 27.09  |  6  | 6  | 0  | 0  | 0  |
 | PH-1  |  10 | 7  | 0  | 0  | 3  |
 | PH-4  |  3  | 0  | 0  | 0  | 3  |
-| Track A (QĐ9) |  12 | 11 | 0  | 0  | 1  |
+| Track A (QĐ9) |  17 | 12 | 0  | 0  | 5  |
 | META  | 13  | 8  | 0  | 0  | 5  |
 
 ## PH-0 — Spike editor + render DOCX (go/no-go) — ĐÃ ĐÓNG 27.09 · verdict GO WITH CAVEAT
@@ -57,8 +57,6 @@ type: queue
 > Rung hiện tại: **A3 — Viewer Rust** (H3; A1 ĐÓNG 02.10, A2 ĐÓNG 03.10). Task Track A bắt buộc đọc
 > `harness/rules/clean-room.md` trước khi làm; roadmap đầy đủ: `docs/vision.md` QĐ9.
 
-- [ ] 🟨 T-A25 · A3 mở màn — **viewer Rust đọc-only** ("quick view" không boot sdkjs, thang QĐ9): đọc model từ crate A2 + render đọc-only; XONG khi mở <500 ms + RAM <150 MB + parity render vs oracle; DD riêng (mã nhóm mới) sinh khi mở màn · ← T-A24 · **deps review #3 (03.10, diagnostics):** C2 mở model render-side theo spec đúng nhu cầu viewer (w:rFonts §17.3.2.26 foundational, w:br/w:tab đang bị bỏ document.rs:243, color/spacing/ind/tblGrid/pgSz cơ bản, Run bold/italic lên 3-state, rStyle + w:default flag) giữ invariant parity · C3 điểm cắm viewer = command layer song song delivery (Tauri command parse-only + serve word/media/* bytes; KHÔNG đụng sidecar seam — viewer bỏ qua x2t/Editor.bin; delivery.js engine-only giữ nguyên) · C4 chốt trong DD: font-metrics (a) accessor OS/2 line-height rẻ — allfonts.rs có metrics nhưng pub(crate)+private, hay (b) parser hmtx advance thật · claim 03.10 (phiên design-first: DD + slice + seed V1..Vn)
-
 - [ ] ⬜ T-V1 · C2 — model render-side mở + resolve về Rust (bảng construct + spec-ref từng mục: DD V01 §3.2): w:rFonts §17.3.2.26, w:br §17.3.3.3 + w:tab §17.3.3.34 (đang bị bỏ document.rs Event::Empty), Run bold/italic lên 3-state ST_OnOff, rStyle §17.5.2.3, w:color/w:spacing/w:ind/w:tblGrid/w:pgSz, docDefaults §17.7.5.1; write.rs đối xứng từng mục; frontend bỏ merge TS (viewer_open trả render model đã resolve) · 2 invariant cứng: round-trip bất biến + parity-a2.sh 0 diff · ← T-A25
 - [ ] ⬜ T-V2 · Layout tối thiểu + **gates số liệu**: line break theo pgSz + tab stop + line-height từ accessor OS/2 (C4-a — allfonts.rs expose accessor, không parser hmtx theo DD V01 §3.3); gate verify.sh MỚI: quick-view mở <500 ms + RAM <150 MB (công thức RAM chốt theo số đo V0 — DD V01 §5.1: app-only 117.8 MB vs +helpers 236 MB debug; không đụng log contract gates 9/10/11) · ← T-V1
 - [ ] ⬜ T-V3 · C3 trọn — serve `word/media/*` bytes cho viewer (filesrv route an toàn; bytes đã byte-exact nhờ T-A26) + render ảnh theo `wp:extent` EMU · ← T-A26 ← T-V1
@@ -78,6 +76,7 @@ type: queue
 - [x] ✅ T-A11 · A1: Tự sinh `AllFonts.js` bằng Rust — clean-room ĐẦU TIÊN của Track A: `protocol/allfonts.rs` enumerate FONT_ROOTS + parse sfnt std-thuần (không thêm crate), 5 global đúng format oracle-obs (selection bin v2 decode sạch 91283/91283B); 2 consumer (filesrv + save.rs `m_sAllFontsPath`) cùng 1 nhà → index khớp by construction; xoá `all_fonts_source()` — runtime hết đọc data-dir app (counterfactual mv: render + save vẫn GREEN) · verify.sh exit 0; parity 528/528 face giao tập khớp 100% field; deviations (tie-break 27/387 family, ranges tự sinh, superset) ghi reference.map · 30.09 · fc714e0 · reference.map § AllFonts generator + diagnostics 30.09
 - [x] ✅ T-A10 · A1: Bundle x2t per-platform vào `engines/converter/<triple>/` — x2t + config + 17 framework (otool: strong-link hết, 0 weak) = **113 MB**; bỏ templates/empty/dictionaries proven bằng chạy thật; symlink `editors` fix DoctRenderer `InitNativeEditors` (exit 86); resolution 3 nhánh env→bundled→app-WARN (1 nhà `save.rs::x2t_path`) · gate 10 PASSED env-unset + counterfactual env-sai + fallback proven · script committed, engines/ không commit · 30.09 · 4f58a32 + 5dd2fdf · reference.map § Converter bundle + diagnostics 30.09
 - [x] ✅ T-A13 · A1: **Gate 11 "sạch ONLYOFFICE"** — round-trip open→edit→save KHÔNG phụ thuộc ONLYOFFICE.app · strict clean-machine mode `NANO_OFFICE_NO_APP_FALLBACK` (`save.rs::x2t_path` tắt nhánh fallback app — lỗi rõ ràng thay WARN; log ADDITIVE override `NANO_OFFICE_X2T`) · gate 11 `smoke-clean-machine.sh` thường trụ verify.sh: **positive exit 0** (save round-trip 1962→25570 B + 0 path `/Applications/ONLYOFFICE` + 0 WARN fallback trong log) + **negative PROVEN exit 1** (force override trỏ app x2t → app-path-hits=1 bị bắt dù run "chạy được") · **test tích thể: mv `/Applications/ONLYOFFICE.app` → verify.sh FULL exit 0 khi app ẨN** (`clean-machine-proof.sh` trap-restore + pgrep check + KHÔNG rm; restore `ls` xác nhận; log /tmp/verify-ta13-clean-machine.log) · **RUNG A1 ĐÓNG** · 02.10 · 634ec1a + 7811f2b · diagnostics 02.10
+- [x] ✅ T-A25 · A3 **MỞ MÀN** — viewer Rust đọc-only, DESIGN-FIRST như T-A20 (ponytail ULTRA): DD **V01** `docs/design/viewer-a3/DD.md` (registry mã nhóm V; render R1 canvas 2D "PDF-style" webview riêng — R2 DOM-flow/R3 qua-PDF loại vì không mở đường A4; **C3** viewer cắm COMMAND LAYER song song delivery — KHÔNG sidecar seam, không FileRegistry, delivery.js nguyên; **C4 chốt (a)** accessor OS/2 line metrics, KHÔNG parser hmtx — canvas `measureText` là native platform, trigger mở lại ghi DD §3.3; **C2** bảng construct render-side + spec-ref từng mục → T-V1) · **slice V0 chạy thật:** `viewer.rs` command `viewer_open` parse-only (env `NANO_OFFICE_QUICK_VIEW` → crate in-process, không CLI; return-sớm trong setup — đường boot engine nguyên văn) + `viewer.html`/`src/viewer.ts` entry vite 2 không shim/engine — canvas 1 dòng/paragraph (align/underline/style chain/table cell-text) + evidence `inked` đếm pixel tối · **số đo đầu** (fixture make_docx_full 3794 B, debug, ×2 nhất quán): parse **2.9 ms** · invoke→first-draw **14.0 ms** · app RSS **117.8 MB** (<150 ✓) / +3 WebKit XPC ≈**236 MB** (engine 1-doc 561–579 MB — WebContent ~370→~46 MB; công thức RAM + release build = T-V2 chốt, OQ-V01-2) · log ADDITIVE `viewer:` — contract gates 9/10/11 byte-identical · verify FULL exit 0 (cargo 23 shell + 10 crate, smoke 6 gates GREEN đường thường) · 03.10 · e17ca5b + 3573c69 · diagnostics 03.10 + DD V01 §5.1
 
 ## META — harness / docs / skills
 
