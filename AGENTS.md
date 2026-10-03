@@ -88,9 +88,13 @@ user). **Gate 13** `smoke-quick-view-ui.sh` thường trụ verify.sh — driver
 cắn). Bằng chứng đóng rung: parity-view (T-V4) 6/6 PASS không đổi + gate 12 không thoái hóa
 (265 MB tree debug ≤ 300 tripwire; first-draw 89 ms) + scroll E2E canvas 2232 px; đích mở
 <500 ms GREEN; **đích RAM <150 MB = criterion RELEASE — T-057 (release boot stall, PH-4)
-chặn đo release, ceiling ghi thẳng không fake số (DD V01 §10)**. Kế tiếp: **T-055 #4
-(review kiến trúc post-A3)** rồi A4 mở màn — seed **T-A27** (editor core "Nano Light",
-design-first khi claim).
+chặn đo release, ceiling ghi thẳng không fake số (DD V01 §10)**. Mới nhất 03.10 (**T-055 #4 —
+review kiến trúc post-A3**): candidates land — **T-059** (registry keying bỏ `latest()`: quick-view
+đăng ký vào cùng registry với delivery/save = wrong-open/save-fail trong cửa sổ race; bug nhỏ,
+trước A4) + **T-V7** (layout core tách module + hit-test ngược — điều kiện A4: layout parity
+ε=2.0px không được fork) + **deps C2 vào T-A27** (DocSession giữ Document chưa-resolve + undo +
+mutation commands + save = write_docx không qua Editor.bin). Kế tiếp: **T-059 + T-V7** rồi
+**T-A27** mở màn A4 (editor core "Nano Light", design-first khi claim).
 Trước đó 03.10 (**T-A24 — A2/S4 adapter, ĐÓNG RUNG A2**, ponytail ULTRA chuỗi A2 — verify FULL
 exit 0): crate `nanooffice-ooxml` vào đường runtime qua seam `sidecar::convert` — **open-side
 pre-normalize**: open docx → crate parse+write `canonical.docx` trong workdir → x2t chuyển

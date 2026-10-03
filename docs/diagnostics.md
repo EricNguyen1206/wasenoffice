@@ -8,6 +8,56 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-03 · Review kiến trúc #4 (T-055) — post-A3, focus cản A4 "Nano Light"
+
+- **Phương pháp:** bộ đôi improve-codebase-architecture + ponytail-audit (codebase-design từ
+  vựng), hot-spot `git b8e2490..HEAD` (35 commits, +4967/−424 — chuỗi A3: crate render-side +
+  resolve, viewer + command layer, gates 12/13, Tailwind token-slot); 4 claim chịu lực kiểm
+  chứng first-hand: (1) `delivery.js:197` invoke `get_document_for_delivery` KHÔNG tham số +
+  `latest()` = max id (`protocol/mod.rs:64-69`) được consume ở 3 nơi engine flow
+  (`lib.rs:137` delivery, `save.rs:79` append_changes, `save.rs:184` save_document) trong khi
+  `viewer_open` đăng ký file vào CÙNG registry (`viewer.rs:110`, V3) · (2) layout interleaved
+  trong draw (`viewer.ts:147-351`), `main()` one-shot, line model vứt sau draw, không hit-test
+  ngược, không resize listener · (3) `viewer_open` parse→resolve→DROP `Document`
+  (`viewer.rs:102-105`) — `RenderDoc` đã flatten thứ bậc §17.7.2 (resolve.rs), bản
+  ghi-ngược-được là `Document` + `write_docx` (round-trip bất biến + media byte-exact T-A26) ·
+  (4) gate 12/13 = consumer mỏng smoke-lib, fixtures share docxgen_common — ponytail lean.
+- **Trả lời 3 câu hỏi trọng tâm A4 (handoff #4):** model/resolve **CHIA** được viewer↔editor
+  (crate pub, parity bảo vệ) · layout **CHƯA** — không phải module (C1) · command layer
+  **CHƯA** có chỗ cho edit+undo — model không sống Rust-side, `QuickViewRequest` single-slot
+  có race tự nhận trong comment (`viewer.rs:20-22`) (C2) · save khi không có Editor.bin =
+  **`write_docx(&Document)` đã proven** nhưng session phải giữ bản CHƯA-resolve + danh sách
+  ngoài-model (sectPr giữa tài liệu/hyperlink/settings.xml/theme fonts/tblPr-tcPr) phải thành
+  parity matrix (C2).
+- **C3 (observed — bug shell chạy được hôm nay):** registry có 2 writer + keying `latest()` —
+  Open A (boot engine hàng trăm ms) rồi Quick view B → delivery nhận nhầm B (wrong-open);
+  save A sau đó hit workdir của id B ("Editor.bin missing" fail-closed, hoặc deltas ghi nhầm
+  workdir — không mất dữ liệu user hôm nay vì workdir keyed id monotonic per-run + delivery
+  `remove_dir_all` trước convert, nhưng sai kết cấu và A4 nhân số flow: session Nano Light +
+  advanced-mode + quick view đồng thời). Amendment V3 trong DD ghi "luồng delivery không hề
+  đụng tới" — đúng ở mức gọi hàm, sai ở nhất quán dữ liệu (`latest()` = shared state).
+- **C1 (cản A4):** layout là tài sản parity ε=2.0px (OQ-V01-1) nhưng không tồn tại như module —
+  A4 fork copy `wrapParagraph` = 2 layout engine trôi từ ngày đầu, parity không bảo vệ bản
+  editor; cần LineModel + hitTest trước khi T-A27 code (regression: parity-view 6/6 + gates
+  12/13 không đổi từng px).
+- **C2 (cản A4):** không có nhà cho session/undo/save-đường-crate — constraint nạp T-A27
+  (pattern T-A25 nạp deps review #3): DocSession window-scoped giữ `Document` + undo + dirty,
+  mutation commands ở command layer (tiền lệ C3 song song delivery), save = `write_docx` +
+  atomic replace; `QuickViewRequest` single-slot bị session map thay tự nhiên.
+- **Ponytail:** lean — không có delete:/stdlib:/native:/yagni:/shrink đáng đất trong diff A3
+  (mỗi commit đã qua ponytail-review theo mandate 03.10); quan sát perf KHÔNG thành task
+  (ngoài scope ponytail, chưa pain đo được): `viewer.rs::families()` dedup O(n²) (doc nhỏ),
+  filesrv media route re-read toàn zip mỗi request ảnh, evidence/ink scans chạy cả production
+  quick view (là thức ăn của gates — log contract đóng băng; C1 tách evidence theo draw tự
+  nhiên).
+- **Land:** T-059 (C3, đầu PH-1) + T-V7 (C1, điều kiện mở T-A27) + deps C2 vào dòng T-A27 +
+  T-055 đặt lại ⬜ (lần kế #5). Report HTML tạm
+  `$TMPDIR/architecture-review-20261003-t055-r4.html` (không vào repo). Không mâu thuẫn
+  QĐ1–QĐ9; không re-đề xuất T-A14..T-056/T-V1..T-V6.
+- **Trạng thái:** confirmed (verify.sh chạy cuối phiên — kết quả trong báo cáo phiên).
+
+---
+
 ## 2026-10-03 · T-V5: A3/V5 — wire UX quick-view + ĐÓNG RUNG A3
 
 - **Bối cảnh:** slice cuối rung A3 — quick view ra khỏi dev-env thành UX thật: chọn file
