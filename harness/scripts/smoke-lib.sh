@@ -38,6 +38,8 @@
 #            ← src-tauri/src/editor.rs (view/opened/edit/saved) +
 #            src/editor.ts (first-draw/layout/evidence/media); driver
 #            NANO_OFFICE_NANO_LIGHT + NANO_OFFICE_NL_PROBE
+#            T-A28 thêm `nano light selection:` (ADDITIVE — evidence
+#            selection anchor/focus/span, cùng consumer gate 15)
 set -u
 
 SMOKE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -70,6 +72,7 @@ SMOKE_RE_QV_VIEW='viewer view:'
 SMOKE_RE_NL_FIRST_DRAW='nano light first-draw'
 SMOKE_RE_NL_SAVED='nano light saved:'
 SMOKE_RE_NL_PROBE_DONE='nano light probe: chain done'
+SMOKE_RE_NL_SEL='nano light selection:'
 SMOKE_RE_NL_FAILED='nano light failed:'
 
 # ── Trạng thái dùng chung (consumer đọc, không ghi trực tiếp khi không cần) ──

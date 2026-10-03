@@ -11,10 +11,15 @@
 #      redo (from `nano light edit:` lines, emitting end src-tauri/src/editor.rs)
 #   3. `nano light saved:` — write_docx + atomic replace over the original
 #   4. the SAVED FILE re-parsed by the crate CLI carries the marker text
+#      AND the selection type-replace ("paragraphT28" — the probe's
+#      shift+Arrow selection replaced by typing, T-A28)
 #   5. media parts are byte-exact vs the pre-save snapshot (sha256 per part)
 #   6. REOPEN: a second window (opened AFTER the save, via nano_light_reopen)
 #      renders evidence containing the marker — "mở lại render đúng nội dung
 #      đã edit" (DD L01 §5)
+#   7. SELECTION evidence (T-A28): `nano light selection:` lines exist and
+#      the last one reports span ≥ NANO_LIGHT_MIN_SPAN — the shift+arrow
+#      selection really happened (DD L01 §5.3e)
 #   and no `nano light failed:` anywhere.
 # LOG CONTRACT: the `nano light` lines are frozen constants SMOKE_RE_NL_* in
 # harness/scripts/smoke-lib.sh — change in the SAME commit as the emitting
@@ -25,7 +30,9 @@
 # Env:   SMOKE_NANO_LIGHT_TIMEOUT=360  total seconds before giving up
 #        NANO_LIGHT_MAX_MS=500         first-draw budget (ms)
 #        NANO_LIGHT_MARKER=…           the inserted marker (default fixed)
-# Negative proofs (asserts must bite; documented in docs/diagnostics.md T-A27):
+#        NANO_LIGHT_MIN_SPAN=3         selection span floor (gate 15, T-A28)
+# Negative proofs (asserts must bite; documented in docs/diagnostics.md T-A27
+# and T-A28):
 #   NANO_LIGHT_NEGATIVE=garbage harness/scripts/smoke-nano-light.sh
 #     → a garbage .docx: the chain runs to parse → `nano light failed:` bites
 #       → exit 1 fast (pattern gate 13).
@@ -33,6 +40,10 @@
 #     → full positive run, but the marker check parses the PRE-SAVE snapshot
 #       (no marker in it) → the read-the-saved-file assert bites → exit 1
 #       (proves the load-bearing parse-back check, not just absence).
+#   NANO_LIGHT_NEGATIVE=seldoctor harness/scripts/smoke-nano-light.sh
+#     → full positive run, but the selection assert requires span == 0 —
+#       contradicts the real selection evidence → exit 1 (proves the gate
+#       READS the selection numbers, not just their presence — T-A28).
 set -u
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -42,6 +53,8 @@ cd "$ROOT"
 TIMEOUT="${SMOKE_NANO_LIGHT_TIMEOUT:-360}"
 MAX_MS="${NANO_LIGHT_MAX_MS:-500}"
 MARKER="${NANO_LIGHT_MARKER:-NL01-EDITED-BY-NANOLIGHT}"
+MIN_SPAN="${NANO_LIGHT_MIN_SPAN:-3}"
+REPL='T28'
 NEGATIVE="${NANO_LIGHT_NEGATIVE:-}"
 FIXTURE=/tmp/nanooffice-nanolight.docx
 SNAPSHOT=/tmp/nanooffice-nanolight-pre.docx
@@ -79,7 +92,7 @@ nano_light_signals() {
   grep -q "$SMOKE_RE_NL_PROBE_DONE" "$LOG" 2>/dev/null || { SMOKE_SUMMARY="probe chain not done yet"; return 1; }
   # full asserts as the poll body (pattern gate 12): the reopen evidence may
   # trail the probe-done line, so keep polling until the python check passes
-  SMOKE_NL_REPORT=$(python3 - "$LOG" "$MAX_MS" "$MARKER" "$SNAPSHOT" "$FIXTURE" "$CLI" "$NEGATIVE" <<'PY' 2>&1
+  SMOKE_NL_REPORT=$(python3 - "$LOG" "$MAX_MS" "$MARKER" "$SNAPSHOT" "$FIXTURE" "$CLI" "$NEGATIVE" "$MIN_SPAN" "$REPL" <<'PY' 2>&1
 import hashlib
 import json
 import re
@@ -87,8 +100,9 @@ import subprocess
 import sys
 import zipfile
 
-log_path, max_ms, marker, snapshot, fixture, cli, negative = sys.argv[1:8]
+log_path, max_ms, marker, snapshot, fixture, cli, negative, min_span, repl = sys.argv[1:10]
 max_ms = float(max_ms)
+min_span = int(min_span)
 
 def need(cond, msg):
     if not cond:
@@ -106,15 +120,33 @@ edits = re.findall(r"nano light edit: cmd=(\w+)", "\n".join(lines))
 for cmd, n in [("insert", 2), ("backspace", 3), ("enter", 1), ("undo", 1), ("redo", 1)]:
     need(edits.count(cmd) >= n, f"edit chain incomplete: {cmd} x{edits.count(cmd)} < {n} ({edits})")
 
+# (7) SELECTION evidence (T-A28): the shift+arrow selection really happened.
+# The seldoctor negative requires span == 0 — contradicting the real chain —
+# so the assert bites (the gate READS the selection numbers, not just their
+# presence).
+sels = re.findall(
+    r"nano light selection: anchor=(\d+)/(\d+)/(\d+) focus=(\d+)/(\d+)/(\d+) span=(-?\d+)",
+    "\n".join(lines),
+)
+need(bool(sels), "no `nano light selection:` evidence line")
+span = int(sels[-1][6])
+if negative == "seldoctor":
+    need(span == 0, f"seldoctor: selection span {span} != 0 — the assert must bite here")
+else:
+    need(span >= min_span, f"selection span {span} < {min_span} ({sels[-1]})")
+
 need(any("nano light saved:" in l for l in lines), "no saved line")
 
-# (4) the saved file re-parsed by the crate carries the marker. The DOCTOR
-# negative parses the PRE-SAVE snapshot instead — no marker by design, so the
-# assert itself is proven to bite (it reads the file, not the log).
+# (4) the saved file re-parsed by the crate carries the marker AND the
+# selection type-replace. The DOCTOR negative parses the PRE-SAVE snapshot
+# instead — no marker by design, so the assert itself is proven to bite (it
+# reads the file, not the log).
 parse_target = snapshot if negative == "doctor" else fixture
 model = subprocess.run([cli, parse_target], capture_output=True, text=True)
 need(model.returncode == 0, f"crate CLI failed on {parse_target}: {model.stderr[:200]}")
 need(marker in model.stdout, f"marker {marker!r} not found in the crate-parsed model of {parse_target}")
+if negative != "doctor":
+    need(f"paragraph{repl}" in model.stdout, f"selection replace not joined to 'paragraph' in the parse-back of {parse_target} — expected 'paragraph{repl}' (the probe replaces the selected ' two')")
 
 # (5) media byte-exact vs the pre-save snapshot (per part sha256)
 def media_shas(path):
@@ -151,7 +183,7 @@ need(
     f"reopen evidence does not contain the marker {marker!r} — saved file did not re-render the edit",
 )
 print(
-    f"NL OK first-draw={ms}ms edits={len(edits)} media={len(after)}B-exact "
+    f"NL OK first-draw={ms}ms edits={len(edits)} sel-span={span} media={len(after)}B-exact "
     f"reopen-evidence-marker=yes (parse-back via crate CLI)"
 )
 PY
@@ -163,8 +195,9 @@ PY
 }
 
 if smoke_poll "$TIMEOUT" nano_light_signals "Nano Light edit round-trip evidence"; then
-  echo "smoke: ✓ first-draw < ${MAX_MS} ms · ✓ edit chain (insert/backspace/delete/enter/undo/redo) · ✓ save (write_docx + atomic replace) · ✓ parse-back contains marker · ✓ media byte-exact · ✓ reopen renders the edit"
+  echo "smoke: ✓ first-draw < ${MAX_MS} ms · ✓ edit chain (insert/backspace/delete/enter/undo/redo) · ✓ selection span ≥ ${MIN_SPAN} · ✓ type-replace → save (write_docx + atomic replace) · ✓ parse-back contains marker + 'paragraph${REPL}' · ✓ media byte-exact · ✓ reopen renders the edit"
   grep -m1 "$SMOKE_RE_NL_FIRST_DRAW" "$LOG" | sed 's/^/smoke:   /' | cut -c1-160
+  grep -m1 "$SMOKE_RE_NL_SEL" "$LOG" | sed 's/^/smoke:   /' | cut -c1-160
   grep -m1 "$SMOKE_RE_NL_SAVED" "$LOG" | sed 's/^/smoke:   /' | cut -c1-160
   echo "smoke: PASSED — full log kept at $LOG"
   exit 0

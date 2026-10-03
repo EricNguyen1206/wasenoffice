@@ -452,24 +452,28 @@ export function hitTest(model: LineModel, measure: Measurer, x: number, y: numbe
 }
 
 /**
- * Forward map (para, run, offset) → (x, baseline, line-height) — the mirror
- * of `hitTest` on the SAME model + measurer: the item whose run/charStart
- * contains the offset (caret BEFORE char `offset`); end-of-run clamps to the
- * LAST item of that run (visual end of a wrapped run); an empty paragraph
- * resolves to its line start (hitTest's placeholder semantics).
- * T-060 C3: moved here from src/editor.ts so the hit seam (hitTest ↔
- * caretXY) lives in one tested module — gate 14 asserts their round-trip.
+ * Forward map (para, run, offset) → (x, baseline, line-height, line index) —
+ * the mirror of `hitTest` on the SAME model + measurer: the item whose
+ * run/charStart contains the offset (caret BEFORE char `offset`); end-of-run
+ * clamps to the LAST item of that run (visual end of a wrapped run); an
+ * empty paragraph resolves to its line start (hitTest's placeholder
+ * semantics). T-060 C3: moved here from src/editor.ts so the hit seam
+ * (hitTest ↔ caretXY) lives in one tested module — gate 14 asserts their
+ * round-trip. T-A28 §5.3a: `para` matches the BODY BLOCK index (the editor
+ * `Caret.para` coordinate — equal to `Hit.block`; `Hit.para`'s `pi` shares
+ * values with table-cell content and cannot address the body). `line` rides
+ * along (additive) for the editor's Up/Down/Home/End line moves.
  */
 export function caretXY(
   model: LineModel,
   measure: Measurer,
   caret: { para: number; run: number; offset: number },
-): { x: number; y: number; lh: number } | null {
-  let fallback: { x: number; y: number; lh: number } | null = null;
-  for (const line of model.lines) {
-    if (line.para !== caret.para) continue;
+): { x: number; y: number; lh: number; line: number } | null {
+  let fallback: { x: number; y: number; lh: number; line: number } | null = null;
+  for (const [li, line] of model.lines.entries()) {
+    if (line.block !== caret.para) continue;
     if (line.items.length === 0) {
-      fallback ??= { x: line.x, y: line.baseline, lh: line.lh };
+      fallback ??= { x: line.x, y: line.baseline, lh: line.lh, line: li };
       continue;
     }
     for (const it of line.items) {
@@ -477,10 +481,10 @@ export function caretXY(
       const end = it.charStart + itemCharLen(it);
       if (caret.offset >= it.charStart && caret.offset < end) {
         const x = it.tab ? it.x : it.x + measure(it.r, it.text.slice(0, caret.offset - it.charStart));
-        return { x, y: line.baseline, lh: line.lh };
+        return { x, y: line.baseline, lh: line.lh, line: li };
       }
       if (caret.offset === end) {
-        fallback = { x: it.x + it.w, y: line.baseline, lh: line.lh };
+        fallback = { x: it.x + it.w, y: line.baseline, lh: line.lh, line: li };
       }
     }
   }

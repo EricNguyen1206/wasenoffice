@@ -161,6 +161,13 @@ const hit = (m: LineModel, x: number, y: number): Hit =>
   eq([hCell.para, hCell.block, hCell.cell], [2, 1, [0, 0]], 'hit in the cell → cell identity, not the after-table paragraph');
   const hAfter = hit(m, 30, m.lines[3].baseline); // mid "after"
   eq([hAfter.para, hAfter.block, hAfter.cell], [2, 2, null], 'same pi as the cell line, different block + null cell — the collision is resolved');
+  // T-A28 §5.3a: caretXY matches the BODY BLOCK index (the editor's
+  // Caret.para) — the `pi` collision cannot leak into caret work
+  const cCell = caretXY(m, measure, { para: 1, run: 0, offset: 1 });
+  ok(!!cCell && cCell.y === m.lines[1].baseline, 'caretXY(block 1) resolves inside the TABLE block (its cell line)');
+  const cAfter = caretXY(m, measure, { para: 2, run: 0, offset: 2 });
+  ok(!!cAfter && cAfter.y === m.lines[3].baseline, 'caretXY(block 2) = the after-table line, NOT the cell line sharing pi=2');
+  ok(!!cAfter && cAfter.line === 3, 'caretXY returns the line index (additive, editor Up/Down uses it)');
 }
 
 // ── T-060 C3: hitTest ↔ caretXY round-trip (char boundaries are exact
