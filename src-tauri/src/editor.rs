@@ -14,11 +14,12 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
-use tauri::{State, WebviewUrl, WebviewWindowBuilder};
+use tauri::State;
 
 use nanooffice_ooxml::{Block, Document, Page, Paragraph, RenderDoc, Run};
 
 use crate::protocol::FileRegistry;
+use crate::viewer::render_payload;
 
 /// Caret position — the hit-test coordinate system (`hitTest` T-V7, DD V01
 /// §5.7): `para` = body block index, `run` = index in the paragraph's runs,
@@ -134,6 +135,24 @@ impl EditorSessions {
         map.retain(|k, _| k != owner);
         before - map.len()
     }
+
+    /// Run `f` on the calling window's session (T-060 C2/C5-mini): the
+    /// poison + no-session error strings have ONE home here — the commands
+    /// stopped repeating the lock/get/error mold.
+    pub fn with_session<T>(
+        &self,
+        label: &str,
+        f: impl FnOnce(&mut EditorSession) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let mut map = self
+            .0
+            .lock()
+            .map_err(|_| "nano light: sessions poisoned".to_string())?;
+        let session = map
+            .get_mut(label)
+            .ok_or_else(|| format!("nano light: no session for window {label}"))?;
+        f(session)
+    }
 }
 
 /// Path handoff from the start-page action to the window's single
@@ -157,7 +176,8 @@ impl NanoLightRequest {
 /// Window-label sequence for UI-opened Nano Light windows ("main" = env boot).
 static WINDOW_SEQ: AtomicU32 = AtomicU32::new(0);
 
-/// Shared open-a-window body of the two view commands.
+/// Shared open-a-window body of the two view commands (the window build
+/// itself lives in `viewer::open_surface_window`, T-060 C2).
 fn open_window(
     app: &tauri::AppHandle,
     request: &NanoLightRequest,
@@ -172,15 +192,13 @@ fn open_window(
         .map(|f| f.to_string_lossy().into_owned())
         .unwrap_or_else(|| path.clone());
     request.stash(path.clone());
-    WebviewWindowBuilder::new(app, &label, WebviewUrl::App("editor.html".into()))
-        .title(format!("NanoOffice — Nano Light: {name}"))
-        .inner_size(1000.0, 700.0)
-        // Rule 6b (AGENTS.md): show WITHOUT taking focus. No shim is injected
-        // on this window — Nano Light has no bridge, no engine (DD L01 §2).
-        .visible(true)
-        .focused(false)
-        .build()
-        .map_err(|e| format!("nano light: open window: {e}"))?;
+    crate::viewer::open_surface_window(
+        app,
+        &label,
+        "editor.html",
+        format!("NanoOffice — Nano Light: {name}"),
+        "nano light",
+    )?;
     log::info!("nano light view: {path} (window {label})");
     Ok(())
 }
@@ -209,15 +227,7 @@ pub fn nano_light_reopen(
     sessions: State<'_, Arc<EditorSessions>>,
     window: tauri::WebviewWindow,
 ) -> Result<(), String> {
-    let path = {
-        let map = sessions
-            .0
-            .lock()
-            .map_err(|_| "nano light: sessions poisoned".to_string())?;
-        map.get(window.label())
-            .map(|s| s.path.clone())
-            .ok_or_else(|| format!("nano light: no session for window {}", window.label()))?
-    };
+    let path = sessions.with_session(window.label(), |s| Ok(s.path.clone()))?;
     open_window(&app, request.inner(), path.display().to_string())
 }
 
@@ -253,28 +263,12 @@ pub fn nano_light_open(
                 .filter(|p| !p.is_empty())
         })
         .ok_or_else(|| "nano light: no source (UI action or NANO_OFFICE_NANO_LIGHT)".to_string())?;
-    let started = std::time::Instant::now();
-    let bytes = std::fs::read(&path).map_err(|e| format!("nano light: read {path}: {e}"))?;
-    let doc = nanooffice_ooxml::parse_docx(&bytes)
-        .map_err(|e| format!("nano light: parse {path}: {e}"))?;
-    let render = nanooffice_ooxml::resolve(&doc);
-    let fonts: BTreeMap<String, [i16; 3]> = crate::viewer::families(&render)
-        .into_iter()
-        .filter_map(|fam| crate::protocol::allfonts::line_metrics(&fam).map(|m| (fam, m)))
-        .collect();
-    // Registering hands the media route its fileId (`/media/<id>/<part>`,
-    // filesrv reads the registry — not the session). No registration → no
-    // media; text still renders (same policy as the viewer).
-    let media_base = match registry.register(window.label(), std::path::Path::new(&path)) {
-        Ok(id) => Some(format!(
-            "http://127.0.0.1:{}/media/{id}",
-            crate::protocol::filesrv::bound_port()
-        )),
-        Err(e) => {
-            log::warn!("nano light: media disabled — cannot register file: {e}");
-            None
-        }
-    };
+    let p = render_payload(
+        registry.inner().as_ref(),
+        window.label(),
+        &path,
+        "nano light",
+    )?;
     let name = std::path::Path::new(&path)
         .file_name()
         .map(|f| f.to_string_lossy().into_owned())
@@ -285,11 +279,10 @@ pub fn nano_light_open(
         offset: 0,
         cell: None,
     };
-    let page = doc.page.clone();
     let session = EditorSession {
-        saved: Some(doc.clone()),
-        doc,
-        media_src: bytes,
+        saved: Some(p.doc.clone()),
+        doc: p.doc,
+        media_src: p.bytes,
         undo: Vec::new(),
         redo: Vec::new(),
         caret,
@@ -300,17 +293,17 @@ pub fn nano_light_open(
         .lock()
         .map_err(|_| "nano light: sessions poisoned".to_string())?
         .insert(window.label().to_string(), session);
-    let parse_ms = started.elapsed().as_secs_f64() * 1000.0;
     log::info!(
-        "nano light: opened {path} in {parse_ms:.1} ms (window {})",
+        "nano light: opened {path} in {:.1} ms (window {})",
+        p.parse_ms,
         window.label()
     );
     Ok(NanoLightDoc {
-        parse_ms,
-        doc: render,
-        fonts,
-        page,
-        media_base,
+        parse_ms: p.parse_ms,
+        doc: p.render,
+        fonts: p.fonts,
+        page: p.page,
+        media_base: p.media_base,
         caret,
         name,
     })
@@ -369,25 +362,24 @@ pub fn nano_light_edit(
     window: tauri::WebviewWindow,
     cmd: EditCmd,
 ) -> Result<EditOutcome, String> {
-    let mut map = sessions
-        .0
-        .lock()
-        .map_err(|_| "nano light: sessions poisoned".to_string())?;
-    let session = map
-        .get_mut(window.label())
-        .ok_or_else(|| format!("nano light: no session for window {}", window.label()))?;
     let label = cmd.label();
-    let caret = session.apply(cmd)?;
-    let dirty = session.dirty();
+    let (caret, dirty, undo_len, render) = sessions.with_session(window.label(), |s| {
+        let caret = s.apply(cmd)?;
+        Ok((
+            caret,
+            s.dirty(),
+            s.undo.len(),
+            nanooffice_ooxml::resolve(&s.doc),
+        ))
+    })?;
     log::info!(
-        "nano light edit: cmd={label} caret={}/{}/{} undo={} dirty={dirty}",
+        "nano light edit: cmd={label} caret={}/{}/{} undo={undo_len} dirty={dirty}",
         caret.para,
         caret.run,
-        caret.offset,
-        session.undo.len()
+        caret.offset
     );
     Ok(EditOutcome {
-        doc: nanooffice_ooxml::resolve(&session.doc),
+        doc: render,
         caret,
         dirty,
     })
@@ -402,33 +394,14 @@ pub fn nano_light_save(
     sessions: State<'_, Arc<EditorSessions>>,
     window: tauri::WebviewWindow,
 ) -> Result<(), String> {
-    let mut map = sessions
-        .0
-        .lock()
-        .map_err(|_| "nano light: sessions poisoned".to_string())?;
-    let session = map
-        .get_mut(window.label())
-        .ok_or_else(|| format!("nano light: no session for window {}", window.label()))?;
-    save_session(session)
+    sessions.with_session(window.label(), save_session)
 }
 
 fn save_session(session: &mut EditorSession) -> Result<(), String> {
     let started = std::time::Instant::now();
     let out = nanooffice_ooxml::write_docx(&session.doc, Some(&session.media_src))
         .map_err(|e| format!("nano light: write docx: {e}"))?;
-    let ext = session
-        .path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("docx")
-        .to_string();
-    let tmp = session.path.with_extension(format!("nanooffice-nl.{ext}"));
-    std::fs::write(&tmp, &out)
-        .map_err(|e| format!("nano light: write tmp {}: {e}", tmp.display()))?;
-    if let Err(e) = std::fs::rename(&tmp, &session.path) {
-        let _ = std::fs::remove_file(&tmp);
-        return Err(format!("nano light: rename over original: {e}"));
-    }
+    atomic_replace(&session.path, &out, "nanooffice-nl", "nano light")?;
     session.saved = Some(session.doc.clone());
     let ms = started.elapsed().as_secs_f64() * 1000.0;
     log::info!(
@@ -436,6 +409,31 @@ fn save_session(session: &mut EditorSession) -> Result<(), String> {
         session.path.display(),
         out.len()
     );
+    Ok(())
+}
+
+/// Atomic file swap (T-060 C2, pattern `bridge/save.rs:251-254,323`): write
+/// to a tmp sibling in the SAME directory (same volume), rename over the
+/// target, clean the tmp up when the rename fails. The engine save path does
+/// NOT use this — its tmp is written by x2t on disk, not from memory bytes.
+fn atomic_replace(
+    path: &std::path::Path,
+    bytes: &[u8],
+    tmp_tag: &str,
+    err_tag: &str,
+) -> Result<(), String> {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("docx")
+        .to_string();
+    let tmp = path.with_extension(format!("{tmp_tag}.{ext}"));
+    std::fs::write(&tmp, bytes)
+        .map_err(|e| format!("{err_tag}: write tmp {}: {e}", tmp.display()))?;
+    if let Err(e) = std::fs::rename(&tmp, path) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(format!("{err_tag}: rename over original: {e}"));
+    }
     Ok(())
 }
 

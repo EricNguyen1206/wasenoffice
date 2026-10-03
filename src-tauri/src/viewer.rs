@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 use serde::Serialize;
 use tauri::{State, WebviewUrl, WebviewWindowBuilder};
 
-use nanooffice_ooxml::{Page, RBlock, RenderDoc};
+use nanooffice_ooxml::{Document, Page, RBlock, RenderDoc};
 
 use crate::protocol::FileRegistry;
 
@@ -57,15 +57,13 @@ pub fn viewer_view(
         .map(|f| f.to_string_lossy().into_owned())
         .unwrap_or_else(|| path.clone());
     quick.stash(path.clone());
-    WebviewWindowBuilder::new(&app, &label, WebviewUrl::App("viewer.html".into()))
-        .title(format!("NanoOffice — Quick View: {name}"))
-        .inner_size(1000.0, 700.0)
-        // Rule 6b (AGENTS.md): show WITHOUT taking focus. No shim is injected
-        // on this window — quick view has no bridge, no engine (DD §3.1).
-        .visible(true)
-        .focused(false)
-        .build()
-        .map_err(|e| format!("viewer: open window: {e}"))?;
+    open_surface_window(
+        &app,
+        &label,
+        "viewer.html",
+        format!("NanoOffice — Quick View: {name}"),
+        "viewer",
+    )?;
     log::info!("viewer view: {path} (window {label})");
     Ok(())
 }
@@ -73,14 +71,87 @@ pub fn viewer_view(
 /// Window-label sequence for UI-opened quick views ("main" = the env boot).
 static WINDOW_SEQ: AtomicU32 = AtomicU32::new(0);
 
-/// Parse-only quick view: read the file, parse it with the A2 crate, resolve
-/// the style chains (V1 — the crate's `resolve` module, DD V01 §3.2) and hand
-/// the RENDER model to the viewer window. V2 added the two layout inputs the
-/// frontend cannot get elsewhere: the page geometry (`pgSz`, wrap column) and
-/// the OS/2 line metrics per family (C4-a — `allfonts::line_metrics`, bundled
-/// set only). V3 registers the file in the FileRegistry so image parts can be
-/// served by fileId over the `/media/<id>/<part>` filesrv route — URLs carry
-/// no disk paths (DD V01 §3.1; the delivery flow itself is untouched).
+/// Shared surface-window body (T-060 C2): the viewer and Nano Light view
+/// commands build the same focused(false) window (rule 6b) — label/html/
+/// title differ per surface, the error carries the caller's tag. No shim is
+/// injected on these windows (no bridge, no engine — DD V01 §3.1, DD L01 §2).
+pub(crate) fn open_surface_window(
+    app: &tauri::AppHandle,
+    label: &str,
+    html: &str,
+    title: String,
+    tag: &str,
+) -> Result<(), String> {
+    WebviewWindowBuilder::new(app, label, WebviewUrl::App(html.into()))
+        .title(title)
+        .inner_size(1000.0, 700.0)
+        .visible(true)
+        .focused(false)
+        .build()
+        .map_err(|e| format!("{tag}: open window: {e}"))?;
+    Ok(())
+}
+
+/// The shared open pipeline of the two parse-only surfaces (T-060 C2):
+/// read → parse → resolve → OS/2 font metrics → FileRegistry registration
+/// (T-059 owner keying — the media route's fileId). `tag` ("viewer" /
+/// "nano light") prefixes errors so the gate negative proofs keep biting on
+/// the same messages.
+pub(crate) struct RenderPayload {
+    /// The UNRESOLVED model — the editor session keeps it (write-back-able),
+    /// the viewer drops it after resolving.
+    pub doc: Document,
+    /// The original package bytes — media parts copy byte-exact on save.
+    pub bytes: Vec<u8>,
+    pub render: RenderDoc,
+    pub fonts: BTreeMap<String, [i16; 3]>,
+    pub page: Option<Page>,
+    pub media_base: Option<String>,
+    pub parse_ms: f64,
+}
+
+pub(crate) fn render_payload(
+    registry: &FileRegistry,
+    owner: &str,
+    path: &str,
+    tag: &str,
+) -> Result<RenderPayload, String> {
+    let started = std::time::Instant::now();
+    let bytes = std::fs::read(path).map_err(|e| format!("{tag}: read {path}: {e}"))?;
+    let doc =
+        nanooffice_ooxml::parse_docx(&bytes).map_err(|e| format!("{tag}: parse {path}: {e}"))?;
+    let render = nanooffice_ooxml::resolve(&doc);
+    let fonts: BTreeMap<String, [i16; 3]> = families(&render)
+        .into_iter()
+        .filter_map(|fam| crate::protocol::allfonts::line_metrics(&fam).map(|m| (fam, m)))
+        .collect();
+    let media_base = match registry.register(owner, std::path::Path::new(path)) {
+        Ok(id) => Some(format!(
+            "http://127.0.0.1:{}/media/{id}",
+            crate::protocol::filesrv::bound_port()
+        )),
+        // no registration → no media route; text still renders (the surface
+        // must not refuse a document over a serving hiccup)
+        Err(e) => {
+            log::warn!("{tag}: media disabled — cannot register file: {e}");
+            None
+        }
+    };
+    let parse_ms = started.elapsed().as_secs_f64() * 1000.0;
+    Ok(RenderPayload {
+        page: doc.page.clone(),
+        doc,
+        bytes,
+        render,
+        fonts,
+        media_base,
+        parse_ms,
+    })
+}
+
+/// Parse-only quick view: the shared open pipeline (T-060 C2 — read → parse
+/// → resolve → metrics → registry) plus this surface's log; see
+/// `render_payload` for the steps themselves.
 #[tauri::command]
 pub fn viewer_open(
     registry: State<'_, Arc<FileRegistry>>,
@@ -99,39 +170,19 @@ pub fn viewer_open(
         .ok_or_else(|| {
             "viewer: no quick-view source (UI action or NANO_OFFICE_QUICK_VIEW)".to_string()
         })?;
-    let started = std::time::Instant::now();
-    let bytes = std::fs::read(&path).map_err(|e| format!("viewer: read {path}: {e}"))?;
-    let doc =
-        nanooffice_ooxml::parse_docx(&bytes).map_err(|e| format!("viewer: parse {path}: {e}"))?;
-    let render = nanooffice_ooxml::resolve(&doc);
-    let fonts: BTreeMap<String, [i16; 3]> = families(&render)
-        .into_iter()
-        .filter_map(|fam| crate::protocol::allfonts::line_metrics(&fam).map(|m| (fam, m)))
-        .collect();
-    let media_base = match registry.register(window.label(), std::path::Path::new(&path)) {
-        Ok(id) => Some(format!(
-            "http://127.0.0.1:{}/media/{id}",
-            crate::protocol::filesrv::bound_port()
-        )),
-        // no registration → no media route; text still renders (quick view
-        // must not refuse a document over a serving hiccup)
-        Err(e) => {
-            log::warn!("viewer: media disabled — cannot register file: {e}");
-            None
-        }
-    };
-    let parse_ms = started.elapsed().as_secs_f64() * 1000.0;
+    let p = render_payload(registry.inner().as_ref(), window.label(), &path, "viewer")?;
     log::info!(
-        "viewer: parsed {path} ({} bytes) in {parse_ms:.1} ms, {} families with OS/2 metrics",
-        bytes.len(),
-        fonts.len()
+        "viewer: parsed {path} ({} bytes) in {:.1} ms, {} families with OS/2 metrics",
+        p.bytes.len(),
+        p.parse_ms,
+        p.fonts.len()
     );
     Ok(QuickView {
-        parse_ms,
-        doc: render,
-        fonts,
-        page: doc.page,
-        media_base,
+        parse_ms: p.parse_ms,
+        doc: p.render,
+        fonts: p.fonts,
+        page: p.page,
+        media_base: p.media_base,
     })
 }
 
