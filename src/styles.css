@@ -3,7 +3,8 @@
  * tailwind.config. Preflight is deliberately NOT imported — this UI was
  * pixel-baselined on UA defaults (body margin, content-box form controls),
  * a global reset would move them. Layout/skin lives as utility classes in
- * index.html / viewer.html / src/main.ts; this file holds the token slots.
+ * index.html / viewer.html / editor.html / src/main.ts / src/editor.ts; this
+ * file holds the token slots.
  *
  * Token slots are OUR names with neutral placeholder values carrying
  * today's look 1:1 (the stock Vite/Tauri template palette this UI shipped
@@ -14,11 +15,13 @@
 @layer theme, base, utilities;
 @import 'tailwindcss/theme.css' layer(theme);
 @import 'tailwindcss/utilities.css' layer(utilities) source(none);
-/* Utility candidates ONLY from the two own-UI surfaces — auto-detection would
+/* Utility candidates ONLY from the own-UI surfaces — auto-detection would
  * otherwise crawl src/shim/*.js and extract garbage candidates (m-1391, …). */
 @source '../index.html';
 @source '../viewer.html';
+@source '../editor.html';
 @source './main.ts';
+@source './editor.ts';
 
 /* `static`: emit every slot even without a live utility user yet
  * (--color-accent currently has none — the start page grew no anchors) —

@@ -74,7 +74,8 @@ crates/nanooffice-ooxml (K01)         ← Document + resolve + write_docx (0 đ�
   `owner=window-label` (media route) → trả `RenderDoc` + fonts + page + media_base
   (cùng shape payload `QuickView` — frontend viewer/editor dùng chung contract).
 - `nano_light_edit(window, cmd)`: mutate `Document` tại toạ độ hitTest → resolve lại
-  → trả `{doc, caret, undoDepth, dirty}`. Log `nano light edit:`.
+  → trả `{doc, caret, dirty}` (undoDepth chỉ log Rust — không ai consume TS,
+  cut ponytail). Log `nano light edit:`.
 - `nano_light_save(window)`: `write_docx` + tmp + rename → `saved = clone`, dirty=false.
   Log `nano light saved:`.
 - Cleanup: `WindowEvent::Destroyed` đã có sẵn ở lib.rs gọi `unregister_owner` (T-059);
@@ -85,7 +86,7 @@ crates/nanooffice-ooxml (K01)         ← Document + resolve + write_docx (0 đ�
 | Lệnh | Hành vi | Caret trả |
 |---|---|---|
 | `insert {text, caret}` | chèn text vào run tại offset (paragraph 0 run → tạo run default); từ chối ký tự điều khiển `\t\n\u{c}\u{b}` | `(para, run, offset+len)` |
-| `backspace {caret}` | offset>0: xoá ký tự trước caret (kể cả ký tự điều khiển trong run text) · offset=0, run>0: gộp text/images vào run trước, xoá run hiện tại · offset=0, run=0, para>0: gộp paragraph vào paragraph trước (block trước phải là Paragraph, không thì no-op) · đầu tài liệu: no-op | theo nhánh |
+| `backspace {caret}` | offset>0: xoá ký tự trước caret (kể cả ký tự điều khiển trong run text) · offset=0, run>0: gộp text/images vào run trước, xoá run hiện tại · offset=0, run=0, para>0: gộp 2 paragraph — **pPr của paragraph CHỨA CARET thắng** (semantics Word: xoá dấu đoạn trước → nhận format đoạn sau) · đầu tài liệu / kề bảng: no-op | theo nhánh |
 | `delete {caret}` | offset<len: xoá ký tự tại caret · cuối run: gộp run sau vào (text+images) · cuối paragraph: gộp paragraph sau vào · cuối tài liệu: no-op | giữ nguyên |
 | `enter {caret}` | tách run tại offset (runs phải + props giữ cho 2 phía; **images theo run PHẢI** — parser flatten con trong run, ảnh luôn vẽ sau text, ceiling ghi §5), tách paragraph (pPr clone), block mới chèn sau | `(para+1, 0, 0)` |
 | `undo` / `redo` | pop/push snapshot `(Document, caret)` | caret của snapshot |
@@ -145,9 +146,33 @@ mỗi mục ghi giữ-được/mất + criterion nâng.
 Đây là danh sách THÀNH THẬN cho criterion đóng rung A4: từng lớp tính năng vào
 matrix thì mới tính "thay được" — vòng 1 chỉ claim đúng dòng "giữ".
 
-### 5.2 Kết quả slice L0
+### 5.2 Kết quả slice L0 (03.10.2026 — T-A27)
 
-(ghi khi land)
+Vòng edit đầu chạy thật trên `make_docx_layout.py` (6 block: 4 text + 2 ảnh),
+debug build, boot nền env `NANO_OFFICE_NANO_LIGHT` + probe
+`NANO_OFFICE_NL_PROBE` (chuỗi: hitTest đặt caret → insert marker → insert " XY"
+→ backspace ×3 → enter → insert dòng 2 → undo → redo → save → reopen window 2):
+
+| Đo | Số liệu | Đối chiếu |
+|---|---|---|
+| Parse + resolve (Rust) | **7.5–8.5 ms** | viewer cùng fixture 7.4 ms (gate 12 lần chạy cùng phiên) — cùng đường parse |
+| invoke → first-draw | **27.0–39.0 ms** (×3 run) | viewer 27–89 ms; đích < 500 ms xa |
+| Save (`write_docx` + tmp+rename) | **1.6–2.3 ms**, 2681 B | save engine qua x2t ~hàng trăm ms — đường Nano Light không có x2t |
+| Media byte-exact | 2/2 part sha256 khớp snapshot trước save | T-A26 proven, gate 15 tái assert từng part |
+| Reopen window 2 | evidence chứa marker trong text dòng | "mở lại render đúng nội dung đã edit" |
+
+**Gate 15** `harness/scripts/smoke-nano-light.sh` (thường trụ verify.sh sau
+gate 13): positive exit 0 ×3 (trước + sau ponytail cuts) + **negative ×2 exit
+1**: `NANO_LIGHT_NEGATIVE=garbage` (docx rác → `nano light failed:` cắn nhanh
+tại parse, pattern gate 13) · `NANO_LIGHT_NEGATIVE=doctor` (post-check parse
+bản PRE-SAVE không có marker → assert parse-back cắn — chứng minh assert đọc
+đúng file đã save, không chỉ vắng mặt). Verify FULL exit 0 **19 ▸ steps**
+(gates 9a–d/10/11/12/13/14 nguyên vẹn + 15 mới); gate 12 layout số không đổi
+(16 dòng · 601.7 · 600.5 · lhs 17.9) — **layout.ts/viewer.ts KHÔNG đụng**
+(editor.ts là consumer mới; vite gom layout thành chunk dùng chung). cargo
+test 33 shell (+5 test editor: verbs/carets, utf-16 surrogate, refuse
+bảng+control chars, session undo/dirty, save round-trip qua crate thật) +
+12 crate.
 
 ## 6. Rủi ro + mitigations
 

@@ -125,6 +125,26 @@ async function quickView(path: string): Promise<void> {
   }
 }
 
+/**
+ * Nano Light (L01, DD docs/design/editor-a4/DD.md): opens the docx in the
+ * lightweight editor window — no engine boot, no Editor.bin (save goes
+ * straight through the Rust OOXML core). The DEFAULT open path stays the
+ * engine (D1); this button is Nano Light's own entry.
+ */
+async function nanoLight(path: string): Promise<void> {
+  const ext = path.includes('.') ? path.split('.').pop()!.toLowerCase() : '';
+  if (ext !== 'docx') {
+    logLine(`ERROR: nano light supports .docx (got ".${ext}") — use Open for the engine`);
+    return;
+  }
+  logLine(`nano light: ${path}`);
+  try {
+    await invoke('nano_light_view', { path });
+  } catch (err) {
+    logLine(`ERROR: ${err}`);
+  }
+}
+
 function logLine(text: string): void {
   const el = document.createElement('div');
   el.textContent = text;
@@ -154,6 +174,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
       />
       <button type="submit" class="cursor-pointer hover:border-edge active:border-edge active:bg-panel-active ${CONTROL_SKIN}">Open</button>
       <button type="button" id="quick-view-btn" class="cursor-pointer hover:border-edge active:border-edge active:bg-panel-active ${CONTROL_SKIN}">Quick view</button>
+      <button type="button" id="nano-light-btn" class="cursor-pointer hover:border-edge active:border-edge active:bg-panel-active ${CONTROL_SKIN}">Nano Light</button>
     </form>
   </header>
   <main id="editor-root" class="relative flex-1"></main>
@@ -167,6 +188,9 @@ document.querySelector<HTMLFormElement>('#open-form')!.addEventListener('submit'
 });
 document.querySelector<HTMLButtonElement>('#quick-view-btn')!.addEventListener('click', () => {
   if (pathInput.value.trim()) void quickView(pathInput.value.trim());
+});
+document.querySelector<HTMLButtonElement>('#nano-light-btn')!.addEventListener('click', () => {
+  if (pathInput.value.trim()) void nanoLight(pathInput.value.trim());
 });
 
 // V5 UX E2E driver (gate 13; NANO_OFFICE_UX_PROBE, pattern SAVE_PROBE): fill

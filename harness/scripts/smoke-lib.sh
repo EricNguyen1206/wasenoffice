@@ -32,6 +32,12 @@
 #            harness/scripts/smoke-quick-view-ui.sh)
 #            ← src-tauri/src/viewer.rs viewer_view (start page Quick view
 #            button → invoke → command; driver NANO_OFFICE_UX_PROBE)
+#   gate 15 · nano light view/opened/edit/saved + first-draw/layout/evidence
+#            (T-A27 — Nano Light editor vòng 1; consumer
+#            harness/scripts/smoke-nano-light.sh)
+#            ← src-tauri/src/editor.rs (view/opened/edit/saved) +
+#            src/editor.ts (first-draw/layout/evidence/media); driver
+#            NANO_OFFICE_NANO_LIGHT + NANO_OFFICE_NL_PROBE
 set -u
 
 SMOKE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -56,6 +62,15 @@ SMOKE_RE_QV_HIT='viewer hit-test: '
 SMOKE_RE_QV_FAILED='viewer failed:'
 # gate 13 (quick-view UX wiring, T-V5) — dòng của command viewer_view
 SMOKE_RE_QV_VIEW='viewer view:'
+# gate 15 (Nano Light editor vòng 1, T-A27) — dòng ADDITIVE `nano light`
+# (emitting ends: src-tauri/src/editor.rs cho view/opened/edit/saved;
+# src/editor.ts cho first-draw/layout/evidence/media — cùng commit khi đổi).
+# Gate bash chỉ grep 4 dòng dưới; layout/evidence/opened/edit do python
+# heredoc của gate 15 parse inline (pattern gate 12).
+SMOKE_RE_NL_FIRST_DRAW='nano light first-draw'
+SMOKE_RE_NL_SAVED='nano light saved:'
+SMOKE_RE_NL_PROBE_DONE='nano light probe: chain done'
+SMOKE_RE_NL_FAILED='nano light failed:'
 
 # ── Trạng thái dùng chung (consumer đọc, không ghi trực tiếp khi không cần) ──
 SMOKE_APP_PID=""     # PID process-group của app (smoke_boot đặt)

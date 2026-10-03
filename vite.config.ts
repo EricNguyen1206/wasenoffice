@@ -11,10 +11,11 @@ export default defineConfig({
     // frontend sources — keep the dev server from crawling them.
     watch: { ignored: ['**/engines/**', '**/upstream/**'] },
   },
-  // two entries: the engine start page + the V01 quick-view page (no shim)
+  // three entries: the engine start page + the V01 quick-view page (no shim)
+  // + the L01 Nano Light editor page (no shim either)
   build: {
     rollupOptions: {
-      input: { main: 'index.html', viewer: 'viewer.html' },
+      input: { main: 'index.html', viewer: 'viewer.html', editor: 'editor.html' },
     },
   },
   optimizeDeps: {

@@ -5,12 +5,16 @@
 //! - `protocol` : `nanooffice-engine://` assets + `nanooffice-file://` user documents
 //! - `sidecar`  : x2t converter seam — binary resolution + `convert()` (T-A14)
 //! - `formats`  : format registry + per-document workdir layout (T-052)
+//! - `viewer`   : quick-view command layer (V01 — parse-only, no engine)
+//! - `editor`   : Nano Light editor command layer (L01 — sessions, mutations,
+//!   save straight through the A2 crate; no Editor.bin, no x2t on that path)
 //!
 //! Shim JS injected into every frame (in this order, see `run`): probe flag →
 //! `BRIDGE_JS` (desktopEditor.js — bridge + relay) → `DELIVERY_JS`
 //! (delivery.js — open-delivery chain); both also bundled by vite via src/main.ts.
 
 mod bridge;
+mod editor;
 mod formats;
 mod protocol;
 mod sidecar;
@@ -249,11 +253,14 @@ pub fn run() {
     tauri::Builder::default()
         .manage(Arc::new(FileRegistry::default()))
         .manage(Arc::new(viewer::QuickViewRequest::default()))
+        .manage(Arc::new(editor::EditorSessions::default()))
+        .manage(Arc::new(editor::NanoLightRequest::default()))
         .register_uri_scheme_protocol(protocol::ENGINE_SCHEME, protocol::handle_engine)
         .register_uri_scheme_protocol(protocol::FILE_SCHEME, protocol::handle_file)
         // T-059 cleanup: the registry used to only ever grow. A destroyed
-        // window drops the entries it registered (quick-view windows come and
-        // go in one app run; the main window's drop coincides with exit).
+        // window drops the entries it registered (quick-view / Nano Light
+        // windows come and go in one app run; the main window's drop
+        // coincides with exit). L01: editor sessions drop on the same hook.
         .on_window_event(|window, event| {
             if matches!(event, tauri::WindowEvent::Destroyed) {
                 let registry = window.app_handle().state::<Arc<FileRegistry>>();
@@ -261,6 +268,14 @@ pub fn run() {
                 if removed > 0 {
                     log::info!(
                         "registry: window {} closed — unregistered {removed} file(s)",
+                        window.label()
+                    );
+                }
+                let sessions = window.app_handle().state::<Arc<editor::EditorSessions>>();
+                let dropped = sessions.remove_owner(window.label());
+                if dropped > 0 {
+                    log::info!(
+                        "nano light: window {} closed — dropped session",
                         window.label()
                     );
                 }
@@ -277,7 +292,12 @@ pub fn run() {
             get_document_for_delivery,
             frontend_log,
             viewer::viewer_open,
-            viewer::viewer_view
+            viewer::viewer_view,
+            editor::nano_light_view,
+            editor::nano_light_reopen,
+            editor::nano_light_open,
+            editor::nano_light_edit,
+            editor::nano_light_save
         ])
         .setup(|app| {
             // Engine-facing document URLs must be loopback HTTP (see filesrv docs).
@@ -322,6 +342,21 @@ pub fn run() {
                 }
                 _ => String::new(),
             };
+            // L01 gate-15 edit driver (pattern NANO_OFFICE_SAVE_PROBE): env
+            // holds the MARKER TEXT the editor page inserts through the SAME
+            // edit() function the keydown handler uses (caret set by a real
+            // hitTest), then saves and reopens in a second window. No
+            // synthetic keystrokes, no focus taken; product default (no env)
+            // untouched.
+            let nl_probe_js = match std::env::var("NANO_OFFICE_NL_PROBE") {
+                Ok(marker) if !marker.is_empty() => {
+                    format!(
+                        "window.__NANO_OFFICE_NL_PROBE__ = {};",
+                        serde_json::json!(marker)
+                    )
+                }
+                _ => String::new(),
+            };
             // V01 quick-view slice (DD docs/design/viewer-a3/DD.md §3.1): env
             // trigger opens the dedicated viewer entry — no shim, no engine
             // iframe. The normal boot path below is untouched.
@@ -342,6 +377,25 @@ pub fn run() {
                         .focused(false);
                 if !hit_test_js.is_empty() {
                     win = win.initialization_script_for_all_frames(hit_test_js);
+                }
+                let win = win.build()?;
+                let _ = win;
+                return Ok(());
+            }
+            // L01 Nano Light slice (DD docs/design/editor-a4/DD.md §3): env
+            // trigger opens the dedicated editor entry — no shim, no engine,
+            // no Editor.bin on this path. The normal boot path below stays
+            // the DEFAULT (D1 — engine remains the default open; the button
+            // + this env are Nano Light's own entries). Rule 6b as above.
+            if std::env::var("NANO_OFFICE_NANO_LIGHT").is_ok_and(|v| !v.is_empty()) {
+                let mut win =
+                    WebviewWindowBuilder::new(app, "main", WebviewUrl::App("editor.html".into()))
+                        .title("NanoOffice — Nano Light")
+                        .inner_size(1000.0, 700.0)
+                        .visible(true)
+                        .focused(false);
+                if !nl_probe_js.is_empty() {
+                    win = win.initialization_script_for_all_frames(&nl_probe_js);
                 }
                 let win = win.build()?;
                 let _ = win;
