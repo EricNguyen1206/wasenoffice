@@ -75,13 +75,21 @@ impl BridgeCmd {
             | "LocalFileGetSourcePath" => Ok(Value::Null),
             "LocalFileSetOpenChangesCount" => {
                 // record the open-time changes count for save truncation math
+                // (T-059: keyed by the fileId the shim stamps — never "latest")
                 if let Some(n) = payload
                     .get("args")
                     .and_then(|a| a.get(0))
                     .and_then(Value::as_i64)
                 {
-                    if let Some((id, _)) = registry.latest() {
-                        save::set_open_changes_count(id, n);
+                    match payload
+                        .get("fileId")
+                        .and_then(Value::as_u64)
+                        .map(|v| v as u32)
+                    {
+                        Some(id) => save::set_open_changes_count(id, n),
+                        None => {
+                            log::warn!("bridge: LocalFileSetOpenChangesCount without fileId — not recorded")
+                        }
                     }
                 }
                 Ok(Value::Null)

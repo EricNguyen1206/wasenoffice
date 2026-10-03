@@ -33,16 +33,26 @@ pub const FILE_SCHEME: &str = "nanooffice-file";
 // flavors (disk `js_raw` / loopback-URL `engine_flavor_js`) live in
 // `protocol::allfonts` — the producer. This module and filesrv are consumers.
 
-/// fileId → absolute path registry. Kept in Rust state; JS only ever sees
+/// fileId → registered document. Kept in Rust state; JS only ever sees
 /// `…/file/<id>/<name>` URLs (custom scheme + loopback HTTP mirror).
+/// T-059 (review #4 C3): every consumer resolves its file by the EXPLICIT
+/// fileId its flow carries (stamped JS-side from `open_document`) — there is
+/// no "latest" implicit key, so a quick-view registration can never shadow an
+/// in-flight open/save. `owner` (the window label) is the cleanup key:
+/// unregistering on window close keeps the map from only ever growing.
 #[derive(Default)]
 pub struct FileRegistry {
     next_id: AtomicU32,
-    entries: Mutex<HashMap<u32, PathBuf>>,
+    entries: Mutex<HashMap<u32, Entry>>,
+}
+
+struct Entry {
+    disk: PathBuf,
+    owner: String,
 }
 
 impl FileRegistry {
-    pub fn register(&self, path: &Path) -> Result<u32, String> {
+    pub fn register(&self, owner: &str, path: &Path) -> Result<u32, String> {
         let canonical = path
             .canonicalize()
             .map_err(|e| format!("cannot resolve {}: {e}", path.display()))?;
@@ -53,19 +63,27 @@ impl FileRegistry {
         self.entries
             .lock()
             .map_err(|_| "registry poisoned".to_string())?
-            .insert(id, canonical);
+            .insert(
+                id,
+                Entry {
+                    disk: canonical,
+                    owner: owner.to_string(),
+                },
+            );
         Ok(id)
     }
 
     pub fn get(&self, id: u32) -> Option<PathBuf> {
-        self.entries.lock().ok()?.get(&id).cloned()
+        self.entries.lock().ok()?.get(&id).map(|e| e.disk.clone())
     }
 
-    /// (id, path) of the most recently registered file (PH-0 single-doc flow).
-    pub fn latest(&self) -> Option<(u32, PathBuf)> {
-        let entries = self.entries.lock().ok()?;
-        let id = entries.keys().copied().max()?;
-        entries.get(&id).cloned().map(|p| (id, p))
+    /// Drop every entry registered by `owner` (window close cleanup).
+    /// Returns how many entries were removed.
+    pub fn unregister_owner(&self, owner: &str) -> usize {
+        let mut entries = self.entries.lock().expect("registry poisoned");
+        let before = entries.len();
+        entries.retain(|_, e| e.owner != owner);
+        before - entries.len()
     }
 }
 
@@ -424,5 +442,35 @@ mod tests {
         assert_eq!(response.status(), StatusCode::PARTIAL_CONTENT);
         assert_eq!(response.body(), b"2345");
         let _ = std::fs::remove_file(&path);
+    }
+
+    /// T-059 race: two registrations (open A, then quick view B) — resolving
+    /// each flow's OWN id must return the right file, and the newer B must
+    /// never shadow the older A (the old `latest()` failure mode).
+    #[test]
+    fn keyed_consume_crosses_registered_files_correctly() {
+        let dir = std::env::temp_dir().join("nanooffice-test-registry-keyed");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let a = dir.join("a.docx");
+        let b = dir.join("b.docx");
+        std::fs::write(&a, b"document A").unwrap();
+        std::fs::write(&b, b"document B").unwrap();
+
+        let registry = FileRegistry::default();
+        let id_a = registry.register("main", &a).unwrap();
+        let id_b = registry.register("quickview-1", &b).unwrap();
+        assert!(id_a < id_b, "ids monotonic — B is the would-be `latest`");
+
+        assert_eq!(registry.get(id_a), Some(a.canonicalize().unwrap()));
+        assert_eq!(registry.get(id_b), Some(b.canonicalize().unwrap()));
+        assert_eq!(registry.get(id_b + 1), None, "unknown fileId");
+
+        // window-close cleanup removes only the owner's entries
+        assert_eq!(registry.unregister_owner("quickview-1"), 1);
+        assert_eq!(registry.get(id_b), None, "quick-view file unregistered");
+        assert_eq!(registry.get(id_a), Some(a.canonicalize().unwrap()));
+        assert_eq!(registry.unregister_owner("quickview-1"), 0, "idempotent");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

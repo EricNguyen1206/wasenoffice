@@ -35,14 +35,17 @@ const DELIVERY_JS: &str = include_str!("../../src/shim/delivery.js");
 /// Open a local file for editing: registers it in the FileRegistry and returns
 /// the URL the engine should load — loopback HTTP with an opaque fileId
 /// (the engine rejects custom-scheme document URLs; the disk path never
-/// reaches JS). See protocol::filesrv for the rationale.
+/// reaches JS). See protocol::filesrv for the rationale. T-059: the entry is
+/// owned by the calling window's label; every later engine call for this
+/// document (delivery/save) must carry the returned `fileId` explicitly.
 #[tauri::command]
 fn open_document(
+    window: tauri::WebviewWindow,
     path: String,
     registry: State<'_, Arc<FileRegistry>>,
 ) -> Result<OpenedDocument, String> {
     log::info!("open_document: {path}");
-    let id = registry.register(std::path::Path::new(&path))?;
+    let id = registry.register(window.label(), std::path::Path::new(&path))?;
     let disk = registry_path(&registry, id);
     let name = disk
         .file_name()
@@ -55,6 +58,7 @@ fn open_document(
             name
         ),
         name,
+        file_id: id,
     })
 }
 
@@ -66,20 +70,26 @@ fn registry_path(registry: &State<Arc<FileRegistry>>, id: u32) -> std::path::Pat
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OpenedDocument {
     url: String,
     name: String,
+    /// The registry key of this document (T-059): the JS side stamps it on
+    /// every later engine call (delivery/save) so Rust resolves exactly this
+    /// entry — never an implicit "latest".
+    file_id: u32,
 }
 
 /// Startup document (env `NANO_OFFICE_OPEN`), consumed once by the start page.
 #[tauri::command]
 fn get_startup_document(
+    window: tauri::WebviewWindow,
     registry: State<'_, Arc<FileRegistry>>,
 ) -> Result<Option<OpenedDocument>, String> {
     match std::env::var("NANO_OFFICE_OPEN") {
         Ok(path) if !path.is_empty() => {
             std::env::remove_var("NANO_OFFICE_OPEN");
-            open_document(path, registry).map(Some)
+            open_document(window, path, registry).map(Some)
         }
         _ => Ok(None),
     }
@@ -115,9 +125,12 @@ fn payload_to_short(payload: &serde_json::Value) -> String {
     }
 }
 
-/// Deliver the most recently registered document to the engine frame via the
+/// Deliver a REGISTERED document to the engine frame via the
 /// desktop open contract (LocalStartOpen → convert →
-/// DesktopOfflineAppDocumentEndLoad). The engine's offline loader consumes the
+/// DesktopOfflineAppDocumentEndLoad). T-059: the caller states WHICH document
+/// (`fileId`, stamped by the shim from `open_document`) — resolving by
+/// "most recent registration" raced quick-view windows into wrong opens.
+/// The engine's offline loader consumes the
 /// x2t-converted `Editor.bin` for OOXML sources; PDF is a cross-platform
 /// format — the real shell does NOT convert it, it copies the ORIGINAL file
 /// into the recovery folder and delivers those bytes (observed: recovery dir
@@ -132,12 +145,16 @@ fn payload_to_short(payload: &serde_json::Value) -> String {
 #[tauri::command]
 fn get_document_for_delivery(
     registry: State<'_, Arc<FileRegistry>>,
+    file_id: Option<u32>,
 ) -> Result<DeliverableDocument, String> {
     use base64::Engine as _;
-    let (id, disk) = registry
+    let id = file_id.ok_or_else(|| {
+        "delivery: no fileId (the shim must stamp the open_document id)".to_string()
+    })?;
+    let disk = registry
         .inner()
-        .latest()
-        .ok_or_else(|| "no document registered yet".to_string())?;
+        .get(id)
+        .ok_or_else(|| format!("no document registered for fileId {id}"))?;
 
     let work = formats::DocWorkdir::new(id);
     let _ = std::fs::remove_dir_all(work.root());
@@ -234,6 +251,21 @@ pub fn run() {
         .manage(Arc::new(viewer::QuickViewRequest::default()))
         .register_uri_scheme_protocol(protocol::ENGINE_SCHEME, protocol::handle_engine)
         .register_uri_scheme_protocol(protocol::FILE_SCHEME, protocol::handle_file)
+        // T-059 cleanup: the registry used to only ever grow. A destroyed
+        // window drops the entries it registered (quick-view windows come and
+        // go in one app run; the main window's drop coincides with exit).
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::Destroyed) {
+                let registry = window.app_handle().state::<Arc<FileRegistry>>();
+                let removed = registry.unregister_owner(window.label());
+                if removed > 0 {
+                    log::info!(
+                        "registry: window {} closed — unregistered {removed} file(s)",
+                        window.label()
+                    );
+                }
+            }
+        })
         .on_page_load(|_webview, payload| {
             log::info!("page_load [{:?}] {}", payload.event(), payload.url());
         })

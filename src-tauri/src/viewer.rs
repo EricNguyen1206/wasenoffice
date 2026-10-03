@@ -85,6 +85,7 @@ static WINDOW_SEQ: AtomicU32 = AtomicU32::new(0);
 pub fn viewer_open(
     registry: State<'_, Arc<FileRegistry>>,
     quick: State<'_, Arc<QuickViewRequest>>,
+    window: tauri::WebviewWindow,
 ) -> Result<QuickView, String> {
     // V5: the UI path stashes the path and the window consumes it; the env
     // stays as the dev/gate-12 trigger (DD §3.1/§4).
@@ -107,7 +108,7 @@ pub fn viewer_open(
         .into_iter()
         .filter_map(|fam| crate::protocol::allfonts::line_metrics(&fam).map(|m| (fam, m)))
         .collect();
-    let media_base = match registry.register(std::path::Path::new(&path)) {
+    let media_base = match registry.register(window.label(), std::path::Path::new(&path)) {
         Ok(id) => Some(format!(
             "http://127.0.0.1:{}/media/{id}",
             crate::protocol::filesrv::bound_port()

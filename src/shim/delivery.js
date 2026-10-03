@@ -190,11 +190,15 @@
 
   /** Main frame only: fetch the registered document and send it DOWN to the
    *  engine frame (which asked for it via LocalStartOpen). Called by
-   *  desktopEditor.js when the LocalStartOpen relay arrives. */
+   *  desktopEditor.js when the LocalStartOpen relay arrives. T-059: states
+   *  WHICH document — the fileId its window got from open_document (stamped
+   *  by main.ts into window.__nanooffice_file_id__) — instead of letting
+   *  Rust resolve an implicit "latest" registration (wrong-open race against
+   *  quick-view windows). */
   function deliverDocument() {
     var invoke = tauriInvoke();
     if (!invoke) return;
-    invoke('get_document_for_delivery').then(function (doc) {
+    invoke('get_document_for_delivery', { fileId: window.__nanooffice_file_id__ }).then(function (doc) {
       // The real shell delivers well after LocalStartOpen (it converts first);
       // give the engine's post-LocalStartOpen init a beat to settle.
       setTimeout(function () {

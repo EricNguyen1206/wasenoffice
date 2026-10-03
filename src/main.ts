@@ -57,9 +57,16 @@ async function getBootPage(): Promise<string> {
 interface OpenedDoc {
   url: string;
   name: string;
+  /** Registry key of this document (T-059): the shims stamp it onto every
+   * later engine call (delivery/save) so Rust resolves exactly this entry. */
+  fileId: number;
 }
 
 async function mountEditor(doc: OpenedDoc): Promise<void> {
+  // T-059: single choke point of every opened doc — the relay (shim) reads
+  // this stamp to key delivery/save on THIS document, never "latest".
+  (window as unknown as { __nanooffice_file_id__?: number }).__nanooffice_file_id__ =
+    doc.fileId;
   const boot = await getBootPage();
   const ext = doc.name.includes('.') ? doc.name.split('.').pop()!.toLowerCase() : '';
   const format = FILE_FORMATS[ext];

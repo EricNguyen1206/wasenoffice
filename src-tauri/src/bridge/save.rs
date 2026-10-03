@@ -73,12 +73,28 @@ pub fn set_open_changes_count(id: u32, n: i64) {
     }
 }
 
+/// T-059: the engine call's OWN document — the shim stamps every relayed call
+/// with the `fileId` its window received from `open_document`; an unknown or
+/// missing id is a loud error instead of a silent "whatever registered last".
+fn flow_file_id(
+    registry: &FileRegistry,
+    payload: &Value,
+) -> Result<(u32, std::path::PathBuf), String> {
+    let id = payload
+        .get("fileId")
+        .and_then(Value::as_u64)
+        .map(|v| v as u32)
+        .ok_or_else(|| "engine call without fileId (shim must stamp the open id)".to_string())?;
+    let disk = registry
+        .get(id)
+        .ok_or_else(|| format!("no document registered for fileId {id}"))?;
+    Ok((id, disk))
+}
+
 /// `LocalFileSaveChanges(data, deleteIndex, count)` — append (or truncate on
 /// undo) the engine deltas in `<workdir>/changes/changes0.json`.
 pub fn append_changes(registry: &FileRegistry, payload: &Value) -> Result<Value, BridgeError> {
-    let Some((id, _disk)) = registry.latest() else {
-        return Err(BridgeError::Runtime("no document registered yet".into()));
-    };
+    let (id, _disk) = flow_file_id(registry, payload).map_err(BridgeError::Runtime)?;
     let args = payload
         .get("args")
         .and_then(Value::as_array)
@@ -181,8 +197,9 @@ fn finish(app: &tauri::AppHandle, path: Option<&Path>, ok: bool, code: i64, note
 /// `LocalFileSave(param, password, docinfo, fileType, jsonParams, oldPassword)`
 /// — convert Editor.bin (+ changes) back to the original file via x2t.
 pub fn save_document(app: &tauri::AppHandle, registry: &FileRegistry, payload: &Value) -> Value {
-    let Some((id, disk)) = registry.latest() else {
-        return finish(app, None, false, 2, "no document registered yet");
+    let (id, disk) = match flow_file_id(registry, payload) {
+        Ok(id_disk) => id_disk,
+        Err(note) => return finish(app, None, false, 2, &note),
     };
     let args = payload
         .get("args")
@@ -327,6 +344,54 @@ pub fn save_document(app: &tauri::AppHandle, registry: &FileRegistry, payload: &
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// T-059 race: open A ("main") then register B ("quickview-1") — the
+    /// old `latest()` keying would hand A's save flow B's workdir. Every
+    /// engine call must land in the workdir of the id IT carries.
+    #[test]
+    fn save_flows_key_by_the_file_id_they_carry() {
+        use crate::formats::DocWorkdir;
+        let dir = std::env::temp_dir().join("nanooffice-test-save-keyed");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let a = dir.join("a.docx");
+        let b = dir.join("b.docx");
+        std::fs::write(&a, b"document A").unwrap();
+        std::fs::write(&b, b"document B").unwrap();
+
+        let registry = FileRegistry::default();
+        let id_a = registry.register("main", &a).unwrap();
+        let id_b = registry.register("quickview-1", &b).unwrap();
+        assert!(id_a < id_b);
+
+        // deltas for A land in A's workdir, even though B registered later
+        let payload = serde_json::json!({ "fileId": id_a, "args": ["10;AAAA", 0, 1] });
+        append_changes(&registry, &payload).expect("append keyed by fileId");
+        assert!(
+            DocWorkdir::new(id_a).changes_file().is_file(),
+            "changes must land in the carried id's workdir"
+        );
+        assert!(
+            !DocWorkdir::new(id_b).changes_dir().exists(),
+            "the later-registered file must not be touched"
+        );
+
+        // counterfactual: missing / unknown fileId fail loudly
+        assert!(append_changes(&registry, &serde_json::json!({ "args": ["x", 0, 1] })).is_err());
+        assert!(append_changes(
+            &registry,
+            &serde_json::json!({ "fileId": id_b + 7, "args": ["x", 0, 1] })
+        )
+        .is_err());
+
+        // LocalFileSetOpenChangesCount keying shares the same contract
+        let (id, disk) = flow_file_id(&registry, &serde_json::json!({ "fileId": id_a })).unwrap();
+        assert_eq!(id, id_a);
+        assert!(disk.ends_with("a.docx"));
+        let _ = std::fs::remove_dir_all(DocWorkdir::new(id_a).root());
+        let _ = std::fs::remove_dir_all(DocWorkdir::new(id_b).root());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn truncate_keeps_exact_entry_count() {

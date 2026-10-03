@@ -359,7 +359,7 @@ mod tests {
     fn media_serves_fixture_bytes_byte_exact() {
         let (port, registry) = server();
         let id = registry
-            .register(std::path::Path::new(media_fixture()))
+            .register("test", std::path::Path::new(media_fixture()))
             .unwrap();
         let raw = std::fs::read(media_fixture()).unwrap();
         let expected = nanooffice_ooxml::try_part_bytes(&raw, "word/media/image1.png").unwrap();
@@ -388,7 +388,7 @@ mod tests {
     fn media_rejects_traversal_and_unknown_targets() {
         let (port, registry) = server();
         let id = registry
-            .register(std::path::Path::new(media_fixture()))
+            .register("test", std::path::Path::new(media_fixture()))
             .unwrap();
 
         let (status, _) = get(port, &format!("/media/{id}/../secret"));

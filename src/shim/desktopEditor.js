@@ -223,7 +223,14 @@
       console.warn('[nanooffice-bridge] __TAURI__ unavailable; method', method);
       return Promise.resolve(null);
     }
-    return invoke(BRIDGE_CMD, { method: method, payload: { args: args } }).catch(function (err) {
+    // T-059: the main frame owns the document — `open_document` returned its
+    // fileId (main.ts keeps it in window.__nanooffice_file_id__). Every
+    // relayed engine call is stamped with it so Rust resolves exactly that
+    // registry entry instead of an implicit "latest" (quick-view windows
+    // register files into the same registry).
+    var payload = { args: args };
+    if (window.__nanooffice_file_id__ != null) payload.fileId = window.__nanooffice_file_id__;
+    return invoke(BRIDGE_CMD, { method: method, payload: payload }).catch(function (err) {
       var msg = String(err);
       if (msg.indexOf('UNIMPL:') === 0) {
         console.warn('[nanooffice-bridge] UNIMPL hit:', msg, 'args:', safeArgs(args));
