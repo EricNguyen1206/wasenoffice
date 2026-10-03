@@ -43,6 +43,7 @@ Ngoài `docs/`: contract cho agent = `AGENTS.md` (root) · luật bắt buộc =
 | `docs/design/F01-editor-pdf/` | DD + TEST cửa sổ xem/soạn PDF (PH-1, T-048) |
 | `docs/design/converter-a2/` | DD converter core A2 — Rust thay x2t, mã K01 (Track A, T-A20; component-level — không phải màn UI) |
 | `docs/design/viewer-a3/` | DD viewer Rust đọc-only "quick view" A3 — mã V01 (Track A, T-A25; component-level — không phải màn UI) |
+| `docs/design/editor-a4/` | DD editor core A4 "Nano Light" — mã L01 (Track A, T-A27; component-level — không phải màn UI) |
 | `docs/design/A01-startpage/` | DD + TEST trang bắt đầu (draft, PH-2) |
 | `docs/design/A02-about/` · `docs/design/C01-print-preview/` · `docs/design/X01-settings/` | stub màn kế hoạch (planned) |
 | `docs/techstack-analysis.md` | research Bun/Go/Rust 26.09 (untracked theo QĐ stack) |
