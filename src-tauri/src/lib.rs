@@ -328,13 +328,22 @@ pub fn run() {
             // Rule 6b (AGENTS.md): window shows WITHOUT taking focus; devtools opt-in only.
             // Full-hide breaks engine save-probes (throttled frames) — verified 03.10.
             if std::env::var("NANO_OFFICE_QUICK_VIEW").is_ok_and(|v| !v.is_empty()) {
-                let win =
+                // T-V7 gate-12 probe: round-trip every laid-out line through
+                // the layout module's hitTest (env-driven — gate food only).
+                let hit_test_js = match std::env::var("NANO_OFFICE_QV_HITTEST") {
+                    Ok(v) if !v.is_empty() => "window.__NANO_OFFICE_QV_HITTEST__ = true;",
+                    _ => "",
+                };
+                let mut win =
                     WebviewWindowBuilder::new(app, "main", WebviewUrl::App("viewer.html".into()))
                         .title("NanoOffice — Quick View")
                         .inner_size(1000.0, 700.0)
                         .visible(true)
-                        .focused(false)
-                        .build()?;
+                        .focused(false);
+                if !hit_test_js.is_empty() {
+                    win = win.initialization_script_for_all_frames(hit_test_js);
+                }
+                let win = win.build()?;
                 let _ = win;
                 return Ok(());
             }

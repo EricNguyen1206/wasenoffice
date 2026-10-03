@@ -27,6 +27,9 @@ node harness/scripts/check-docs.mjs || fail=1
 echo "▸ bridge surface 3 chiều (shim KNOWN/LOCAL_TRUTHS ↔ rust dispatch ↔ reference.map — T-044)"
 node harness/scripts/check-bridge-surface.mjs || fail=1
 
+echo "▸ layout core unit tests (gate 14: tsc-compile + node — T-V7)"
+harness/scripts/test-layout.sh || fail=1
+
 echo "▸ smoke render behavioral (TC-D01-06: boot app, render fixture DOCX)"
 harness/scripts/smoke-render.sh || fail=1
 

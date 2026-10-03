@@ -45,7 +45,7 @@ python3 "$ROOT/harness/fixtures/make_docx_layout.py" "$FIXTURE" >/dev/null || {
 smoke_init "$FIXTURE"
 echo "smoke: fixture=$FIXTURE log=$LOG timeout=${TIMEOUT}s budgets=${MAX_MS}ms/${MAX_MB}MB"
 
-smoke_boot "NANO_OFFICE_QUICK_VIEW=$FIXTURE" "NANO_OFFICE_DEVTOOLS=0" "RUST_LOG=info" "$LOG"
+smoke_boot "NANO_OFFICE_QUICK_VIEW=$FIXTURE" "NANO_OFFICE_QV_HITTEST=1" "NANO_OFFICE_DEVTOOLS=0" "RUST_LOG=info" "$LOG"
 
 quick_view_signals() {
   if grep -q "$SMOKE_RE_QV_FAILED" "$LOG" 2>/dev/null; then
@@ -56,6 +56,7 @@ quick_view_signals() {
   grep -q "$SMOKE_RE_QV_FIRST_DRAW" "$LOG" 2>/dev/null || { SMOKE_SUMMARY="no first-draw line yet"; return 1; }
   grep -q "$SMOKE_RE_QV_LAYOUT" "$LOG" 2>/dev/null || { SMOKE_SUMMARY="first-draw seen, layout line not yet"; return 1; }
   grep -q "$SMOKE_RE_QV_MEDIA" "$LOG" 2>/dev/null || { SMOKE_SUMMARY="layout seen, media lines not yet"; return 1; }
+  grep -q "$SMOKE_RE_QV_HIT" "$LOG" 2>/dev/null || { SMOKE_SUMMARY="media seen, hit-test line not yet"; return 1; }
   SMOKE_QV_REPORT=$(python3 - "$LOG" "$MAX_MS" <<'PY' 2>&1
 import re
 import sys
@@ -126,8 +127,18 @@ for i in range(len(media) - 1):
     top, h = float(media[i][6]), float(media[i][4])
     need(abs(float(media[i + 1][6]) - (top + h)) <= 0.6,
          f"image {i + 1} top {media[i + 1][6]} != image {i} bottom {top + h:.1f}px — image line must advance by the image height")
+
+# T-V7 hit-test round-trip: every laid-out TEXT line must invert through the
+# layout module's hitTest (mid-line → inside the line; left/right edges → its
+# boundary offsets). The exact per-coordinate semantics live in gate 14
+# (test-layout.sh); here we assert the E2E wiring on the real model.
+m = re.search(r"viewer hit-test: (\d+)/(\d+) lines ok", text)
+need(m, "no hit-test line (NANO_OFFICE_QV_HITTEST probe missing?)")
+need(int(m.group(1)) == int(m.group(2)) == lines,
+     f"hit-test {m.group(1)}/{m.group(2)} != {lines} lines — inverse mapping regressed")
+need("viewer hit-test FAIL" not in text, "hit-test FAIL line present")
 print(f"QV OK first-draw={ms}ms lines={lines} lh={expected:.2f}px(col {colw}px maxw {maxw}px) "
-      f"media={len(media)} drawn={[f'{m[3]}x{m[4]}' for m in media]} ink={[m[7] for m in media]}")
+      f"media={len(media)} drawn={[f'{m[3]}x{m[4]}' for m in media]} ink={[m[7] for m in media]} hit-test={m.group(1)}/{m.group(2)}")
 PY
 )
   local rc=$?
