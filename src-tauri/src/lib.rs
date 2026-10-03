@@ -277,11 +277,15 @@ pub fn run() {
             // V01 quick-view slice (DD docs/design/viewer-a3/DD.md §3.1): env
             // trigger opens the dedicated viewer entry — no shim, no engine
             // iframe. The normal boot path below is untouched.
+            // Rule 6b (AGENTS.md): window shows WITHOUT taking focus; devtools opt-in only.
+            // Full-hide breaks engine save-probes (throttled frames) — verified 03.10.
             if std::env::var("NANO_OFFICE_QUICK_VIEW").is_ok_and(|v| !v.is_empty()) {
                 let win =
                     WebviewWindowBuilder::new(app, "main", WebviewUrl::App("viewer.html".into()))
                         .title("NanoOffice — Quick View")
                         .inner_size(1000.0, 700.0)
+                        .visible(true)
+                        .focused(false)
                         .build()?;
                 let _ = win;
                 return Ok(());
@@ -290,6 +294,8 @@ pub fn run() {
                 .title("NanoOffice")
                 .inner_size(1280.0, 800.0)
                 .min_inner_size(940.0, 560.0)
+                .visible(true)
+                .focused(false)
                 .initialization_script_for_all_frames(&probe_flag_js);
             let win = if save_probe_js.is_empty() {
                 win.initialization_script_for_all_frames(BRIDGE_JS)
@@ -300,11 +306,10 @@ pub fn run() {
             let win = win
                 .initialization_script_for_all_frames(DELIVERY_JS)
                 .build()?;
-            // Debug builds only: engine console is the primary PH-0 evidence source.
-            // Disable with NANO_OFFICE_DEVTOOLS=0 — the docked panel squeezes the
-            // webview viewport and skews layout/render verification.
+            // Debug builds: engine console opt-in only (rule 6b — devtools default OFF;
+            // the docked panel also skews layout/render verification).
             #[cfg(debug_assertions)]
-            if std::env::var("NANO_OFFICE_DEVTOOLS").as_deref() != Ok("0") {
+            if std::env::var("NANO_OFFICE_DEVTOOLS").as_deref() == Ok("1") {
                 win.open_devtools();
             }
             let _ = win;
