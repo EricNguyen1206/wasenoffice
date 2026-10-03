@@ -10,6 +10,7 @@
  * the keydown handler uses. No engine shim is loaded on this page.
  */
 import {
+  caretXY,
   hitTest,
   layoutBlocks,
   MARGIN,
@@ -18,7 +19,6 @@ import {
   twip,
   type Block,
   type FontMetrics,
-  type LayoutItem,
   type LineModel,
   type Measurer,
   type Run,
@@ -28,6 +28,10 @@ interface Caret {
   para: number;
   run: number;
   offset: number;
+  /** T-060 C3: the hit's cell identity — `[row, col]` when the caret sits
+   * inside a table, null at top level. The command layer refuses edits on
+   * `cell !== null` (round-1 scope, DD L01 §2). */
+  cell: [number, number] | null;
 }
 
 interface NanoLightDoc {
@@ -93,38 +97,6 @@ async function loadMedia(blocks: Block[], base: string, bitmaps: Map<string, Ima
       }
     }),
   );
-}
-
-const itemLen = (it: LayoutItem): number => (it.tab ? 1 : it.text.length);
-
-/**
- * Forward map (para, run, offset) → (x, baseline, line-height) — the mirror
- * of `hitTest` on the SAME model + measurer: the item whose run/charStart
- * contains the offset (caret BEFORE char `offset`); end-of-run clamps to the
- * LAST item of that run (visual end of a wrapped run); an empty paragraph
- * resolves to its line start (hitTest's placeholder semantics).
- */
-function caretXY(model: LineModel, measure: Measurer, caret: Caret): { x: number; y: number; lh: number } | null {
-  let fallback: { x: number; y: number; lh: number } | null = null;
-  for (const line of model.lines) {
-    if (line.para !== caret.para) continue;
-    if (line.items.length === 0) {
-      fallback ??= { x: line.x, y: line.baseline, lh: line.lh };
-      continue;
-    }
-    for (const it of line.items) {
-      if (it.ri !== caret.run) continue;
-      const end = it.charStart + itemLen(it);
-      if (caret.offset >= it.charStart && caret.offset < end) {
-        const x = it.tab ? it.x : it.x + measure(it.r, it.text.slice(0, caret.offset - it.charStart));
-        return { x, y: line.baseline, lh: line.lh };
-      }
-      if (caret.offset === end) {
-        fallback = { x: it.x + it.w, y: line.baseline, lh: line.lh };
-      }
-    }
-  }
-  return fallback;
 }
 
 async function main(): Promise<void> {
@@ -271,7 +243,7 @@ async function main(): Promise<void> {
       if (!model) return;
       const h = hitTest(model, measure, ev.offsetX, ev.offsetY);
       if (h) {
-        caret = { para: h.para, run: h.run, offset: h.offset };
+        caret = { para: h.para, run: h.run, offset: h.offset, cell: h.cell };
         render();
       }
     });
@@ -346,7 +318,7 @@ async function main(): Promise<void> {
       try {
         const first = model.lines[0];
         const h = hitTest(model, measure, first.x + first.total / 2, first.baseline);
-        if (h) caret = { para: h.para, run: h.run, offset: h.offset };
+        if (h) caret = { para: h.para, run: h.run, offset: h.offset, cell: h.cell };
         await edit({ kind: 'insert', text: probe, caret });
         await edit({ kind: 'insert', text: ' XY', caret });
         for (let i = 0; i < 3; i++) await edit({ kind: 'backspace', caret });

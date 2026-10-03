@@ -23,13 +23,18 @@ use crate::protocol::FileRegistry;
 /// Caret position — the hit-test coordinate system (`hitTest` T-V7, DD V01
 /// §5.7): `para` = body block index, `run` = index in the paragraph's runs,
 /// `offset` = utf-16 code units into the run's text (mirrors JS string
-/// indexing; the caret sits BEFORE char `offset`).
+/// indexing; the caret sits BEFORE char `offset`). T-060 C3: `cell` carries
+/// the hit's `[row, col]` table identity (null at top level) — in-cell carets
+/// are refused on it, not on heuristics; `#[serde(default)]` keeps payloads
+/// from before the field additive-parseable.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Caret {
     pub para: usize,
     pub run: usize,
     pub offset: usize,
+    #[serde(default)]
+    pub cell: Option<[usize; 2]>,
 }
 
 /// Snapshot-clone undo bound (DD L01 §2): the model is small, clones are
@@ -68,6 +73,17 @@ impl EditorSession {
     /// changed the model (a no-op backspace at the document start must not
     /// pollute the stack); undo/redo manage their own stacks.
     fn apply(&mut self, cmd: EditCmd) -> Result<Caret, String> {
+        // Round-1 scope (DD L01 §2): in-cell carets are refused on the hit's
+        // `cell` identity (T-060 C3) — the `para` index alone is ambiguous
+        // inside tables (cell content shares `pi` with the following block).
+        if let Some(c) = cmd.caret() {
+            if c.cell.is_some() {
+                return Err(
+                    "nano light: editing inside a table cell is out of scope for round 1 (DD L01 §2)"
+                        .to_string(),
+                );
+            }
+        }
         let is_mutation = !matches!(cmd, EditCmd::Undo | EditCmd::Redo);
         let before = (self.doc.clone(), self.caret);
         let caret = match cmd {
@@ -267,6 +283,7 @@ pub fn nano_light_open(
         para: 0,
         run: 0,
         offset: 0,
+        cell: None,
     };
     let page = doc.page.clone();
     let session = EditorSession {
@@ -320,6 +337,18 @@ impl EditCmd {
             EditCmd::Enter { .. } => "enter",
             EditCmd::Undo => "undo",
             EditCmd::Redo => "redo",
+        }
+    }
+
+    /// The caret the command acts on (None for undo/redo — they carry their
+    /// own snapshot carets).
+    fn caret(&self) -> Option<Caret> {
+        match self {
+            EditCmd::Insert { caret, .. }
+            | EditCmd::Backspace { caret }
+            | EditCmd::Delete { caret }
+            | EditCmd::Enter { caret } => Some(*caret),
+            EditCmd::Undo | EditCmd::Redo => None,
         }
     }
 }
@@ -414,10 +443,10 @@ fn save_session(session: &mut EditorSession) -> Result<(), String> {
 // mutations — free functions over `Document`, hit-test coordinates in/out
 // ---------------------------------------------------------------------------
 
-/// Resolve `para` to a top-level paragraph. Editing inside tables is refused
-/// for round 1 (DD L01 §2): the layout module's body-block `pi` for cell
-/// content collides with the block that follows, so the coordinate is
-/// ambiguous — fail loudly instead of mutating the wrong paragraph.
+/// Resolve `para` to a top-level paragraph. Round-1 scope (DD L01 §2): only
+/// top-level paragraphs are editable — in-cell hits are refused upstream on
+/// the caret's `cell` identity (T-060 C3); this arm catches stale carets
+/// whose `para` points straight at a table block.
 fn paragraph_at(doc: &mut Document, para: usize) -> Result<&mut Paragraph, String> {
     match doc.body.get_mut(para) {
         Some(Block::Paragraph(p)) => Ok(p),
@@ -567,6 +596,7 @@ fn apply_backspace(doc: &mut Document, caret: Caret) -> Result<Caret, String> {
         para: caret.para - 1,
         run: at_run,
         offset: at,
+        cell: None,
     })
 }
 
@@ -647,6 +677,7 @@ fn apply_enter(doc: &mut Document, caret: Caret) -> Result<Caret, String> {
         para: caret.para + 1,
         run: 0,
         offset: 0,
+        cell: None,
     })
 }
 
@@ -694,6 +725,7 @@ mod tests {
                 para: 0,
                 run: 0,
                 offset: 0,
+                cell: None,
             },
             path: std::env::temp_dir().join("nanooffice-test-nl-unused.docx"),
         }
@@ -709,6 +741,7 @@ mod tests {
             para: 0,
             run: 1,
             offset: 2,
+            cell: None,
         }; // "wo|orld"
         let c = apply_insert(&mut s.doc, c0, "XY").unwrap();
         assert_eq!(
@@ -746,6 +779,7 @@ mod tests {
                 para: 0,
                 run: 1,
                 offset: 0,
+                cell: None,
             },
         )
         .unwrap();
@@ -766,6 +800,7 @@ mod tests {
                 para: 1,
                 run: 0,
                 offset: 5,
+                cell: None,
             },
         )
         .unwrap();
@@ -776,6 +811,7 @@ mod tests {
                 para: 0,
                 run: 0,
                 offset: 6,
+                cell: None,
             },
         )
         .unwrap();
@@ -800,6 +836,7 @@ mod tests {
                 para: 0,
                 run: 0,
                 offset: 3,
+                cell: None,
             },
             "Q",
         )
@@ -819,6 +856,7 @@ mod tests {
                 para: 0,
                 run: 0,
                 offset: 3,
+                cell: None,
             },
         )
         .unwrap();
@@ -842,6 +880,7 @@ mod tests {
                 para: 0,
                 run: 0,
                 offset: 0,
+                cell: None,
             },
             "x",
         )
@@ -854,10 +893,44 @@ mod tests {
                 para: 0,
                 run: 0,
                 offset: 0,
+                cell: None,
             },
             "a\tb"
         )
         .is_err());
+    }
+
+    /// T-060 C3: a caret whose hit landed INSIDE a table cell (`cell`
+    /// identity from the layout's hitTest) is refused by every mutating verb
+    /// BEFORE `para` is resolved — `para` alone is ambiguous there (cell
+    /// content shares `pi` with the block after the table), which is exactly
+    /// why the identity rides on the caret.
+    #[test]
+    fn in_cell_carets_refused() {
+        let mut s = session(doc_one_para());
+        let in_cell = Caret {
+            para: 0,
+            run: 0,
+            offset: 1,
+            cell: Some([0, 1]),
+        };
+        for cmd in [
+            EditCmd::Insert {
+                text: "x".into(),
+                caret: in_cell,
+            },
+            EditCmd::Backspace { caret: in_cell },
+            EditCmd::Delete { caret: in_cell },
+            EditCmd::Enter { caret: in_cell },
+        ] {
+            let err = s.apply(cmd).unwrap_err();
+            assert!(
+                err.contains("table cell"),
+                "in-cell {err:?} must refuse on the cell identity"
+            );
+        }
+        assert!(!s.dirty(), "no refused command touched the model");
+        assert!(s.undo.is_empty(), "no refused command pushed a snapshot");
     }
 
     /// Session semantics through the REAL transition (`apply` — the command
@@ -900,6 +973,7 @@ mod tests {
                     para: 0,
                     run: 0,
                     offset: 0,
+                    cell: None,
                 },
             })
             .unwrap();
@@ -910,6 +984,7 @@ mod tests {
                 para: 0,
                 run: 0,
                 offset: 0,
+                cell: None,
             }
         );
     }
@@ -938,6 +1013,7 @@ mod tests {
                 para: 0,
                 run: 0,
                 offset: 0,
+                cell: None,
             },
             path: path.clone(),
         };

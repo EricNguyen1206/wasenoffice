@@ -113,6 +113,15 @@ export interface LayoutItem {
 export interface TextLine {
   items: LayoutItem[];
   para: number; // body block index — `pi` in the evidence JSON
+  /** T-060 C3 (additive): the TOP-LEVEL body block this line belongs to (for
+   * a table's cell lines: the table block's own index). Unlike `para` (the
+   * `pi` walk counter, which cell content shares with the block after the
+   * table), `block` is collision-free across tables. */
+  block: number;
+  /** T-060 C3 (additive): `[row, col]` when the line sits inside a table cell
+   * (only `rows[0]` is laid out — V3 ceiling), else null. The edit layer
+   * refuses in-cell carets on this identity, not on heuristics. */
+  cell: [number, number] | null;
   x: number; // aligned line start
   baseline: number;
   lh: number;
@@ -276,7 +285,16 @@ export function layoutBlocks(input: LayoutInput): LineModel {
   let metrics: [number, number, number] | null = null;
 
   // One paragraph at baseline y; returns the y advance.
-  const layoutParagraph = (p: Paragraph, x0: number, w: number, y: number, pi: number, inCell: boolean): number => {
+  const layoutParagraph = (
+    p: Paragraph,
+    x0: number,
+    w: number,
+    y: number,
+    pi: number,
+    inCell: boolean,
+    block: number,
+    cell: [number, number] | null,
+  ): number => {
     const xLeft = x0 + ((p.ind?.left ?? 0) / 20) * PT_PX;
     const wrapped = wrapParagraph(p, xLeft, x0 + w, measure);
     let yCur = y;
@@ -314,19 +332,32 @@ export function layoutBlocks(input: LayoutInput): LineModel {
         it.x = ix;
         ix += it.w;
       }
-      lines.push({ items: line, para: pi, x, baseline: yCur, lh, total, align: p.align, inCell });
+      lines.push({ items: line, para: pi, block, cell, x, baseline: yCur, lh, total, align: p.align, inCell });
       yCur += lh;
     }
     return yCur - y;
   };
 
   // Blocks starting at baseline y; x0/w is the text column. Returns the bottom y.
-  const walk = (bs: Block[], x0: number, w: number, y: number, piBase: number, inCell: boolean): number => {
+  // T-060 C3: `tableBlock`/`cell` carry the top-level block identity down the
+  // recursion — a top-level paragraph owns its own index; everything inside a
+  // table (nested tables included) belongs to that table's block + cell.
+  const walk = (
+    bs: Block[],
+    x0: number,
+    w: number,
+    y: number,
+    piBase: number,
+    inCell: boolean,
+    tableBlock: number | null,
+    cell: [number, number] | null,
+  ): number => {
     let pi = piBase;
     let yCur = y;
-    for (const block of bs) {
+    for (let i = 0; i < bs.length; i++) {
+      const block = bs[i];
       if ('Paragraph' in block) {
-        yCur += layoutParagraph(block.Paragraph, x0, w, yCur, pi, inCell);
+        yCur += layoutParagraph(block.Paragraph, x0, w, yCur, pi, inCell, tableBlock ?? i, cell);
         pi += 1;
       } else {
         // table: each cell's blocks at its column offset; the row advances by
@@ -335,10 +366,12 @@ export function layoutBlocks(input: LayoutInput): LineModel {
         const row = block.Table.rows[0];
         pi += 1;
         if (!row) continue;
+        const tbl = tableBlock ?? i;
         const colW = w / row.length;
         let rowBottom = yCur;
-        row.forEach((cell, col) => {
-          rowBottom = Math.max(rowBottom, walk(cell.blocks, x0 + col * colW, colW, yCur, pi, true));
+        row.forEach((tc, col) => {
+          // only rows[0] is walked (V3 ceiling) → row 0 in the cell identity
+          rowBottom = Math.max(rowBottom, walk(tc.blocks, x0 + col * colW, colW, yCur, pi, true, tbl, [0, col]));
         });
         yCur = rowBottom + 4;
       }
@@ -346,7 +379,7 @@ export function layoutBlocks(input: LayoutInput): LineModel {
     return yCur;
   };
 
-  walk(blocks, input.x0, input.w, input.y, 0, false);
+  walk(blocks, input.x0, input.w, input.y, 0, false, null, null);
 
   let bottom = 0;
   lines.forEach((l) => {
@@ -360,9 +393,15 @@ export function layoutBlocks(input: LayoutInput): LineModel {
 /** The hit-test result: caret position — `line` indexes `LineModel.lines`,
  * `para` the body block, `run` the paragraph's runs array, `offset` the char
  * offset INSIDE that run's text (0..=len; the caret sits BEFORE char
- * `offset`). Image/tab items resolve to their run-text position. */
+ * `offset`). Image/tab items resolve to their run-text position.
+ * T-060 C3 (additive): `block` is the TOP-LEVEL body block (tables own their
+ * cells' lines — `para` alone cannot tell a cell line from the block after
+ * the table); `cell` is the `[row, col]` identity for in-cell lines, null
+ * for top-level ones — the edit layer refuses on `cell !== null`. */
 export interface Hit {
   para: number;
+  block: number;
+  cell: [number, number] | null;
   line: number;
   run: number;
   offset: number;
@@ -386,7 +425,7 @@ export function hitTest(model: LineModel, measure: Measurer, x: number, y: numbe
     if (Math.abs(y - ls[i].baseline) < Math.abs(y - ls[i - 1].baseline)) k = i;
   }
   const line = ls[k];
-  const hit = (run: number, offset: number): Hit => ({ para: line.para, line: k, run, offset });
+  const hit = (run: number, offset: number): Hit => ({ para: line.para, block: line.block, cell: line.cell, line: k, run, offset });
   if (line.items.length === 0) return hit(0, 0); // empty line (hard break): caret at paragraph start
   const first = line.items[0];
   const last = line.items[line.items.length - 1];
@@ -410,4 +449,40 @@ export function hitTest(model: LineModel, measure: Measurer, x: number, y: numbe
     }
   }
   return hit(last.ri, last.charStart + itemCharLen(last)); // float safety
+}
+
+/**
+ * Forward map (para, run, offset) → (x, baseline, line-height) — the mirror
+ * of `hitTest` on the SAME model + measurer: the item whose run/charStart
+ * contains the offset (caret BEFORE char `offset`); end-of-run clamps to the
+ * LAST item of that run (visual end of a wrapped run); an empty paragraph
+ * resolves to its line start (hitTest's placeholder semantics).
+ * T-060 C3: moved here from src/editor.ts so the hit seam (hitTest ↔
+ * caretXY) lives in one tested module — gate 14 asserts their round-trip.
+ */
+export function caretXY(
+  model: LineModel,
+  measure: Measurer,
+  caret: { para: number; run: number; offset: number },
+): { x: number; y: number; lh: number } | null {
+  let fallback: { x: number; y: number; lh: number } | null = null;
+  for (const line of model.lines) {
+    if (line.para !== caret.para) continue;
+    if (line.items.length === 0) {
+      fallback ??= { x: line.x, y: line.baseline, lh: line.lh };
+      continue;
+    }
+    for (const it of line.items) {
+      if (it.ri !== caret.run) continue;
+      const end = it.charStart + itemCharLen(it);
+      if (caret.offset >= it.charStart && caret.offset < end) {
+        const x = it.tab ? it.x : it.x + measure(it.r, it.text.slice(0, caret.offset - it.charStart));
+        return { x, y: line.baseline, lh: line.lh };
+      }
+      if (caret.offset === end) {
+        fallback = { x: it.x + it.w, y: line.baseline, lh: line.lh };
+      }
+    }
+  }
+  return fallback;
 }
