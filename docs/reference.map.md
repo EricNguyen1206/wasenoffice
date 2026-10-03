@@ -406,3 +406,39 @@ và `<m_sFileFrom>` trỏ vào thư mục chứa `changes/`.
 | Shim bridge đầy đủ | `ONLYOFFICE/desktop-sdk` ✅ | nguồn chân lý native surface + cơ chế inject |
 | Build engine/x2t từ source | `ONLYOFFICE/build_tools` | pipeline deps + WASM + packaging |
 | Mac app layer (editor:config answer, recents push, app lifecycle) | repo mac của ONLYOFFICE (chưa xác định) | fidelity UI desktop còn thiếu: editor:config reply, `onupdaterecents` push, dialog lỗi iLa từ viewer api (diagnostics 27.09) |
+
+## Viewer oracle CDP — cursor-probe walk trên app thật (mới 03.10, T-V4, rung A3)
+
+Bằng chứng hành vi runtime dùng cho parity harness `harness/scripts/parity-view.sh`
+(clean-room oracle-obs — toàn bộ đo trên app thật qua CDP, KHÔNG đọc source sdkjs;
+tái lập: boot `ONLYOFFICE --remote-debugging-port=9222` nền + `open -g <file>` + node script
+`Runtime.evaluate` trong frame `documenteditor`):
+
+- **Editor frame + main world:** desktop app mở MỖI file MỘT window; window title chung
+  ("ONLYOFFICE Documents") — chỉ URL boot page mang `title=<file>.docx` (observed 03.10,
+  diagnostics T-V4). Frame sdkjs = URL chứa `documenteditor`; main world = execution context
+  `isDefault !== false, name=""` của frame đó (OOPIF-style contexts liệt kê qua
+  `Runtime.enable`).
+- **`callCommand` (Document Builder):** `Asc.editor.callCommand(fn, a, b)` — fn chạy trong
+  sandbox KHÔNG có `Asc.editor` nhưng CÓ global `editor` (api instance); **kết quả trả về
+  qua callback vị trí 3** (`b`), đo 03.10. Builder API ổn: `Api.GetDocument()`,
+  `GetElementsCount()`, `GetElement(i)`, `GetClassType()`, `GetText()`, `ToJSON()`,
+  `GetRange(a,b).Select()` — internals của document object đều bị minify (không dùng được,
+  cũng không cần).
+- **Collapsed-caret probe:** `GetRange(p,p).Select()` + `editor.asc_GetSelectionBounds()` →
+  4 điểm `[[x,y],[x,y],[x,y],[x,y]]` = caret giữa GetText (p−1, p) — **y = đỉnh line box**,
+  x = vị trí caret. Bisect y-flip → ranh giới dòng. **positions ĐẾM content element ẩn**
+  (engine re-split runs không đều — đo: select(0,3)="the" nhưng select(105,108)="the" trên
+  cùng paragraph, GetText 0 ký tự ẩn) → KHÔNG map được position ↔ GetText index.
+- **Text dòng = selection:** `GetRange(s,e).Select()` + `editor.asc_GetSelectedText()` trả
+  đúng text của khoảng (đo (104,107)=" th", (105,108)="the" trên filler). Selection bounds
+  của RANGE = 4 góc bounding box (height nhảy khi range vượt dòng).
+- **Bounds cache ASYNC:** `asc_GetSelectionBounds` đọc cache cập nhật theo draw — đọc cùng
+  tick với Select trả giá trị position TRƯỚC (flaky) → phải chờ rAF + settle, và verify
+  triple (s on-line, lo off-line, lo−1 on-line) trước khi tin ranh giới.
+- **`zoom100()`** pin zoom → bounds = CSS px @96dpi, cùng đơn vị với viewer canvas.
+- **Extent ảnh:** Builder `ToJSON()` của paragraph chứa `extent.cx/cy` (EMU) cho mọi
+  drawing — nguồn EMU phía oracle cho M4.
+- **Quit app:** `osascript quit app "ONLYOFFICE"` có thể BỎ QUA im lặng trên app chưa từng
+  được activate (observed 03.10) — harness phải verify port 9222 đóng + fallback
+  `kill -TERM` pid listener.

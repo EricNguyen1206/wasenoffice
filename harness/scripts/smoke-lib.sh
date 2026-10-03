@@ -26,6 +26,8 @@
 #            mang path app — negative proof bám vào đó)
 #   gate 12 · viewer first-draw + viewer layout (T-V2 — ADDITIVE viewer log)
 #            ← src/viewer.ts main() (invoke 'viewer_open' ở src-tauri/src/viewer.rs)
+#            T-V4 thêm `viewer evidence:` (ADDITIVE — consumer là
+#            harness/scripts/parity-view.sh, gate 12 không grep dòng này)
 set -u
 
 SMOKE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"

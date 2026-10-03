@@ -8,6 +8,59 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-03 · T-V4: A3/V4 — parity render viewer ↔ sdkjs qua oracle CDP (cursor-probe walk)
+
+- **Bối cảnh:** slice V4 viewer (A3) — chứng minh viewer render **parity** với engine sdkjs
+  trên corpus. Oracle = ONLYOFFICE.app thật, CDP `:9222` (diagnostics 22.09/27.09), boot nền
+  `open -g` (rule 6b) + `open -g <file>` + quit AppleEvent/TERM — không keystroke. Clean-room:
+  quan sát runtime thuần (Builder API + selection bounds), KHÔNG đọc source render sdkjs.
+  Chi tiết metric + bảng: DD V01 §5.5; kỹ thuật: reference.map § Viewer oracle CDP.
+- **Kỹ thuật oracle (đã validate từng bước trên app thật):** (1) `callCommand` (Document
+  Builder) chạy code trong editor frame — sandbox KHÔNG có `Asc.editor` nhưng CÓ global
+  `editor` nội bộ; kết quả trả về qua callback VỊ TRÍ 3 (`callCommand(fn, a, b)` — data đến
+  qua `b`, đo được 03.10); (2) **collapsed-caret probe**: `GetRange(p,p).Select()` +
+  `editor.asc_GetSelectionBounds()` trả điểm caret (x, y đỉnh line box) — bisect y-flip =
+  ranh giới dòng; (3) **text từng dòng = selection**: `GetRange(s,e).Select()` +
+  `asc_GetSelectedText()`; (4) extent ảnh từ Builder `ToJSON` (`extent.cx/cy` EMU);
+  (5) `zoom100()` pin đơn vị CSS px = viewer space.
+- **3 bẫy lớn (confirmed, mỗi cái đều làm split sai trước khi fix):** (a) **positions ≠
+  GetText index** — positions đếm content element ẩn (engine re-split runs không đều: đo
+  select(0,3)="the" shift-0 nhưng select(105,108)="the" shift-1 trên CÙNG paragraph; scan
+  GetText: 0 ký tự ẩn) → mọi phép suy position↔char đều sai — text PHẢI đọc qua selection;
+  (b) **bounds cache cập nhật ASYNC theo draw** — đọc cùng tick với select trả giá trị
+  position TRƯỚC (triệu chứng: "line break" giữa mid-word đúng 1 ký tự lệch, flaky giữa
+  các run) → verify-triple (caret s on-line, lo off-line, lo−1 on-line) + re-bisect với
+  baseline fresh, 4 lần rồi fail loudly (không bao giờ phát split sai im lặng); (c) **sai
+  window**: desktop app mở MỖI file MỘT WINDOW, title chung "ONLYOFFICE Documents" — target
+  phải match `title=<file>.docx` trong URL boot page, và `osascript quit` BỎ QUA im lặng
+  trên app không bao giờ được activate → quit phải verify port đóng + fallback
+  `kill -TERM` pid (lifecycle fresh mỗi run).
+- **Metric chốt (OQ-V01-1):** M0 text paragraph sequence = HARD; M1 số dòng + M2 text dòng
+  — lệch = wrap ceiling (phân loại); M3 spacing TRONG paragraph (j>0) ±**ε=2.0px** HARD —
+  nền đo được max 0.64px (16 dòng uniform); drift ranh giới paragraph (j=0) = spacing
+  ceiling (w:spacing không trong model), numbering dx/dy = numbering ceiling (mark + indent
+  level); M4 extent ảnh EMU = HARD exact; offset tuyệt đối (margin 1in+16 vs pgMar + page
+  placement giữa cửa sổ: y+17..+36, x−245..−330) chỉ báo — shift-corrected + re-anchor sau
+  bảng/ảnh.
+- **Bảng parity (6 file, ×2 deterministic giống hệt từng px):** layout 4/4 paras 16/16
+  lines maxdy **0.64** dx 0.00 imgs 2/2 · full 8/8 8/8 4.07* 47.00* 1/1 · media 2/2 2/2
+  0.00 0.00 1/1 · multilevel 5/5 5/5 6.47* 0.00 · style-override 3/3 3/3 2.73* 0.00 ·
+  engine-save 5/5 3/7† 2.73* 0.00 — **PASS 6/6** (* = ranh giới paragraph/numbering —
+  phân loại; † 2 para viewer wrap 2 dòng vs oracle 1 — wrap ceiling, M0 identical).
+- **Negative (tiêm giả → cắn):** `PARITY_VIEW_NEGATIVE=1` trên layout fixture — +3px
+  baseline + " XQ" text + EMU lệch 1px → **cả 3 cắn (M0 text / M3 baseline / M4 EMU) →
+  exit 1**. Bài học đếm bite: marker "XQ" bị `[:50]` cắt trong message → đếm qua M0
+  (concat luôn lộ) + M3 đúng target line + M4; injection phải mutate cả `vparas[].text`
+  (M0 đọc từ đó); dòng inject phải tránh anchor + re-anchor line (dy bị skip).
+- **Verify:** `parity-view.sh` positive ×2 exit 0 + negative exit 1 (3/3 bites) ·
+  `parity-a2.sh` exit 0 (9 file, 0 hard-fail) · verify.sh FULL exit 0 (18 gates — gate 12
+  không thoái hóa, `viewer evidence:` ADDITIVE không đụng contract) · `pnpm build` exit 0
+  (viewer.ts evidence + align `al` field).
+- **Trạng thái:** T-V4 ✅ — OQ-V01-1 ĐÓNG. ▶ = T-058 (Tailwind, đúng trigger trước T-V5);
+  ceiling lớn lộ ra → seed **T-V6** (model mở w:spacing + pgMar + render numbering mark).
+
+---
+
 ## 2026-10-03 · T-V3: A3/V3 — media bytes qua route filesrv an toàn + render ảnh theo wp:extent (EMU→px)
 
 - **Bối cảnh:** slice V3 viewer (A3) — ảnh thật hiển thị trên canvas quick view. Clean-room:

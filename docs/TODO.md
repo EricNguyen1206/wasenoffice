@@ -15,14 +15,14 @@ type: queue
 
 ## Tình hình nhanh
 
-▶ Kế tiếp: **T-V4 (parity render vs oracle — so viewer render ↔ render sdkjs qua oracle CDP trên corpus: text content exact + số dòng + baseline ±ε; ε chốt sau khi đo sai số nền 2 canvas, OQ-V01-1)** — T-V3 ĐÓNG 03.10: route `/media/<fileId>/<part>` an toàn (exact-name zip lookup + 403 traversal, test socket thật) + render ảnh dòng riêng theo `wp:extent` EMU→px (evidence pixel ink phủ kín trong gate 12)
+▶ Kế tiếp: **T-058 (Tailwind v4 + token-slot structure cho own-UI — đúng trigger trước T-V5)**, rồi **T-V5 (wire UX quick view — RUNG A3 ĐÓNG khi T-V5 xong: T-V4 parity ĐẠT + T-V2 gates GREEN sẵn)** · T-V4 ĐÓNG 03.10: parity render vs oracle CDP — `parity-view.sh` 6/6 corpus PASS ×2 deterministic + negative 3/3 cắn; ε=2.0px (nền đo 0.64px); OQ-V01-1 ĐÓNG; ceiling → T-V6
 
 | Phase | Tổng | ✅ | 🟨 | ⏸ | ⬜ |
 |---|---|---|---|---|---|
 | PH-0 — ĐÃ ĐÓNG 27.09  |  6  | 6  | 0  | 0  | 0  |
 | PH-1  |  10 | 7  | 0  | 0  | 3  |
 | PH-4  |  4  | 0  | 0  | 0  | 4  |
-| Track A (QĐ9) |  17 | 15 | 0  | 0  | 2  |
+| Track A (QĐ9) |  18 | 16 | 0  | 0  | 2  |
 | META  | 13  | 9  | 0  | 0  | 4  |
 
 ## PH-0 — Spike editor + render DOCX (go/no-go) — ĐÃ ĐÓNG 27.09 · verdict GO WITH CAVEAT
@@ -61,7 +61,8 @@ type: queue
 - [ ] ⬜ T-058 · Wire **Tailwind v4** (`@tailwindcss/vite`, CSS-first `@theme`) cho own-UI surfaces (start page + viewer chrome; canvas không đụng) + **token-slot structure riêng** (tên slot + placeholder values — KHÔNG copy token ONLYOFFICE; values/theme chọn ở A5 DD) · trigger: **trước T-V5** (migrate muộn hơn = đắt nhất ở A5) · user hỏi 03.10
 
 - [x] ✅ T-V3 · C3 trọn — serve `word/media/*` bytes cho viewer (filesrv route an toàn; bytes đã byte-exact nhờ T-A26) + render ảnh theo `wp:extent` EMU · route `/media/<fileId>/<part>` exact-name zip lookup + 403 traversal (2 test socket thật) · ảnh dòng riêng EMU→px 9525 (POI Units.java Apache-2.0 + §20.4.2.7) · gate 12 + assert media (drawn==EMU→px + ink pixel, counterfactual ×5) · parity-a2 + verify FULL exit 0 · ← T-A26 ← T-V1 · 03.10 · diagnostics 03.10 (T-V3) + DD V01 §5.4
-- [ ] ⬜ T-V4 · **Parity render vs oracle** (oracle CDP sdkjs): so viewer render ↔ render engine thật trên corpus — text content exact + số dòng + baseline ±ε; ε chốt sau khi đo sai số nền 2 canvas (OQ-V01-1) · ← T-V2 ← T-V3
+- [x] ✅ T-V4 · A3/V4 — **Parity render vs oracle CDP** (engine sdkjs = ORACLE qua app thật `--remote-debugging-port=9222`, boot nền rule 6b, không keystroke, không đọc source render): `harness/scripts/parity-view.sh` — **cursor-probe walk** (`GetRange(p,p).Select()` + `asc_GetSelectionBounds()` bisect y-flip → số dòng + x/y từng dòng từ layout engine thật; text dòng = `asc_GetSelectedText()` của range; extent ảnh từ Builder `ToJSON`; `zoom100()` pin CSS px) · 3 bẫy đo được xử lý: positions ≠ GetText index (content element ẩn — text PHẢI qua selection), bounds cache async → verify-triple + re-bisect fail-loudly, target phải match `title=<file>` + quit verify port + TERM fallback · **metric OQ-V01-1 CHỐT**: M0 text sequence HARD · M1/M2 wrap ceiling phân loại · M3 trong-paragraph ±**ε=2.0px** HARD (đo nền max **0.64px**, ε_x=2.0px đo 0.00) · M4 extent EMU HARD exact · bảng **6/6 PASS ×2 deterministic giống hệt từng px** (layout 16/16 lines maxdy 0.64 imgs 2/2; full/multilevel/engine-save drift ranh-giới phân loại spacing/numbering ceiling) · **negative tiêm 3 giả cắn 3/3 exit 1** (+3px baseline, XQ text, EMU lệch — đếm bite qua M0/M3-target/M4, không qua message[:50]) · viewer.ts thêm `viewer evidence:` JSON theo dòng + align (ADDITIVE, gate 12 không đụng) · parity-a2 exit 0 · ceiling lớn → seed **T-V6** (w:spacing + pgMar + numbering mark) · verify FULL exit 0 · 03.10 · diagnostics 03.10 (T-V4) + DD V01 §5.5 + reference.map § Viewer oracle
+- [ ] ⬜ T-V6 · Viewer model mở cho parity sắc hơn (ceiling lộ ra từ T-V4): `w:spacing` before/after (lệch 2.7–6.5px tại ranh giới paragraph), `pgMar` (viewer đang 1in cố định + engine page placement), **render numbering mark** (engine GetText mang "1. "/"•" + indent level — viewer chưa vẽ mark) · trigger: khi V5 UX cần parity sát hơn hoặc A4 editor dựng trên layout này · ← T-V4
 - [ ] ⬜ T-V5 · Wire UX: open docx → quick view (mặc định hay toggle — OQ-V01-3 user quyết), rút trigger env `NANO_OFFICE_QUICK_VIEW`; **RUNG A3 ĐÓNG** khi T-V4 parity + T-V2 gates đạt · ← T-V4
 
 - [x] ✅ T-A20 · A2 mở màn DESIGN-FIRST (ponytail ULTRA): probe 2 phương án bằng số liệu — **P1** (Editor.bin): 1962 B docx → 1586 B Editor.bin **deterministic**, payload 926 B không nén, TLV `[u8 tag][u32 len]` 2 chuỗi lồng verify byte-exact (+5/mức), style resolve trong binary, preamble 42 B chưa decode, delta records = format thứ 2 (T-010) → ước lượng **tháng** + dead code sau A4 · **P2** (OOXML core): 100% spec ECMA-376, fixture 21 element types (5 parts, 2.5 KB), docx cơ bản ~85 element types → ước lượng **tuần** → **CHỐT P2** (không 50/50: P1 chỉ rút 113 MB x2t trong khi sdkjs 313 MB vẫn ship; P2 = nền bắt buộc A3/A4, ship mọi rung) · crate slice `src-tauri/crates/nanooffice-ooxml` (parse docx → model tối giản + CLI JSON; 3 test; deps quick-xml/zip qua license gate; workspace member + verify.sh cargo `--workspace`) · DD mã **K01** `docs/design/converter-a2/DD.md` · verify.sh 16 gates exit 0 · 02.10 · 0cc770a · diagnostics 02.10 + reference.map § Editor.bin

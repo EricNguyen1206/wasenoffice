@@ -113,7 +113,7 @@ line height từ C4-a; advances từ `measureText`.
 | V2 | layout tối thiểu: line break theo pgSz, tab stop, line-height C4-a; **gates số liệu** mở <500 ms + RAM <150 MB trong verify.sh (gate mới, không đụng 9/10/11) | gate GREEN trên fixture corpus; metric RAM chốt (OQ-V01-2) |
 | **V2** (T-V2, 03.10) ✅ | wrap greedy theo cột từ `pgSz` + tab stop + line-height C4-a; **gate 12** `smoke-quick-view.sh` | gate GREEN (positive exit 0 + negative ×2 exit 1); OQ-V01-2 chốt §10 |
 | **V3** (T-V3, 03.10) ✅ | route filesrv `/media/<fileId>/<part>` (exact-name zip lookup, 403 traversal — bytes byte-exact nhờ T-A26) + render ảnh dòng riêng theo `wp:extent` EMU→px | gate 12 assert drawn == EMU→px (gate tự tính lại) + ink thật trên fixture media; E2E fixture T-A26 |
-| V4 | parity render vs oracle: so viewer render với render sdkjs (oracle CDP app thật) — text content + vị trí dòng | metric parity đạt trên corpus (định nghĩa metric ở slice này, OQ-V01-1) |
+| **V4** (T-V4, 03.10) ✅ | parity render vs oracle: so viewer render với render sdkjs (oracle CDP app thật) — text content + vị trí dòng | **`harness/scripts/parity-view.sh` 6/6 corpus PASS ×2 deterministic exit 0 + negative (tiêm 3 diff giả) 3/3 cắn exit 1; OQ-V01-1 chốt §5.5** |
 | V5 | wire UX: open docx → quick view (mặc định hoặc toggle — user quyết), rút trigger env | **rung A3 đóng** khi V4 parity + V2 gates đạt |
 
 ## 5. Tiêu chí đo
@@ -216,6 +216,64 @@ phía sau.
 
 ---
 
+### 5.5 Kết quả slice V4 (03.10.2026 — T-V4, parity render vs oracle CDP) — CHỐT OQ-V01-1
+
+**Oracle (clean-room oracle-obs — không đọc source sdkjs):** ONLYOFFICE.app thật boot nền
+`--remote-debugging-port=9222` (kỹ thuật diagnostics 22.09/27.09); harness
+`harness/scripts/parity-view.sh` walk từng paragraph của doc MỞ THẬT qua CDP
+`callCommand` (Document Builder API) bằng **collapsed-caret probe**:
+`GetRange(p, p).Select()` + `asc_GetSelectionBounds()` trả điểm caret (x, y đỉnh line box)
+— y nhảy tại ranh giới dòng → số dòng + tọa độ x/y từng dòng lấy thẳng từ layout của
+engine; **text từng dòng đọc bằng selection** (`GetRange(s, e)` + `asc_GetSelectedText()`);
+extent ảnh lấy từ Builder `ToJSON` (`extent.cx/cy` EMU). Zoom pin 100% → đơn vị CSS px =
+không gian vẽ của viewer. Ba bẫy đã đo và xử lý trong harness (chi tiết diagnostics
+03.10): (1) positions ĐẾM content element ẩn (engine re-split runs) → KHÔNG map được
+position ↔ chỉ mục GetText — text line phải đọc qua selection; (2) bounds cache cập nhật
+async theo draw → đọc stale → verify-triple (s, lo, lo−1) + re-bisect, fail loudly nếu
+không chốt được; (3) caret cuối dòng trước space: engine vẽ caret sau space ở CUỐI dòng
+trước — y-flip vẫn đúng ranh giới dòng.
+
+**Metric (OQ-V01-1 CHỐT):** M0 sequence text paragraph (normalized) = HARD; M1 số dòng —
+lệch phải PHÂN LOẠI (wrap ceiling); M2 text theo dòng (para cùng số dòng) — drift break
+point = wrap ceiling (bất biến nội dung do M0 bảo đảm); M3 **spacing trong paragraph**
+(j>0) **±ε HARD với ε = 2.0 px** (đo nền: max |dy| trong-paragraph = **0.64 px** trên 16
+dòng uniform corpus; ε_x = 2.0 px, dx đo = 0.00 px), drift **j=0** = spacing ceiling
+(w:spacing không trong model) — cả hai phía neo vào dòng đầu của mình (shift-corrected),
+re-anchor sau bảng/ảnh bị skip; offset tuyệt đối (margin model + page placement) chỉ
+BÁO, không gate; M4 extent ảnh EMU = HARD (đúng từng EMU), vị trí ảnh = ceiling own-line
+(§5.4). Tab luân phiên giữ nguyên `\t` hai phía. Bảng = ceiling 2 phía (oracle không đi
+vào cell; viewer `c:1`).
+
+| Corpus (6) | paras | lines | maxdy | maxdx | imgs | verdict |
+|---|---|---|---|---|---|---|
+| layout-fixture (wrap + tab + 2 ảnh) | 4/4 | 16/16 | **0.64** | 0.00 | 2/2 | PASS |
+| full-fixture (tiếng Việt + style + list + bảng + hdr/ftr) | 8/8 | 8/8 | 4.07* | 47.00* | 1/1 | PASS |
+| media-fixture (ảnh + header image) | 2/2 | 2/2 | 0.00 | 0.00 | 1/1 | PASS |
+| edge-multilevel-list (đánh số 3 mức) | 5/5 | 5/5 | 6.47* | 0.00 | 0/0 | PASS |
+| edge-style-override (override trực tiếp) | 3/3 | 3/3 | 2.73* | 0.00 | 0/0 | PASS |
+| engine-save-t011 (engine-save thật) | 5/5 | 3/7† | 2.73* | 0.00 | 0/0 | PASS |
+
+\* drift tại ranh giới paragraph / dưới numbering — phân loại (spacing/numbering
+ceiling), không phải trong-paragraph. † 2 paragraph viewer wrap 2 dòng vs oracle 1 —
+phân loại wrap ceiling (M0 text identical).
+
+Bằng chứng: positive **×2 chạy, exit 0, bảng số giống hệt từng px** (deterministic);
+negative `PARITY_VIEW_NEGATIVE=1` tiêm 3 diff giả vào viewer evidence (+3px baseline,
++" XQ" text, EMU lệch 1px) → **cả 3 assert cắn (M0 text / M3 baseline / M4 EMU) → exit
+1**. `parity-a2.sh` exit 0 (không thoái hóa).
+
+**Ceilings lộ ra qua parity (đã phân loại, KHÔNG fix trong phiên — seed task):** (1)
+wrap-point drift + line-count khác (font metric: viewer `measureText` WebKit vs font
+engine riêng của sdkjs); (2) **numbering**: engine GetText/render mang mark ("1. ", "•")
++ indent cấp level, viewer chưa vẽ mark; (3) **w:spacing before/after** + indent từ
+numbering level không trong model → khoảng cách paragraph lệch 2.7–6.5px; (4) margin:
+viewer 1in cố định (pgMar chưa vào model) + engine vẽ trang giữa cửa sổ → offset tuyệt
+đối (chỉ báo, đã shift-correct); (5) ảnh own-line (§5.4); (6) header/footer/bảng không
+thuộc domain so (2 phía cùng skip). → **T-V6** (model mở pPr spacing + pgMar + render
+numbering mark) khi parity đòi sắc hơn.
+
+---
+
 ## 6. Rủi ro + mitigations
 
 | Rủi ro | Mitigation |
@@ -236,8 +294,9 @@ phía sau.
 
 ## 8. Câu hỏi mở
 
-- **OQ-V01-1:** metric parity render — ε cho baseline/width bao nhiêu là "đạt"? Chốt ở V4
-  sau khi đo sai số nền giữa 2 canvas (viewer vs sdkjs cùng WKWebView).
+- **OQ-V01-1: CHỐT ở V4 — xem §5.5.** ε_baseline = 2.0 px (within-paragraph, đo nền max
+  0.64 px); ε_x = 2.0 px (đo 0.00 px); drift ranh-giới-paragraph / numbering = phân loại
+  ceiling, không gate.
 - **OQ-V01-2: CHỐT ở V2 — xem §10.**
 - **OQ-V01-3:** UX quick view (V5) — viewer là mặc định cho docx hay toggle user chọn?
   User quyết khi V4 đạt (sản phẩm mở <500 ms mới đáng mặc định).

@@ -111,6 +111,12 @@ interface Stats {
   /** V3: every drawn image — the gate recomputes EMU→px from `emu` and
    * asserts the drawn rect size, flow position and inked-pixel count. */
   media: Array<{ part: string; emu: [number, number]; w: number; h: number; x: number; y: number }>;
+  /** V4 parity evidence: one entry per drawn TEXT line — body-block index,
+   * line start x, baseline y, the line text (tabs as `\t`), the paragraph
+   * alignment. `c: 1` marks lines laid out inside a table cell (the sdkjs
+   * oracle walker skips table cells — compared only as a classified ceiling
+   * by parity-view.sh). */
+  lines: Array<{ pi: number; x: number; y: number; t: string; al: string | null; c?: number }>;
 }
 
 type Tok =
@@ -148,12 +154,12 @@ function wrapParagraph(
   xLeft: number,
   xRight: number,
   ctx: CanvasRenderingContext2D,
-): Array<Array<{ r: Run; text: string; w: number; img?: ImageRef; h?: number }>> {
+): Array<Array<{ r: Run; text: string; w: number; img?: ImageRef; h?: number; tab?: boolean }>> {
   const measure = (r: Run, text: string): number => {
     ctx.font = runFont(r);
     return ctx.measureText(text).width;
   };
-  const lines: Array<Array<{ r: Run; text: string; w: number; img?: ImageRef; h?: number }>> = [[]];
+  const lines: Array<Array<{ r: Run; text: string; w: number; img?: ImageRef; h?: number; tab?: boolean }>> = [[]];
   let x = xLeft;
   const breakLine = () => {
     lines.push([]);
@@ -184,7 +190,7 @@ function wrapParagraph(
         breakLine();
         adv = step; // tab on a full line: one step into the fresh line
       }
-      lines[lines.length - 1].push({ r: tok.r, text: '', w: adv });
+      lines[lines.length - 1].push({ r: tok.r, text: '', w: adv, tab: true });
       x += adv;
     } else {
       const w = measure(tok.r, tok.text);
@@ -220,6 +226,8 @@ function drawParagraph(
   fonts: QuickView['fonts'],
   bitmaps: Map<string, ImageBitmap>,
   stats: Stats,
+  pi: number,
+  inCell = false,
 ): number {
   const xLeft = x0 + ((p.ind?.left ?? 0) / 20) * PT_PX;
   const lines = wrapParagraph(p, xLeft, x0 + w, ctx);
@@ -264,6 +272,15 @@ function drawParagraph(
       }
     }
     let x = alignX(p, xLeft, w, total);
+    const ev: Stats['lines'][number] = {
+      pi,
+      x,
+      y: yCur,
+      t: line.map((it) => (it.tab ? '\t' : it.text)).join(''),
+      al: p.align,
+    };
+    if (inCell) ev.c = 1;
+    stats.lines.push(ev);
     for (const it of line) {
       ctx.font = runFont(it.r);
       ctx.fillStyle = it.r.color ? `#${it.r.color}` : '#000';
@@ -288,20 +305,28 @@ function drawBlocks(
   fonts: QuickView['fonts'],
   bitmaps: Map<string, ImageBitmap>,
   stats: Stats,
+  piBase = 0,
+  inCell = false,
 ): number {
+  let pi = piBase;
   for (const block of blocks) {
     if ('Paragraph' in block) {
-      y += drawParagraph(ctx, block.Paragraph, x0, w, y, fonts, bitmaps, stats);
+      y += drawParagraph(ctx, block.Paragraph, x0, w, y, fonts, bitmaps, stats, pi, inCell);
+      pi += 1;
     } else {
       // table: each cell's blocks at its column offset; the row advances by
       // the tallest cell (tblGrid widths land with the V3 media slice — the
       // resolved model does not carry the grid yet)
       const row = block.Table.rows[0];
+      pi += 1;
       if (!row) continue;
       const colW = w / row.length;
       let rowBottom = y;
       row.forEach((cell, col) => {
-        rowBottom = Math.max(rowBottom, drawBlocks(ctx, cell.blocks, x0 + col * colW, colW, y, fonts, bitmaps, stats));
+        rowBottom = Math.max(
+          rowBottom,
+          drawBlocks(ctx, cell.blocks, x0 + col * colW, colW, y, fonts, bitmaps, stats, pi, true),
+        );
       });
       y = rowBottom + 4;
     }
@@ -363,7 +388,7 @@ async function main(): Promise<void> {
     const colW = Math.min(pageW, innerWidth) - 2 * MARGIN;
     const bitmaps = new Map<string, ImageBitmap>();
     if (qv.media_base) await loadMedia(qv.doc.body, qv.media_base, bitmaps);
-    const stats: Stats = { baselines: [], lhs: [], maxw: 0, metrics: null, media: [] };
+    const stats: Stats = { baselines: [], lhs: [], maxw: 0, metrics: null, media: [], lines: [] };
     drawBlocks(ctx, qv.doc.body, MARGIN, colW, MARGIN + 16, qv.fonts, bitmaps, stats);
     const ms = performance.now() - t0;
     // render evidence: count non-white pixels — text actually hit the canvas
@@ -381,6 +406,13 @@ async function main(): Promise<void> {
     // the gate parses `viewer layout:` — change both in the SAME commit.
     const layout = `viewer layout: lines=${stats.baselines.length} colw=${colW.toFixed(1)} maxw=${stats.maxw.toFixed(1)} metrics=${m ? `${m[0]},${m[1]},${m[2]}` : 'none'} lhs=${lhs} baselines=${baselines}`;
     await invoke('frontend_log', { level: 'info', message: layout });
+    // ADDITIVE log contract with harness/scripts/parity-view.sh (T-V4):
+    // the parity harness parses `viewer evidence:` (one JSON line) — change
+    // both in the SAME commit.
+    await invoke('frontend_log', {
+      level: 'info',
+      message: `viewer evidence: ${JSON.stringify({ colw: colW, page_w: qv.page?.w ?? null, lines: stats.lines })}`,
+    });
     // ADDITIVE log contract with harness/scripts/smoke-quick-view.sh (gate 12):
     // the gate parses `viewer media:` / `viewer media-failed:` — change both
     // in the SAME commit. Per drawn image: the rect the gate re-derives from
