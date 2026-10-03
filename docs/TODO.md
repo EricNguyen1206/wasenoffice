@@ -15,7 +15,7 @@ type: queue
 
 ## Tình hình nhanh
 
-▶ Kế tiếp: T-A25 (A3 mở màn — **viewer Rust đọc-only** "quick view" không boot sdkjs, seed khi đóng rung A2 T-A24; DD sinh khi mở màn)
+▶ Kế tiếp: **T-055 review kiến trúc #3 (post-A2)** rồi T-A25 (A3 mở màn — **viewer Rust đọc-only** "quick view" không boot sdkjs, seed khi đóng rung A2 T-A24; DD sinh khi mở màn)
 
 | Phase | Tổng | ✅ | 🟨 | ⏸ | ⬜ |
 |---|---|---|---|---|---|
@@ -74,6 +74,7 @@ type: queue
 
 ## META — harness / docs / skills
 
+- [ ] ⬜ T-055 · **[ĐỊNH KỲ] Review kiến trúc** (`improve-codebase-architecture` + `ponytail-audit` ghép cặp) — chạy SAU MỖI RUNG Track A đóng / phase PH đóng (nhịp đã chứng minh: #1 post-PH-0 27.09, #2 post-A1 02.10); lần kế: **post-A2** (03.10, trước khi mở A3); sau mỗi lần chạy: candidates land thành task + task này ĐẶT LẠI ⬜ (vĩnh viễn kiểu nhịp, không sink ✅) · user chỉ thị 03.10
 - [ ] ⬜ T-020 · Add 2 skill theo audit 26.09: `systematic-debugging` (superpowers) + `handoff` (mattpocock) qua cổng acceptance · **chờ user duyệt**
 - [ ] ⬜ T-021 · CI + gates số liệu size/RAM/startup · trigger: PH-4
 - [ ] ⬜ T-034 · Bật GitNexus index `upstream/sdkjs` phục vụ reverse font pipeline (trigger đã chạm: bridge first wave xong) · ← T-001 · skill: gitnexus-cli
