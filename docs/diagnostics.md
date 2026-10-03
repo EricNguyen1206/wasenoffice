@@ -8,6 +8,43 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-03 · T-A26: fix canonical lossy media bytes (review #3 C1) — writer copy media part từ zip nguồn
+
+- **Triệu chứng (C1, confirmed bởi review #3):** adapter open-side (T-A24) thay MỌI ảnh thật
+  bằng placeholder PNG 1×1 trên mọi docx có ảnh qua luồng canonical — model S1 không giữ bytes,
+  writer ghi placeholder cho mọi media part; invisible với gates vì corpus toàn PNG 1×1.
+- **Fix (approach ponytail — ít đụng model nhất trong 2 phương án handoff):** model KHÔNG đổi.
+  `write_docx`/`write_docx_file` nhận thêm `media_src: Option<&[u8]>` (package nguồn) — writer
+  copy từng media part **byte-exact** từ nguồn qua `opc::try_part_bytes`; placeholder chỉ còn
+  fallback khi `None` hoặc part thiếu (model synthetic/test). JSON CLI bất biến → invariant
+  parity không đổi. Callers: adapter `rust_canonical` đọc src 1 lần → `parse_docx(&bytes)` →
+  write với `Some(&bytes)`; CLI round-trip face tương tự.
+- **Bằng chứng:**
+  - fixture mới `nanooffice-media-fixture.docx` (generator `harness/fixtures/make_docx_media.py`,
+    python stdlib): PNG 2×2 79 B (body) + PNG 3×1 74 B (header — phủ branch header-image
+    write.rs:170-188, C5 coverage hole) — bytes ≠ placeholder 72 B; có `sectPr`/`headerReference`
+    (header mồ côi KHÔNG sectPr bị x2t bỏ khi open — oracle-obs lần đầu, parity 42-line diff,
+    fix bằng fixture thực tế hơn chứ không phải code). Regen deterministic byte-identical.
+  - Test hồi quy `media_bytes_copied_byte_exact_from_source_package` (crate tests/write.rs):
+    so BYTES từng media part giữa input zip và canonical output (không phải kích thước) +
+    model bất biến qua round-trip có nguồn + `None` → placeholder khác gốc. Helper
+    `media_parts()` tái dùng cho cả 3 assert.
+  - `parity-a2.sh` thêm gate (d) media byte-exact (`part_sha` python3 stdlib — không dep
+    unzip/jq): crate-rt phải giữ bytes mọi part mà model tham chiếu; x2t side không gate
+    (serialization oracle). **exit 0 — 8/8 invariant, media gate GREEN**; diff phân loại:
+    x2t renumber rel_id + **ĐỔI TÊN media part** (image1↔image2 swap theo rel mới — mapping
+    rel→part tự-consistent, bytes nguyên vẹn: sha input image1 `4c8f04482971` = x2t-rt
+    image2) — mở rộng lớp vô hại "rel_id renumber" của T-A23.
+  - E2E adapter ON: `smoke-render.sh nanooffice-media-fixture.docx` **exit 0** — log
+    `converter: rust-canonical → x2t (…, normalize 2.48 ms)`; counterfactual
+    `NANO_OFFICE_NO_RUST_CONVERTER=1` **exit 0** — log `rust-canonical OFF … — x2t direct`.
+  - `cargo test --workspace` 23 shell + 10 crate exit 0; `verify.sh` FULL **exit 0** (sau fmt —
+    lần đầu fail duy nhất do `cargo fmt --check` trên test mới).
+- **Trạng thái:** T-A26 ✅ sink Track A — canonical KHÔNG còn lossy trên media; bytes gốc
+  sẵn trong package nguồn cho C3 của T-A25 (serve `word/media/*`). ▶ = T-A25 (A3 viewer).
+
+---
+
 ## 2026-10-03 · Review kiến trúc #3 (T-055) — post-A2, focus cản A3 viewer
 
 - **Phương pháp:** bộ đôi improve-codebase-architecture + ponytail-audit (codebase-design từ vựng),
