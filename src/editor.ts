@@ -238,8 +238,7 @@ async function main(): Promise<void> {
 
     /** Cmd+Left/Right: paragraph start/end through the body runs. */
     const paraHomeEnd = (c: Caret, end: boolean): Caret => {
-      const runs = runsOf(c.para);
-      if (!end && runs) return { para: c.para, run: 0, offset: 0, cell: null };
+      const runs = end ? runsOf(c.para) : null;
       if (!runs || runs.length === 0) return { para: c.para, run: 0, offset: 0, cell: null };
       return {
         para: c.para,

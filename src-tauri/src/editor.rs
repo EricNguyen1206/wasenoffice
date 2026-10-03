@@ -572,12 +572,6 @@ fn byte_to_utf16(s: &str, byte: usize) -> usize {
         .sum()
 }
 
-/// Document-order key of a caret — the total order over top-level carets the
-/// selection ordering uses (DD L01 §5.3a; cell carets are refused upstream).
-fn caret_key(c: &Caret) -> (usize, usize, usize) {
-    (c.para, c.run, c.offset)
-}
-
 /// A non-empty selection collapses to: delete the range, mutate at the range
 /// start. Returns `(caret, ranged)` — `ranged` tells the single-char verbs to
 /// skip their own step (the range delete WAS the deletion, DD L01 §5.3c).
@@ -601,7 +595,9 @@ fn collapse_range(
 /// Empty runs are kept (no splicing) so the returned caret
 /// `(start.para, start.run, start.offset)` always addresses a valid spot.
 fn apply_delete_range(doc: &mut Document, a: Caret, b: Caret) -> Result<Caret, String> {
-    let (start, end) = if caret_key(&a) <= caret_key(&b) {
+    // document-order key (para, run, offset) — a total order over top-level
+    // carets (cell carets are refused upstream, DD L01 §5.3a)
+    let (start, end) = if (a.para, a.run, a.offset) <= (b.para, b.run, b.offset) {
         (a, b)
     } else {
         (b, a)
