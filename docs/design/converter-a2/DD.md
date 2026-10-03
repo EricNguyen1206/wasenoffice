@@ -146,6 +146,11 @@ Harness: `harness/scripts/parity-a2.sh` — 3-way model compare trên canonical 
   chuỗi tùy ý trong package (ECMA-376 Part 2) → model nội dung tương đương. (b) **empty-run
   drop** — file engine-save chứa 8 `<w:r></w:r>` trên 14 run; crate preserve 14/14 (invariant
   green), x2t roundtrip drop 8 run rỗng (normalization giữ content; 0 hunks đổi text/props).
+- **Bổ sung V1 (T-V1, 03.10) — 2 lớp mới khi model surface hóa pgSz/tblGrid/docDefaults/rStyle/
+  color:** (c) **x2t thêm `w:docDefaults` rỗng** trên file gốc không có (8/9 corpus file —
+  mọi trường null, semantically empty); (d) **hex color lowercase** (`FF0000` → `ff0000`,
+  ST_HexColor case-insensitive). Cả hai chỉ thấy được sau khi model V1 mở các construct này —
+  invariant m-orig==m-crate vẫn 9/9, 0 diff không phân loại.
 - **Ceiling + điều kiện 100%:** model-level đã đạt parity đầy đủ trên corpus — khác biệt còn
   lại là normalization phía x2t, không phải lệch model. Blind-spot ghi rõ: `rStyle` (character
   style trên run) không nằm trong model — cả 2 phía cùng bỏ nên parity "mù" ở construct đó;

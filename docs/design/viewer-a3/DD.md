@@ -102,7 +102,7 @@ line height từ C4-a; advances từ `measureText`.
 | Slice | Nội dung | XONG khi |
 |---|---|---|
 | **V0** (T-A25, phiên này) | slice chứng minh kiến trúc: `viewer_open` parse-only + `viewer.html` canvas vẽ text paragraph (không layout đầy đủ) + **số đo ms/MB đầu tiên** | app chạy thật: mở fixture qua env → text hiện trên canvas, log parse/first-draw ms + RSS |
-| V1 | C2: model render-side mở (bảng §3.2) + resolve về Rust; write.rs đối xứng | round-trip bất biến + parity-a2 exit 0 + render dùng model mới |
+| **V1** (T-V1, 03.10) ✅ | C2: model render-side mở (bảng §3.2) + resolve về Rust (`resolve.rs`); write.rs đối xứng | round-trip bất biến + parity-a2 exit 0 + render dùng model mới |
 | V2 | layout tối thiểu: line break theo pgSz, tab stop, line-height C4-a; **gates số liệu** mở <500 ms + RAM <150 MB trong verify.sh (gate mới, không đụng 9/10/11) | gate GREEN trên fixture corpus; metric RAM chốt (OQ-V01-2) |
 | V3 | C3 trọn: serve `word/media/*` bytes (filesrv route an toàn — bytes đã byte-exact nhờ T-A26) + render ảnh theo `wp:extent` EMU | ảnh hiện đúng vị trí/kích thước trên corpus media |
 | V4 | parity render vs oracle: so viewer render với render sdkjs (oracle CDP app thật) — text content + vị trí dòng | metric parity đạt trên corpus (định nghĩa metric ở slice này, OQ-V01-1) |
@@ -133,8 +133,30 @@ boots bằng `NANO_OFFICE_QUICK_VIEW=<file> pnpm tauri dev`, 2 lần chạy nh�
 | RAM + 3 WebKit XPC (method PH-0) | ≈ **236 MB** (WC 46.5 / GPU 49.3 / Net 22.7) | engine 1-doc: ≈ 561–579 MB (diagnostics 27.09) — WebContent rớt ~370 → ~46 MB; nhưng > 150 MB → đích rung phải chốt công thức + release build (OQ-V01-2) |
 
 Đọc thẳng: **"không boot sdkjs" hiện thực hoá đúng** — engine WebContent (370 MB) biến mất
-khỏi đường mở; phần RAM còn lại là shell + WebKit nền (idle start page cũng ~203 MB debug,
+khỏi đường mở; phần RAM còn lại là shell + WebKit nền (idle start page debug cũng ~203 MB debug,
 cùng method). V2 chốt gate: công thức RAM (app-only vs tree) + build release.
+
+### 5.2 Kết quả slice V1 (03.10.2026 — T-V1)
+
+Model mở đủ bảng §3.2 (Run 3-state/rStyle/rFonts/color/spacing, br/tab → ký tự điều khiển
+trong `Run.text`, Ind, tblGrid, pgSz/sectPr, w:default, docDefaults) + `resolve.rs` trả
+`RenderDoc` đã resolve (§17.7.2: direct → rStyle → pStyle/w:default → docDefaults) —
+`viewer_open` trả model đã resolve, viewer.ts không merge gì nữa.
+
+| Đo | Số liệu | Đối chiếu |
+|---|---|---|
+| Parse + resolve (full fixture 3794 B) | **4.8 ms** | V0: 2.9 ms — tăng vì pgSz/tblGrid/sectPr giờ được parse + thêm bước resolve |
+| invoke → first text pixel (full fixture) | **24.0 ms** | V0: 14–17 ms — thêm line-split cho br/tab; cùng bậc, đích 500 ms xa |
+| v1 fixture (2359 B) | parse 2.5 ms · first-draw 20.0 ms · inked 27499 | construct V1 render thật qua canvas |
+| RAM app process | **~92–100 MB** debug | V0: 117.8 MB — không thoái hoá; công thức tree vẫn là T-V2 (OQ-V01-2) |
+
+Parity sau khi mở model (invariant 9/9, exit 0) — 4 lớp diff ĐỀU vô hại, oracle-obs:
+(1) empty-run drop + (2) rel_id renumber/rename (T-A23/T-A26 cũ) + **(3) x2t thêm
+`w:docDefaults` rỗng** trên file gốc không có (surface hoá nhờ model mới) + **(4) hex color
+lowercase** (ST_HexColor case-insensitive). Điểm nhấn: m-x2t của v1-fixture chỉ lệch 3 dòng
+màu → **x2t giữ nguyên mọi construct V1 qua round-trip** (rStyle/rFonts/br page+column/
+spacing âm/docDefaults/w:default/grid/pgSz). File round-trip crate mở trong engine render
+GREEN (smoke-render exit 0 — writer XML được engine chấp nhận).
 
 ## 6. Rủi ro + mitigations
 

@@ -8,6 +8,63 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-03 · T-V1: A3/V1 — model render-side mở (DD V01 §3.2) + resolve chuỗi style về Rust
+
+- **Bối cảnh:** slice V1 của viewer (A3) — crate `nanooffice-ooxml` mở model theo bảng
+  construct C2 (DD V01 §3.2, spec-ref từng mục) và thay merge TS bằng resolve về Rust.
+  Clean-room: chỉ spec-ref ECMA-376 + oracle (parity harness / smoke-render), không đọc
+  upstream render code.
+- **Model mở (parse + write đối xứng từng mục):** `Run.bold/italic` lên **3-state ST_OnOff**
+  (`None` = kế thừa / `Some(false)` = tắt tường minh — limitation 2-state T-A22 hết); `w:rStyle`
+  §17.5.2.3; `w:rFonts` §17.3.2.26 (ascii/hAnsi/eastAsia/cs, literal — theme attrs không model);
+  `w:color` §17.3.2.6 (passthrough); `w:spacing` §17.3.2.33 (i32 twips); **`w:br`/`w:tab` →
+  ký tự điều khiển trong `Run.text`** (`\n` text / `\u{c}` page / `\u{b}` column / `\t` —
+  3 control chars đầu ILLEGAL trong XML content nên không thể đụng `w:t`; `w:type` lạ → Err
+  theo ST_BrType §17.18.49 closed enum; cả 2 serialization Start+End lẫn Empty — bài học
+  a:blip T-A23); `w:ind` §17.3.1.12 (4 attr signed); `w:tblGrid` §17.4.4 (`gridCol` thiếu
+  `w:w` = auto, sai kiểu → Err); `w:pgSz` §17.6.11 từ `w:sectPr` body-level; `w:default`
+  §17.7.2.4 trên `w:style` (**attribute — absent = false**, KHÔNG phải OnOff-element semantics;
+  bug này test round-trip bắt ngay lần đầu) + `w:docDefaults` §17.7.5.1 (rPrDefault/pPrDefault,
+  chung parser với style rPr/pPr).
+- **Resolve về Rust (`resolve.rs`):** `resolve(&Document) -> RenderDoc` — thứ bậc §17.7.2:
+  direct → rStyle (character style) → pStyle hoặc style `w:default` khi không pStyle →
+  docDefaults; con thắng cha (basedOn đã resolve sẵn trong styles.rs); rStyle/pStyle trỏ style
+  sai loại hoặc thiếu → bỏ lớp đó (quick view không chặn open); `u val="none"` và `color="auto"`
+  collapse về `None`; font = ascii→hAnsi→eastAsia→cs. `viewer_open` trả `RenderDoc` —
+  **viewer.ts xoá sạch merge chain** (`styleOf`/interface style hết), chỉ còn fallback terminal
+  (11pt/sans-serif) khi cả docDefaults cũng không khai báo.
+- **Bằng chứng:**
+  - Test mới: `v1_render_constructs_parse_resolve_and_round_trip` (inline XML — assert
+    RESOLVED values từng thứ bậc: default-para-style, rStyle>pStyle, direct>rStyle, explicit-off
+    thắng chain, ind direct thắng style, ascii font, br/tab 2 serialization, gridCol auto,
+    pgSz, round-trip bất biến) + `v1_fixture_parses_resolved_values` (file thật — Carlito từ
+    docDefaults, color chain, underline none→None, ind, grid) + cycle/override có sẵn
+    (malformed (f) + run-override test nâng cấp assert `Some(false)`).
+  - Fuzz: 500 vòng mutation (parse) + 500 vòng (write+reparse, JUNK có `\t`/`\n` → đi qua
+    w:tab/w:br element) — 0 panic, model bất biến từng vòng.
+  - **parity-a2.sh exit 0** — invariant 9/9 (corpus 8 + v1-fixture mới qua glob); diff phân
+    loại ĐỦ: 4 lớp vô hại — 2 cũ (empty-run drop, rel_id renumber/rename) + **2 mới do model
+    surface hóa: x2t thêm `w:docDefaults` rỗng (8/9 file) + hex color lowercase** (DD K01 §5.1
+    bổ sung (c)/(d)). m-x2t của v1-fixture lệch duy nhất 3 dòng màu → x2t giữ nguyên mọi
+    construct V1 qua round-trip.
+  - **Engine nhận XML writer mới:** crate round-trip của v1-fixture qua `smoke-render.sh`
+    **PASSED exit 0** (contentReady + canvas + /fonts/) + adapter pre-normalize chạy trên đó
+    (`rust-canonical → x2t, normalize 3.3 ms`).
+  - **Viewer render GREEN không thoái hóa:** boot nền (rule 6b) `NANO_OFFICE_QUICK_VIEW` —
+    v1-fixture: parse **2.5 ms** · first-draw **20.0 ms** · inked 27499; full-fixture: parse
+    **4.8 ms** (V0 2.9 — thêm pgSz/tblGrid/sectPr + resolve) · first-draw **24.0 ms** ·
+    inked 27547 (khớp V0); app RSS **~92–100 MB** (V0 117.8). Số liệu ghi DD V01 §5.2.
+  - `cargo test --workspace` 23 shell + 12 crate exit 0 · `cargo clippy -D warnings` exit 0 ·
+    `pnpm build` exit 0 · **verify.sh FULL exit 0** (16 gates; lần chạy đầu FAIL do port 1420
+    còn listener từ boot viewer — dọn process, rerun sạch; không phải code).
+  - T-056 cuts trigger đúng lúc chạm fixtures: `docxgen_common.py` (png_1x1×3 → 1 nhà, chữ ký
+    `png_1x1(r,g,b)`/`png(rgb_rows)`) + xoá 2 dead line `make_docx_edge.py` __main__ — verify
+    byte-identical: edge corpus 4 file byte-identical, full/media part-bytes identical.
+- **Trạng thái:** T-V1 ✅ — ▶ = T-V2 (layout + gates số liệu). CẢN T-V2 được giữ: không làm
+  layout/gate RAM trong phiên này.
+
+---
+
 ## 2026-10-03 · T-A25: A3 mở màn — viewer Rust đọc-only, slice V0 chạy thật + số đo ms/MB đầu tiên (design-first như T-A20)
 
 - **Bối cảnh:** mở màn rung A3 (QĐ9 — "quick view" không boot sdkjs; đích rung mở <500 ms,
