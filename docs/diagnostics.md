@@ -8,6 +8,50 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-03 · T-V2: A3/V2 — layout tối thiểu (wrap pgSz + tab + line-height C4-a) + gate số liệu đầu tiên (đóng OQ-V01-2)
+
+- **Bối cảnh:** slice V2 viewer (A3) — layout chạy thật trên canvas V0 + gate verify.sh
+  đầu tiên của quick view. Clean-room: chỉ spec-ref (defaultTabStop §17.3.1.15 — 720 twips
+  là quy ước Word, KHÔNG phải default spec, verify qua nguồn mở) + oracle (log layout app
+  chạy thật); không đọc upstream render code.
+- **Layout (`src/viewer.ts` + payload `viewer.rs`):** `viewer_open` trả thêm `fonts` (map
+  family → OS/2 [ascent, descent, line_gap] scaled 1000/em qua accessor C4-a) + `page`
+  (pgSz). TS layout: greedy wrap trong cột suy từ pgSz (A4 → 601.7 px trừ 2×1in margin —
+  pgMar chưa vào model) · tab stop 720 twips (jump, không flat-space nữa) · line-height =
+  (asc + |desc| + gap)/1000 × px — **accessor `allfonts::line_metrics` scan CHỂ bundled root
+  ~20 file** (không trả giá 557 mặt hệ thống/lần mở; family ngoài bundle → fallback 1.15,
+  ceiling `ponytail:` comment). Break controls `\n\f\v` giữ nguyên hành vi ép dòng.
+- **Bằng chứng layout (assert theo tọa độ, không phải "nhìn thấy"):** fixture
+  `make_docx_layout.py` (4 paragraph uniform Carlito 11pt, A4) — viewer log
+  `viewer layout: lines=16 colw=601.7 maxw=600.5 metrics=750,-250,220 lhs=17.9×16
+  baselines=112.0,129.9,…` — **mỗi delta baseline == line-height của dòng == công thức
+  OS/2 tính lại từ metrics trong log** (17.9 px = 1.22 × 14.667); wrap ăn thật (16 dòng > 4
+  paragraph; filler tự bẻ 12 dòng); maxw ≤ colw. Assert này sống trong gate (python đọc log),
+  viewer.ts chỉ phát dữ liệu.
+- **Gate 12 `smoke-quick-view.sh`** (verify.sh, pattern smoke-lib + hằng `SMOKE_RE_QV_*`
+  vào khối đóng băng — emitting end `src/viewer.ts`): assert layout (trên) + first-draw
+  < 500 ms + **RSS tree < 300 MB** (app + 3 WebKit XPC, method PH-0 PID-adjacency). Bằng
+  chứng: **positive exit 0** ×3 (`first-draw 18–26 ms, tree 253–257 MB ≤ 300`); **negative
+  ×2 exit 1 fail-fast**: `QUICK_VIEW_MAX_MS=1` → `first-draw 19.0 ms exceeds budget`;
+  `QUICK_VIEW_MAX_MB=1` → `RSS tree 257 MB exceeds budget` — threshold là nội bộ gate nên
+  negative = siết ngưỡng (không đụng product code); assert ms và assert RAM cắn RIÊNG lẻ.
+- **OQ-V01-2 CHỐT = TREE (app + WebKit XPC, PID adjacency)** — DD V01 §10: (1) app-only mù
+  đúng thành phần A3 loại (WebContent 370→46 MB); (2) đích rung so với engine 561–579 MB là
+  toàn cây; (3) method PH-0 proven. **Phát hiện method: helper WebKit spawn bởi launchd,
+  KHÔNG phải con app — `pgrep -P` đệ quy trả rỗng (thử thật 03.10); DD §6 mitigation sửa
+  theo PID adjacency.** Ngưỡng: gate = 300 MB tripwire DEBUG (đo được 178–257, helper noisy);
+  đích rung <150 MB = criterion RELEASE (debug idle đã ~203 tree), đo ở PH-4.
+- **Blocker mới ghi nhận (observed, KHÔNG phải T-V2 — boot release không quick-view cũng
+  stall):** release boot webview không navigate — bare binary: cửa sổ lên + WebContent spawn
+  rồi idle hẳn (sample: run loop `mach_msg`, không nhận navigation) + 0 `page_load`; bundle
+  `.app` qua `open -g --env` = 0 cửa sổ. Đã loại App Nap/caffeinate/đợi >90 s; debug boot
+  cùng máy tức thì → nghiêng về WebKit custom-scheme handling trong release, chưa mổ. Nếu
+  muốn tái lập: `cargo build --release` + `NANO_OFFICE_QUICK_VIEW=… ./target/release/nanooffice`
+  (log dừng ở `loopback file server`). → **T-057 (PH-4)** — chặn đường đo đích rung RAM release.
+- **Trạng thái:** T-V2 ✅ — gate 12 thường trụ; ▶ = T-V3 (media).
+
+---
+
 ## 2026-10-03 · T-V1: A3/V1 — model render-side mở (DD V01 §3.2) + resolve chuỗi style về Rust
 
 - **Bối cảnh:** slice V1 của viewer (A3) — crate `nanooffice-ooxml` mở model theo bảng

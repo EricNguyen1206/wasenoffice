@@ -83,6 +83,11 @@ nhận giá trị đã resolve, không merge JSON trên TS (merge của slice V0
 - **(a) Chọn:** accessor rẻ đọc OS/2 line metrics `allfonts.rs` ĐÃ parse sẵn (ascent/
   descent/line_gap, scaled 1000/em — `Face` private, cần 1 accessor `pub(crate)`). Line
   height render = ascent + |descent| + line_gap theo family đã map.
+  **Đã land ở V2 (T-V2):** `allfonts::line_metrics(family)` — scan CHỂ bundled root
+  (~20 file, millisecond; không trả giá 557 mặt hệ thống cho mỗi lần mở), family trùng
+  không phân biệt hoa thường; family không có trong bundle → `None` → renderer dùng
+  fallback phẳng 1.15 (ceiling ghi `ponytail:` comment tại chỗ; V4 parity đo sai số rồi
+  mới quyết nâng).
 - **(b) Bỏ:** parser `hmtx` lấy advance thật — KHÔNG làm: canvas `measureText` đo advance
   của font thật (text stack WebKit, rung 4 ladder "native platform feature"); viết hmtx
   parser là duplicate đúng thứ platform đã làm.
@@ -104,6 +109,7 @@ line height từ C4-a; advances từ `measureText`.
 | **V0** (T-A25, phiên này) | slice chứng minh kiến trúc: `viewer_open` parse-only + `viewer.html` canvas vẽ text paragraph (không layout đầy đủ) + **số đo ms/MB đầu tiên** | app chạy thật: mở fixture qua env → text hiện trên canvas, log parse/first-draw ms + RSS |
 | **V1** (T-V1, 03.10) ✅ | C2: model render-side mở (bảng §3.2) + resolve về Rust (`resolve.rs`); write.rs đối xứng | round-trip bất biến + parity-a2 exit 0 + render dùng model mới |
 | V2 | layout tối thiểu: line break theo pgSz, tab stop, line-height C4-a; **gates số liệu** mở <500 ms + RAM <150 MB trong verify.sh (gate mới, không đụng 9/10/11) | gate GREEN trên fixture corpus; metric RAM chốt (OQ-V01-2) |
+| **V2** (T-V2, 03.10) ✅ | wrap greedy theo cột từ `pgSz` + tab stop + line-height C4-a; **gate 12** `smoke-quick-view.sh` | gate GREEN (positive exit 0 + negative ×2 exit 1); OQ-V01-2 chốt §10 |
 | V3 | C3 trọn: serve `word/media/*` bytes (filesrv route an toàn — bytes đã byte-exact nhờ T-A26) + render ảnh theo `wp:extent` EMU | ảnh hiện đúng vị trí/kích thước trên corpus media |
 | V4 | parity render vs oracle: so viewer render với render sdkjs (oracle CDP app thật) — text content + vị trí dòng | metric parity đạt trên corpus (định nghĩa metric ở slice này, OQ-V01-1) |
 | V5 | wire UX: open docx → quick view (mặc định hoặc toggle — user quyết), rút trigger env | **rung A3 đóng** khi V4 parity + V2 gates đạt |
@@ -158,6 +164,33 @@ màu → **x2t giữ nguyên mọi construct V1 qua round-trip** (rStyle/rFonts/
 spacing âm/docDefaults/w:default/grid/pgSz). File round-trip crate mở trong engine render
 GREEN (smoke-render exit 0 — writer XML được engine chấp nhận).
 
+### 5.3 Kết quả slice V2 (03.10.2026 — T-V2)
+
+Layout thật trên canvas V0: greedy wrap theo cột suy từ `pgSz` (A4 11906 twips → px, trừ
+2×1in margin cố định — `pgMar` chưa vào model); tab stop 720 twips (`w:defaultTabStop`
+§17.3.1.15 nằm ở settings.xml — model chưa parse; **720 = quy ước Word, không phải default
+của spec** — verify số § qua nguồn mở, spec không khai default); line-height =
+(ascent + |descent| + line_gap)/1000 × px từ accessor OS/2 C4-a. Advances vẫn `measureText`
+(C4-b không đổi). Fixture `make_docx_layout.py` (4 paragraph: ngắn + filler dài wrap + tab +
+medium; Carlito 11pt uniform; A4 pgSz) — boot dev nền, ×3 run nhất quán:
+
+| Đo | Số liệu | V1 | V0 |
+|---|---|---|---|
+| Parse (+ resolve + scan line_metrics lần đầu) | **7.0–7.5 ms** | 4.8 | 2.9 |
+| invoke → first-draw | **18–30 ms** | 20–24 | 14–17 |
+| Layout evidence (log `viewer layout:`) | **16 dòng từ 4 paragraph** (filler wrap 12 dòng); colw 601.7 px; maxw 600.5 ≤ colw; lh **17.9 px** = (750+250+220)/1000 × 14.667 — metrics Carlito [750,−250,220] từ log | 1 dòng/paragraph | 1 dòng/paragraph |
+| RSS app-only | **~103–113 MB** | ~92–100 | 117.8 |
+| RSS tree (app + 3 WebKit XPC, method PH-0) | **177.8–257 MB** — helper RSS noisy (WC/GPU/Net 75–143 MB giữa các run) | — | ≈236 |
+
+**Gate 12** `harness/scripts/smoke-quick-view.sh` (thường trụ verify.sh, pattern smoke-lib,
+log ADDITIVE `viewer first-draw/layout/failed` — hằng `SMOKE_RE_QV_*` trong khối đóng băng
+smoke-lib): assert **layout** (mỗi delta baseline == line-height của dòng == công thức OS/2
+tính LẠI từ metrics đọc trong log; lhs uniform; maxw ≤ colw; lines ≥ 12 > 4 paragraph =
+wrap ăn thật) + **first-draw < 500 ms** + **RSS tree < 300 MB**. Positive exit 0 ×3 chạy;
+negative ×2 exit 1 fail-fast (không chờ timeout): `QUICK_VIEW_MAX_MS=1` → "first-draw 19 ms
+exceeds budget"; `QUICK_VIEW_MAX_MB=1` → "RSS tree 257 MB exceeds budget" — 2 assert cắn
+riêng lẻ (threshold là nội bộ gate nên negative = siết ngưỡng, không đụng product code).
+
 ## 6. Rủi ro + mitigations
 
 | Rủi ro | Mitigation |
@@ -165,7 +198,7 @@ GREEN (smoke-render exit 0 — writer XML được engine chấp nhận).
 | Mở model (C2) phá parity A2 | 2 invariant cứng mỗi slice: round-trip bất biến + parity-a2 0 diff; test hồi quy per-construct |
 | `w:rFonts` → family không có trong font roots | map qua bộ bundled (Carlito ≈ Calibri, A12); thiếu → fallback + log đếm được (V1); không dừng open |
 | OS/2 metrics scaled 1000/em truncate | sai số chỉ nằm ở line-height; advance là `measureText` (font thật); đo lệch ở V4 rồi mới quyết |
-| Đo RSS thiếu process WebContent | đo cả cây (pgrep -P đệ quy) từ slice V0; công thức chốt ở V2 thành gate |
+| Đo RSS thiếu process WebContent | đo cả cây từ slice V0 — **method đã sửa ở V2 (thử thật): helper WebKit spawn bởi launchd, KHÔNG phải con app (`pgrep -P` đệ quy trả rỗng) → nhận diện theo PID adjacency (method PH-0); công thức chốt §10** |
 | Scope creep sang layout engine đầy đủ | V0 không layout; từng V-slice một phạm vi; §4 là biên |
 
 ## 7. Kế hoạch kiểm thử (thay TEST.md — component-level)
@@ -180,7 +213,37 @@ GREEN (smoke-render exit 0 — writer XML được engine chấp nhận).
 
 - **OQ-V01-1:** metric parity render — ε cho baseline/width bao nhiêu là "đạt"? Chốt ở V4
   sau khi đo sai số nền giữa 2 canvas (viewer vs sdkjs cùng WKWebView).
-- **OQ-V01-2:** công thức RAM — RSS app process đơn hay cả cây (WebContent/GPU helper)?
-  V0 đo cả 2 để có số liệu; V2 chốt thành gate.
+- **OQ-V01-2: CHỐT ở V2 — xem §10.**
 - **OQ-V01-3:** UX quick view (V5) — viewer là mặc định cho docx hay toggle user chọn?
   User quyết khi V4 đạt (sản phẩm mở <500 ms mới đáng mặc định).
+
+## 10. OQ-V01-2 — công thức RAM đã chốt (T-V2, 03.10)
+
+**Công thức = TREE: RSS app process + toàn bộ WebKit XPC kề nó (WebContent / GPU /
+Networking), nhận diện theo PID adjacency — đúng method PH-0 diagnostics 27.09.**
+
+Lý do (theo số đo, không theo cảm tính):
+
+1. **App-only mù đúng thành phần mà A3 tuyên bố đã loại.** Cả câu chuyện rung là WebContent
+   370 MB (engine) → ~46 MB (quick view) — gate chỉ đo app process sẽ KHÔNG bao giờ bắt được
+   thoái hoá WebContent; tree là vạch đo duy nhất nhìn thấy nó.
+2. **Đích rung đối chiếu theo toàn cây.** Baseline engine 561–579 MB (PH-0) là tổng cây
+   (app + 3 helper); đích <150 MB phải cùng đơn vị mới so được.
+3. **Method đã proven + có sẵn.** PID adjacency đo được bằng `ps`/`pgrep` thuần, đã dùng từ
+   PH-0; helper spawn bởi launchd (KHÔNG phải con của app — pgrep -P đệ quy trả rỗng, thử
+   thật 03.10) nên adjacency là cách gán đúng đã ghi.
+
+Ngưỡng theo build (số đo §5.1/§5.3):
+
+- **verify.sh gate 12 = tripwire DEBUG 300 MB** (số đo tree 178–257 MB, dao động do helper
+  RSS; thoái hoá kiểu WebContent engine +370 MB sẽ bị bắt tức thì). Đích 500 ms giữ nguyên.
+- **Đích rung < 150 MB = criterion cho RELEASE build** — debug không thể là vạch: idle start
+  page debug đã ~203 MB tree (V0 §5.1). Đo khi PH-4 packaging (build phân phối thật).
+
+**Limitation ghi thẳng:** số RELEASE chưa đo được trong phiên T-V2 — release boot stall
+pre-existing (không phải T-V2 gây ra: boot release KHÔNG quick-view cũng stall; diff T-V2
+không đụng boot): bare binary = cửa sổ lên + WebContent spawn nhưng idle hoàn toàn (sample:
+run loop chờ `mach_msg`, không nhận navigation) + 0 dòng `page_load`; bundle `.app` mở bằng
+`open -g --env` = 0 cửa sổ. Đã loại App Nap (`NSAppSleepDisabled`), caffeinate, đợi >90 s;
+debug boot cùng máy tức thì. Đây là việc PH-4 packaging phải xử lý trước khi đo đích rung —
+→ **T-057 (PH-4)**.
