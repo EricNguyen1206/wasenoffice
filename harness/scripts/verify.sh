@@ -45,6 +45,9 @@ harness/scripts/smoke-save.sh || fail=1
 echo "▸ smoke clean-machine behavioral (gate 11: open→edit→save, 0 tham chiếu ONLYOFFICE.app — T-A13)"
 harness/scripts/smoke-clean-machine.sh || fail=1
 
+echo "▸ smoke quick-view metrics (gate 12: layout asserts + <500 ms + RAM tree — T-V2)"
+harness/scripts/smoke-quick-view.sh || fail=1
+
 echo "▸ upstream submodules clean?"
 if [ -n "$(git submodule status | grep '^[+MU]')" ]; then
   echo "  ✗ submodules dirty/different:"; git submodule status; fail=1

@@ -24,6 +24,8 @@
 #   gate 11 · /Applications/ONLYOFFICE + fallback WARN + strict error
 #            ← src-tauri/src/sidecar/mod.rs x2t_path (override info log là dòng
 #            mang path app — negative proof bám vào đó)
+#   gate 12 · viewer first-draw + viewer layout (T-V2 — ADDITIVE viewer log)
+#            ← src/viewer.ts main() (invoke 'viewer_open' ở src-tauri/src/viewer.rs)
 set -u
 
 SMOKE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -40,6 +42,10 @@ SMOKE_RE_SAVE_PROBE='save probe: asc_Save() called'
 SMOKE_APP_PATH='/Applications/ONLYOFFICE'
 SMOKE_RE_FALLBACK_WARN='falling back to the installed ONLYOFFICE'
 SMOKE_RE_STRICT_ERROR='clean-machine mode'
+# gate 12 (quick-view metrics, T-V2) — dòng ADDITIVE của viewer
+SMOKE_RE_QV_FIRST_DRAW='viewer first-draw'
+SMOKE_RE_QV_LAYOUT='viewer layout:'
+SMOKE_RE_QV_FAILED='viewer failed:'
 
 # ── Trạng thái dùng chung (consumer đọc, không ghi trực tiếp khi không cần) ──
 SMOKE_APP_PID=""     # PID process-group của app (smoke_boot đặt)

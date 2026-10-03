@@ -207,6 +207,25 @@ pub(crate) fn generated() -> &'static Option<AllFonts> {
     })
 }
 
+/// OS/2 line metrics for a family — C4-a of DD V01 §3.3, the viewer's
+/// line-height source: `[ascent, descent, line_gap]` scaled to 1000 units per
+/// em (the same truncation the selection bin carries). Scans the BUNDLED set
+/// only (app root, ~20 pinned files): the viewer's font universe is the
+/// bundle (DD V01 §6 — Carlito ≈ Calibri), and the 557-face system
+/// enumeration is not worth paying per open. First face whose family matches
+/// case-insensitively wins (line metrics barely differ across a family's
+/// faces; slot-aware lookup if V4 parity demands it). `None` = family not in
+/// the bundle → the renderer applies its fallback line spacing.
+pub(crate) fn line_metrics(family: &str) -> Option<[i16; 3]> {
+    let root = font_root_disk("app")?;
+    let target = family.to_lowercase();
+    walk(&root).into_iter().find_map(|path| {
+        parse_file(&path, 0).into_iter().find_map(|f| {
+            (f.family.to_lowercase() == target).then_some([f.ascent, f.descent, f.line_gap])
+        })
+    })
+}
+
 /// Write the raw AllFonts.js (disk paths) to a stable temp location once per
 /// run and return its path — the single copy `<m_sAllFontsPath>` and
 /// `<m_sFontDir>` (bridge::save) point at.
@@ -1224,6 +1243,27 @@ mod tests {
         let app = font_root_disk("app").expect("engines root (engines/editors/sdkjs missing?)");
         assert!(app.to_string_lossy().contains("engines"));
         assert!(!app.to_string_lossy().contains("ONLYOFFICE"));
+    }
+
+    /// C4-a accessor (DD V01 §3.3) against the real bundle: Carlito is pinned
+    /// by bundle-fonts.sh, so its OS/2 metrics must resolve with the sign
+    /// conventions the viewer's line-height formula relies on (ascent > 0,
+    /// descent < 0). Skips when engines/ is absent (dev-machine dependency,
+    /// same policy as `bundled_fonts_enumerate_via_interface`).
+    #[test]
+    fn line_metrics_reads_bundled_family() {
+        let Some(app_root) = font_root_disk("app") else {
+            eprintln!("skip: engines root not found (engines/editors/sdkjs missing)");
+            return;
+        };
+        if !app_root.is_dir() {
+            eprintln!("skip: bundled font set missing at {}", app_root.display());
+            return;
+        }
+        let m = line_metrics("Carlito").expect("Carlito pinned by bundle-fonts.sh must resolve");
+        assert!(m[0] > 0, "ascent must be positive: {m:?}");
+        assert!(m[1] < 0, "descent must be negative: {m:?}");
+        assert!(line_metrics("Definitely Not A Font Family").is_none());
     }
 
     /// Enumerate through the PUBLIC interface (`generated()`) against the
