@@ -42,9 +42,10 @@ SMOKE_RE_SAVE_PROBE='save probe: asc_Save() called'
 SMOKE_APP_PATH='/Applications/ONLYOFFICE'
 SMOKE_RE_FALLBACK_WARN='falling back to the installed ONLYOFFICE'
 SMOKE_RE_STRICT_ERROR='clean-machine mode'
-# gate 12 (quick-view metrics, T-V2) — dòng ADDITIVE của viewer
+# gate 12 (quick-view metrics, T-V2; media T-V3) — dòng ADDITIVE của viewer
 SMOKE_RE_QV_FIRST_DRAW='viewer first-draw'
 SMOKE_RE_QV_LAYOUT='viewer layout:'
+SMOKE_RE_QV_MEDIA='viewer media:'
 SMOKE_RE_QV_FAILED='viewer failed:'
 
 # ── Trạng thái dùng chung (consumer đọc, không ghi trực tiếp khi không cần) ──

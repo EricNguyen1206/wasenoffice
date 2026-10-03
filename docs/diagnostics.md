@@ -8,6 +8,55 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-03 · T-V3: A3/V3 — media bytes qua route filesrv an toàn + render ảnh theo wp:extent (EMU→px)
+
+- **Bối cảnh:** slice V3 viewer (A3) — ảnh thật hiển thị trên canvas quick view. Clean-room:
+  quy ước EMU verify qua nguồn mở (Apache POI Units.java, Apache-2.0 — `EMU_PER_INCH=914400`,
+  `EMU_PER_PIXEL=9525` → px = emu/9525 @96 dpi; spec-ref ECMA-376 §20.4.2.7 `wp:extent`);
+  không đọc upstream render code. Chi tiết design + số đo: DD V01 §5.4; evidence route:
+  reference.map § Viewer media route.
+- **Route `/media/<fileId>/<part>` (`filesrv.rs`):** key bằng fileId của FileRegistry
+  (`viewer_open` đăng ký file — delivery không đụng, DD §3.1 amendment); part lookup
+  **exact-name trong zip entry table** qua `try_part_bytes` (re-export 1 dòng từ `mod opc`
+  private của crate) — tên traversal không thể resolve ra đĩa; `..`/`\` → 403 tường minh
+  TRƯỚC lookup (security path, không phải dead code). Test cargo ×2 trên socket thật:
+  byte-exact part == fixture bytes + bộ 403/404 (literal `../`, `%2e%2e` encoded, backslash,
+  part lạ, fileId lạ, thiếu part).
+- **Render (`viewer.ts`):** ảnh từ `Run.images` (ImageRef: part + cx/cy EMU) thành token
+  **dòng riêng** (ceiling `ponytail:` — không inline wrap; ảnh vẽ sau text của run do parser
+  flatten thứ tự con); `drawImage` tại emu/9525; fetch qua `fetch()`+`createImageBitmap` —
+  **canvas không taint** nên `getImageData` đọc được (HTMLImageElement cross-origin sẽ taint).
+  Bytes fail → reserved box + log warn, view không chết.
+- **Bằng chứng pixel (không chỉ text-ink):** log `viewer media: part emu drawn at ink` —
+  ink = đếm pixel non-white trong rect vừa vẽ. E2E boot nền (rule 6b): fixture layout
+  (2 ảnh body extent 100×50/50×30 px, PNG 2×2/3×2 màu đậm) → drawn **100.0×50.0** at
+  **398.3** (= 380.4 last-baseline + 17.9 lh — vị trí flow đúng), **ink 20000 = 100×50@dpr²
+  phủ kín**; ảnh 2 kề ảnh 1 (448.3 = 398.3+50). Fixture T-A26 media (body 2×2): drawn
+  **2.0×2.0** ink 16 — bytes thật ≠ placeholder trắng (placeholder sẽ ink ≈ 0). Header image
+  KHÔNG render (RenderDoc.body chỉ body — ceiling ghi DD; route vẫn serve bytes part header,
+  curl 200 byte-exact sha256 == fixture).
+- **Gate 12 mở rộng** (log contract ADDITIVE `viewer media:`/`viewer media-failed:`, hằng
+  `SMOKE_RE_QV_MEDIA` vào khối đóng băng smoke-lib CÙNG commit): assert media — drawn ==
+  EMU/9525 (gate TỰ tính lại từ EMU trong log, không tin viewer), ink ≥ ½ rect, ảnh đầu đúng
+  vị trí flow, ảnh kề advance = chiều cao ảnh, cấm media-failed. Bằng chứng: positive exit 0
+  (first-draw 27–32 ms, tree 261–265 MB ≤ 300); negative ×2 exit 1 (MAX_MS=1 → "first-draw
+  30.0 ms exceeds budget"; MAX_MB=1 → "RSS tree 257 MB exceeds budget"); **counterfactual
+  fake-log ×5 đều exit 1 đúng thông điệp** (drawn sai 99×50 / ink thủng 20 / vị trí trôi +30 /
+  mất media line / thêm media-failed) — assert media cắn thật mà không đụng product code.
+- **Bug thật gate bắt trong phiên (confirmed):** breakLine thừa sau token ảnh → mỗi image
+  paragraph sinh "dòng rỗng ma" lh 16.9 (fallback 1.15) lọt vào `stats.lhs` — assert uniform
+  của gate cắn ngay run đầu (17.9 vs 16.9 > 0.15). Fix: chỉ breakLine sau ảnh khi còn token
+  phía sau (wrapParagraph indexed). Bài học: assert tọa độ bắt regression layout mà "nhìn
+  có vẻ đẹp" không thấy.
+- **Verify:** `cargo test --workspace` exit 0 (shell lib 26 passed + 1 ignored = 27, crate 8+4=12) · clippy
+  clean (3 warning mới fix: needless_borrow ×2 + unused_mut) · `cargo fmt` (lần đầu verify
+  FULL FAIL do quên fmt filesrv.rs — not code, quy trình) · `pnpm build` exit 0 ·
+  parity-a2.sh exit 0 (9 file, 0 hard-fail) · **verify.sh FULL exit 0 (17 gates)** ·
+  ponytail-review trên diff: 1 finding (dead binding `atx` trong gate python) → fix.
+- **Trạng thái:** T-V3 ✅ — ▶ = T-V4 (parity render vs oracle CDP).
+
+---
+
 ## 2026-10-03 · T-V2: A3/V2 — layout tối thiểu (wrap pgSz + tab + line-height C4-a) + gate số liệu đầu tiên (đóng OQ-V01-2)
 
 - **Bối cảnh:** slice V2 viewer (A3) — layout chạy thật trên canvas V0 + gate verify.sh

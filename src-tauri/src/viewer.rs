@@ -5,20 +5,25 @@
 //! Rust-side, like every other document surface.
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use serde::Serialize;
+use tauri::State;
 
 use nanooffice_ooxml::{Page, RBlock, RenderDoc};
 
+use crate::protocol::FileRegistry;
+
 /// Parse-only quick view: read the file, parse it with the A2 crate, resolve
 /// the style chains (V1 — the crate's `resolve` module, DD V01 §3.2) and hand
-/// the RENDER model to the viewer window. V2 adds the two layout inputs the
+/// the RENDER model to the viewer window. V2 added the two layout inputs the
 /// frontend cannot get elsewhere: the page geometry (`pgSz`, wrap column) and
 /// the OS/2 line metrics per family (C4-a — `allfonts::line_metrics`, bundled
-/// set only). Anything else (media serving) is a later V-slice — this command
-/// must stay parse-only (DD §3.1).
+/// set only). V3 registers the file in the FileRegistry so image parts can be
+/// served by fileId over the `/media/<id>/<part>` filesrv route — URLs carry
+/// no disk paths (DD V01 §3.1; the delivery flow itself is untouched).
 #[tauri::command]
-pub fn viewer_open() -> Result<QuickView, String> {
+pub fn viewer_open(registry: State<'_, Arc<FileRegistry>>) -> Result<QuickView, String> {
     let path = std::env::var("NANO_OFFICE_QUICK_VIEW")
         .ok()
         .filter(|p| !p.is_empty())
@@ -32,6 +37,18 @@ pub fn viewer_open() -> Result<QuickView, String> {
         .into_iter()
         .filter_map(|fam| crate::protocol::allfonts::line_metrics(&fam).map(|m| (fam, m)))
         .collect();
+    let media_base = match registry.register(std::path::Path::new(&path)) {
+        Ok(id) => Some(format!(
+            "http://127.0.0.1:{}/media/{id}",
+            crate::protocol::filesrv::bound_port()
+        )),
+        // no registration → no media route; text still renders (quick view
+        // must not refuse a document over a serving hiccup)
+        Err(e) => {
+            log::warn!("viewer: media disabled — cannot register file: {e}");
+            None
+        }
+    };
     let parse_ms = started.elapsed().as_secs_f64() * 1000.0;
     log::info!(
         "viewer: parsed {path} ({} bytes) in {parse_ms:.1} ms, {} families with OS/2 metrics",
@@ -43,6 +60,7 @@ pub fn viewer_open() -> Result<QuickView, String> {
         doc: render,
         fonts,
         page: doc.page,
+        media_base,
     })
 }
 
@@ -58,6 +76,10 @@ pub struct QuickView {
     pub fonts: BTreeMap<String, [i16; 3]>,
     /// `w:pgSz` (§17.6.11) of the final section — the wrap column's source.
     pub page: Option<Page>,
+    /// V3: origin + fileId prefix for image parts — `<media_base>/<OPC part>`
+    /// fetches those bytes from the loopback filesrv. `None` when the file
+    /// could not be registered.
+    pub media_base: Option<String>,
 }
 
 /// Distinct run font families in document order (deduped).

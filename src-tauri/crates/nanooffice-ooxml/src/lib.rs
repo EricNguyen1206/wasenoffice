@@ -18,6 +18,7 @@ pub mod resolve;
 mod styles;
 pub mod write;
 
+pub use opc::try_part_bytes;
 pub use resolve::{resolve, RBlock, RCell, RParagraph, RRun, RTable, RenderDoc};
 pub use write::{write_docx, write_docx_file};
 

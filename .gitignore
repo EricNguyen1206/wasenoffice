@@ -17,3 +17,5 @@ engines/*
 
 # evidence screenshots (diagnostics tham chiếu path; không commit binary lớn)
 /docs/media/
+# pycache từ fixture generators (import docxgen_common khi gate chạy)
+__pycache__/

@@ -139,6 +139,47 @@ fn handle(mut stream: TcpStream, registry: Arc<FileRegistry>) {
         return;
     }
 
+    // T-V3 media route: OPC parts of a REGISTERED document, keyed by fileId
+    // (same contract as /file/<id>/ — no disk paths travel through URLs). The
+    // part name is looked up EXACTLY in the zip's entry table
+    // (`try_part_bytes`), so a traversal name can never resolve to a disk
+    // path; anything that merely LOOKS like traversal is refused with 403
+    // before the lookup.
+    if let Some(rest) = path.strip_prefix("/media/") {
+        let Some((id_s, part)) = rest.split_once('/') else {
+            respond(&mut stream, 404, &[], &[], false);
+            return;
+        };
+        let Ok(id) = id_s.parse::<u32>() else {
+            respond(&mut stream, 404, &[], &[], false);
+            return;
+        };
+        let Some(disk) = registry.get(id) else {
+            respond(&mut stream, 404, &[], &[], false);
+            return;
+        };
+        if part.split('/').any(|seg| seg == "..") || part.contains('\\') {
+            log::warn!("file server 403: media part {part:?} looks like traversal");
+            respond(&mut stream, 403, &[], &[], false);
+            return;
+        }
+        let Ok(zip_bytes) = std::fs::read(&disk) else {
+            respond(&mut stream, 404, &[], &[], false);
+            return;
+        };
+        match nanooffice_ooxml::try_part_bytes(&zip_bytes, part) {
+            Some(bytes) => {
+                log::info!(
+                    "media serve: fileId {id} part {part} ({} bytes)",
+                    bytes.len()
+                );
+                respond_bytes(&mut stream, super::mime_for(part), bytes, method == "HEAD");
+            }
+            None => respond(&mut stream, 404, &[], &[], false),
+        }
+        return;
+    }
+
     let Some(rest) = path.strip_prefix("/file/") else {
         respond(&mut stream, 404, &[], &[], false);
         return;
@@ -256,14 +297,112 @@ fn resolve_font_path(rest: &str) -> Option<PathBuf> {
     super::safe_join(&disk_root, rel)
 }
 
-fn respond_bytes(mut stream: &mut TcpStream, mime: &str, body: Vec<u8>, head: bool) {
+fn respond_bytes(stream: &mut TcpStream, mime: &str, body: Vec<u8>, head: bool) {
     let resp = format!(
         "HTTP/1.1 200 OK\r\nContent-Type: {mime}\r\nAccept-Ranges: bytes\r\n\
          Access-Control-Allow-Origin: *\r\nContent-Length: {}\r\n\r\n",
         body.len()
     );
-    let _ = std::io::Write::write_all(&mut stream, resp.as_bytes());
+    let _ = std::io::Write::write_all(stream, resp.as_bytes());
     if !head {
-        let _ = std::io::Write::write_all(&mut stream, &body);
+        let _ = std::io::Write::write_all(stream, &body);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::sync::Arc;
+
+    /// The T-A26 media fixture: real multi-pixel PNGs, one body + one header
+    /// part (bytes ≠ the writer's 1×1 white placeholder by construction).
+    fn media_fixture() -> &'static str {
+        concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/crates/nanooffice-ooxml/tests/fixtures/nanooffice-media-fixture.docx"
+        )
+    }
+
+    /// One shared server per test binary; tests register their own files.
+    fn server() -> (u16, Arc<FileRegistry>) {
+        static SERVER: std::sync::OnceLock<(u16, Arc<FileRegistry>)> = std::sync::OnceLock::new();
+        SERVER
+            .get_or_init(|| {
+                let registry = Arc::new(FileRegistry::default());
+                let port = spawn(Arc::clone(&registry)).expect("bind test filesrv");
+                (port, registry)
+            })
+            .clone()
+    }
+
+    fn get(port: u16, target: &str) -> (u16, Vec<u8>) {
+        let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).expect("connect");
+        write!(s, "GET {target} HTTP/1.1\r\nHost: t\r\n\r\n").expect("write request");
+        let mut buf = Vec::new();
+        s.read_to_end(&mut buf).expect("read response");
+        let head = String::from_utf8_lossy(&buf);
+        let status: u16 = head
+            .lines()
+            .next()
+            .and_then(|l| l.split_whitespace().nth(1))
+            .and_then(|c| c.parse().ok())
+            .unwrap_or(0);
+        let body = match buf.windows(4).position(|w| w == b"\r\n\r\n") {
+            Some(i) => buf[i + 4..].to_vec(),
+            None => Vec::new(),
+        };
+        (status, body)
+    }
+
+    #[test]
+    fn media_serves_fixture_bytes_byte_exact() {
+        let (port, registry) = server();
+        let id = registry
+            .register(std::path::Path::new(media_fixture()))
+            .unwrap();
+        let raw = std::fs::read(media_fixture()).unwrap();
+        let expected = nanooffice_ooxml::try_part_bytes(&raw, "word/media/image1.png").unwrap();
+        let other = nanooffice_ooxml::try_part_bytes(&raw, "word/media/image2.png").unwrap();
+        assert!(
+            !expected.is_empty() && expected != other,
+            "fixture parts indistinct"
+        );
+
+        let (status, body) = get(port, &format!("/media/{id}/word/media/image1.png"));
+        assert_eq!(status, 200);
+        assert_eq!(
+            body, expected,
+            "media route must serve the OPC part byte-exact"
+        );
+
+        // a part inside the registered file but never declared in rels is
+        // still a part of THAT file — exact-name lookup, no rels check (the
+        // viewer resolves rels before ever building a URL)
+        let (status, body) = get(port, &format!("/media/{id}/word/document.xml"));
+        assert_eq!(status, 200);
+        assert!(!body.is_empty());
+    }
+
+    #[test]
+    fn media_rejects_traversal_and_unknown_targets() {
+        let (port, registry) = server();
+        let id = registry
+            .register(std::path::Path::new(media_fixture()))
+            .unwrap();
+
+        let (status, _) = get(port, &format!("/media/{id}/../secret"));
+        assert_eq!(status, 403, "literal ../ must be refused");
+        let (status, _) = get(port, &format!("/media/{id}/word/media/%2E%2E/evil"));
+        assert_eq!(status, 403, "percent-encoded ../ must be refused");
+        let (status, _) = get(port, &format!("/media/{id}/word\\media\\image1.png"));
+        assert_eq!(status, 403, "backslash separator must be refused");
+
+        let (status, _) = get(port, &format!("/media/{id}/word/media/absent.png"));
+        assert_eq!(status, 404, "unknown part of a known file");
+        let (status, _) = get(port, "/media/424242/word/media/image1.png");
+        assert_eq!(status, 404, "unknown fileId");
+        let (status, _) = get(port, &format!("/media/{id}"));
+        assert_eq!(status, 404, "no part in the URL");
     }
 }

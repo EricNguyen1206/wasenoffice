@@ -56,7 +56,9 @@ và không đụng converter). `viewer_open` = parse-only: đọc file → `nano
 delivery.js, log contract gates 9/10/11 nguyên vẹn. Trigger slice: env
 `NANO_OFFICE_QUICK_VIEW=<path>` (dev-only; UX wiring thật = V5) — window viewer mở bằng
 entry `viewer.html` riêng, shim bridge/delivery KHÔNG inject (điểm của quick view: không
-engine, không bridge).
+engine, không bridge). *(V3 amendment: `viewer_open` ĐĂNG KÝ file vào FileRegistry để
+keying route media `/media/<id>/<part>` — handoff T-V3 đòi fileId; luồng delivery không
+hề đụng tới, quick-view mode không bao giờ gọi delivery.)*
 
 ### 3.2 C2 — model render-side mở theo spec, đúng nhu cầu viewer (V1)
 
@@ -110,7 +112,7 @@ line height từ C4-a; advances từ `measureText`.
 | **V1** (T-V1, 03.10) ✅ | C2: model render-side mở (bảng §3.2) + resolve về Rust (`resolve.rs`); write.rs đối xứng | round-trip bất biến + parity-a2 exit 0 + render dùng model mới |
 | V2 | layout tối thiểu: line break theo pgSz, tab stop, line-height C4-a; **gates số liệu** mở <500 ms + RAM <150 MB trong verify.sh (gate mới, không đụng 9/10/11) | gate GREEN trên fixture corpus; metric RAM chốt (OQ-V01-2) |
 | **V2** (T-V2, 03.10) ✅ | wrap greedy theo cột từ `pgSz` + tab stop + line-height C4-a; **gate 12** `smoke-quick-view.sh` | gate GREEN (positive exit 0 + negative ×2 exit 1); OQ-V01-2 chốt §10 |
-| V3 | C3 trọn: serve `word/media/*` bytes (filesrv route an toàn — bytes đã byte-exact nhờ T-A26) + render ảnh theo `wp:extent` EMU | ảnh hiện đúng vị trí/kích thước trên corpus media |
+| **V3** (T-V3, 03.10) ✅ | route filesrv `/media/<fileId>/<part>` (exact-name zip lookup, 403 traversal — bytes byte-exact nhờ T-A26) + render ảnh dòng riêng theo `wp:extent` EMU→px | gate 12 assert drawn == EMU→px (gate tự tính lại) + ink thật trên fixture media; E2E fixture T-A26 |
 | V4 | parity render vs oracle: so viewer render với render sdkjs (oracle CDP app thật) — text content + vị trí dòng | metric parity đạt trên corpus (định nghĩa metric ở slice này, OQ-V01-1) |
 | V5 | wire UX: open docx → quick view (mặc định hoặc toggle — user quyết), rút trigger env | **rung A3 đóng** khi V4 parity + V2 gates đạt |
 
@@ -190,6 +192,29 @@ wrap ăn thật) + **first-draw < 500 ms** + **RSS tree < 300 MB**. Positive exi
 negative ×2 exit 1 fail-fast (không chờ timeout): `QUICK_VIEW_MAX_MS=1` → "first-draw 19 ms
 exceeds budget"; `QUICK_VIEW_MAX_MB=1` → "RSS tree 257 MB exceeds budget" — 2 assert cắn
 riêng lẻ (threshold là nội bộ gate nên negative = siết ngưỡng, không đụng product code).
+
+### 5.4 Kết quả slice V3 (03.10.2026 — T-V3)
+
+Media route + render ảnh. Clean-room: EMU quy ước verify nguồn mở — **Apache POI
+`Units.java` (Apache-2.0): `EMU_PER_INCH = 914400`, `EMU_PER_PIXEL = 9525`** + spec-ref
+ECMA-376 §20.4.2.7 (`wp:extent` cx/cy kiểu ST_PositiveCoordinate, đơn vị EMU); px = emu/9525
+@96 dpi — cùng đơn vị px của cả page (PT_PX = 96/72).
+
+| Mảnh | Nội dung | Bằng chứng |
+|---|---|---|
+| Route `/media/<fileId>/<part>` | filesrv, key bằng fileId (registry); part lookup **exact-name trong zip** (`try_part_bytes` — traversal không thể thoát ra đĩa); `..`/backslash → 403 tường minh TRƯỚC lookup | cargo test ×2 (byte-exact part + 403/404 bộ traversal/unknown) · curl route sống: image2 (part của HEADER) 200, bytes == fixture (sha256), `../` 404, `%2e%2e` 403, fileId lạ 404 |
+| Render ảnh | ảnh = token **dòng riêng** (ceiling `ponytail:` — không inline wrap); vẽ `drawImage` tại `emu/9525`; fetch qua `fetch()`+`createImageBitmap` (không taint canvas — getImageData đọc được) | — |
+| Evidence pixel | log `viewer media: part emu drawn at ink` (ink = pixel non-white trong rect vẽ) | fixture layout (2 ảnh body extent 100×50 / 50×30 px): drawn **100.0×50.0 / 50.0×30.0**, vị trí 398.3 = last-baseline + lh; **ink 20000/6000 = phủ kín @dpr2** — placeholder trắng 1×1 của writer sẽ ink ≈ 0 |
+| Gate 12 mở rộng | assert media: drawn == EMU/9525 (gate tự tính lại từ EMU trong log), ink ≥ ½ rect, ảnh đầu đúng vị trí flow, ảnh kề nhau advance = chiều cao ảnh, cấm `viewer media-failed` | positive exit 0 (first-draw 27–32 ms, tree 261–265 MB); negative ms/MB exit 1 ×2; **counterfactual fake-log ×5 đều cắn** (drawn sai / ink thủng / vị trí trôi / mất media line / media-failed) |
+
+Ceilings ghi rõ (ponytail): ảnh chỉ render trên dòng riêng; ảnh vẽ SAU text của run (parser
+flatten thứ tự con trong run); **header image không render** (RenderDoc.body chỉ mang body —
+route vẫn phục vụ bytes của part header, E2E chứng minh; render header = slice sau nếu parity
+V4 đòi). Bug thật gate bắt được trong phiên: breakLine thừa sau ảnh → "dòng rỗng ma" 16.9 px
+lọt vào lhs, assert uniform của gate cắn ngay run đầu — fix bằng chỉ breakLine khi còn token
+phía sau.
+
+---
 
 ## 6. Rủi ro + mitigations
 

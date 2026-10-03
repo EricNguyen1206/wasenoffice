@@ -6,6 +6,24 @@ type: evidence
 Bản đồ bằng chứng: upstream code ↔ nanooffice cần làm gì. Trạng thái: observed (có path) /
 candidate (cần kiểm chứng). Cập nhật mỗi khi phát hiện mới.
 
+## Viewer media route + quy ước EMU (mới 03.10, T-V3 — clean-room, spec-ref + nguồn mở)
+
+- **EMU → px:** `wp:extent` (ECMA-376 §20.4.2.7, trong wrapper `wp:inline` §20.4.2.8) cx/cy
+  kiểu ST_PositiveCoordinate, đơn vị **EMU**. Quy ước verify nguồn mở: **Apache POI
+  `poi/src/main/java/org/apache/poi/util/Units.java` (Apache-2.0)** — `EMU_PER_INCH =
+  914400` (12700×72), `EMU_PER_PIXEL = 9525`, `EMU_PER_DXA = 635` → **px = emu / 9525 @96
+  dpi**, khớp PT_PX = 96/72 mà viewer đã dùng cho twips/pt. (spec-ref + open-source
+  cross-check; không đọc upstream render code.)
+- **Route media viewer:** `/media/<fileId>/<OPC-part>` trong
+  `src-tauri/src/protocol/filesrv.rs` — key bằng fileId của `FileRegistry` (cùng contract
+  `/file/<id>/`: URL không mang đường đĩa); part lookup **exact-name trong bảng entry zip**
+  qua `nanooffice_ooxml::try_part_bytes` (re-export mới từ `mod opc` private) → tên
+  traversal không thể resolve ra đĩa; `..`/`\` → 403 tường minh trước lookup (defense-in-depth,
+  test `media_rejects_traversal_and_unknown_targets`).
+- **Viewer fetch ảnh** (`src/viewer.ts`): `fetch()` + `createImageBitmap` (không
+  `HTMLImageElement` → canvas không taint, `getImageData` đọc được cho evidence ink);
+  ảnh = token dòng riêng, ceiling `ponytail:` ghi tại chỗ + DD V01 §5.4.
+
 ## Nguồn upstream (chỉ đọc qua submodule hoặc onlyoffice-study)
 
 | Thành phần | Vị trí | Ghi chú |

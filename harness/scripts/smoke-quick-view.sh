@@ -55,6 +55,7 @@ quick_view_signals() {
   fi
   grep -q "$SMOKE_RE_QV_FIRST_DRAW" "$LOG" 2>/dev/null || { SMOKE_SUMMARY="no first-draw line yet"; return 1; }
   grep -q "$SMOKE_RE_QV_LAYOUT" "$LOG" 2>/dev/null || { SMOKE_SUMMARY="first-draw seen, layout line not yet"; return 1; }
+  grep -q "$SMOKE_RE_QV_MEDIA" "$LOG" 2>/dev/null || { SMOKE_SUMMARY="layout seen, media lines not yet"; return 1; }
   SMOKE_QV_REPORT=$(python3 - "$LOG" "$MAX_MS" <<'PY' 2>&1
 import re
 import sys
@@ -95,7 +96,38 @@ need(len(lhs) == len(ys) >= 2, "baselines/lhs length mismatch")
 for i in range(len(ys) - 1):
     need(abs((ys[i + 1] - ys[i]) - lhs[i]) <= 0.15,
          f"baseline delta {ys[i + 1] - ys[i]:.1f} != line-height {lhs[i]} at line {i}")
-print(f"QV OK first-draw={ms}ms lines={lines} lh={expected:.2f}px(col {colw}px maxw {maxw}px)")
+
+# T-V3 media: the fixture carries 2 body images (multi-pixel PNGs, saturated
+# colors). Recompute the wp:extent→px conversion HERE from the logged EMUs —
+# the viewer must have drawn at exactly that size, at the flow position right
+# below the last text line, with real ink inside the rect (the writer's 1×1
+# WHITE placeholder would ink ≈0; assert catches placeholder/blank draws).
+EMU_PX = 9525  # 914400 EMU/inch ÷ 96 dpi (Apache POI Units.java, Apache-2.0)
+media = re.findall(
+    r"viewer media: part=(\S+) emu=(\d+)x(\d+) drawn=([\d.]+)x([\d.]+) "
+    r"at=([\d.]+),([\d.]+) ink=(\d+)",
+    text,
+)
+need(len(media) >= 2, f"expected ≥2 drawn images (fixture carries 2), got {len(media)}")
+need("viewer media-failed" not in text, "a media part failed to load from /media/<fileId>/")
+for part, cx, cy, dw, dh, _ax, aty, ink in media:
+    cx, cy, ink = int(cx), int(cy), int(ink)
+    dw, dh, aty = float(dw), float(dh), float(aty)
+    need(abs(dw - cx / EMU_PX) <= 0.05,
+         f"{part}: drawn width {dw}px != wp:extent {cx} EMU → {cx / EMU_PX:.1f}px")
+    need(abs(dh - cy / EMU_PX) <= 0.05,
+         f"{part}: drawn height {dh}px != wp:extent {cy} EMU → {cy / EMU_PX:.1f}px")
+    need(ink >= 0.5 * dw * dh,
+         f"{part}: rect {dw:.0f}x{dh:.0f} has only {ink} inked pixels — image bytes did not hit the canvas")
+first_aty = float(media[0][6])
+need(abs(first_aty - (ys[-1] + lhs[-1])) <= 0.6,
+     f"first image top {first_aty}px != flow position {ys[-1] + lhs[-1]:.1f}px (last baseline + line-height)")
+for i in range(len(media) - 1):
+    top, h = float(media[i][6]), float(media[i][4])
+    need(abs(float(media[i + 1][6]) - (top + h)) <= 0.6,
+         f"image {i + 1} top {media[i + 1][6]} != image {i} bottom {top + h:.1f}px — image line must advance by the image height")
+print(f"QV OK first-draw={ms}ms lines={lines} lh={expected:.2f}px(col {colw}px maxw {maxw}px) "
+      f"media={len(media)} drawn={[f'{m[3]}x{m[4]}' for m in media]} ink={[m[7] for m in media]}")
 PY
 )
   local rc=$?

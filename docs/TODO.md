@@ -15,14 +15,14 @@ type: queue
 
 ## Tình hình nhanh
 
-▶ Kế tiếp: **T-V3 (C3 trọn — serve `word/media/*` bytes cho viewer qua filesrv route an toàn + render ảnh theo `wp:extent` EMU)** — T-V2 ĐÓNG 03.10: layout tối thiểu chạy thật (wrap pgSz + tab + line-height OS/2, assert tọa độ trong gate) + gate 12 số liệu (first-draw <500 ms + RSS tree) + OQ-V01-2 chốt TREE (DD V01 §10)
+▶ Kế tiếp: **T-V4 (parity render vs oracle — so viewer render ↔ render sdkjs qua oracle CDP trên corpus: text content exact + số dòng + baseline ±ε; ε chốt sau khi đo sai số nền 2 canvas, OQ-V01-1)** — T-V3 ĐÓNG 03.10: route `/media/<fileId>/<part>` an toàn (exact-name zip lookup + 403 traversal, test socket thật) + render ảnh dòng riêng theo `wp:extent` EMU→px (evidence pixel ink phủ kín trong gate 12)
 
 | Phase | Tổng | ✅ | 🟨 | ⏸ | ⬜ |
 |---|---|---|---|---|---|
 | PH-0 — ĐÃ ĐÓNG 27.09  |  6  | 6  | 0  | 0  | 0  |
 | PH-1  |  10 | 7  | 0  | 0  | 3  |
 | PH-4  |  4  | 0  | 0  | 0  | 4  |
-| Track A (QĐ9) |  17 | 14 | 0  | 0  | 3  |
+| Track A (QĐ9) |  17 | 15 | 0  | 0  | 2  |
 | META  | 13  | 9  | 0  | 0  | 4  |
 
 ## PH-0 — Spike editor + render DOCX (go/no-go) — ĐÃ ĐÓNG 27.09 · verdict GO WITH CAVEAT
@@ -60,7 +60,7 @@ type: queue
 
 - [ ] ⬜ T-058 · Wire **Tailwind v4** (`@tailwindcss/vite`, CSS-first `@theme`) cho own-UI surfaces (start page + viewer chrome; canvas không đụng) + **token-slot structure riêng** (tên slot + placeholder values — KHÔNG copy token ONLYOFFICE; values/theme chọn ở A5 DD) · trigger: **trước T-V5** (migrate muộn hơn = đắt nhất ở A5) · user hỏi 03.10
 
-- [ ] ⬜ T-V3 · C3 trọn — serve `word/media/*` bytes cho viewer (filesrv route an toàn; bytes đã byte-exact nhờ T-A26) + render ảnh theo `wp:extent` EMU · ← T-A26 ← T-V1
+- [x] ✅ T-V3 · C3 trọn — serve `word/media/*` bytes cho viewer (filesrv route an toàn; bytes đã byte-exact nhờ T-A26) + render ảnh theo `wp:extent` EMU · route `/media/<fileId>/<part>` exact-name zip lookup + 403 traversal (2 test socket thật) · ảnh dòng riêng EMU→px 9525 (POI Units.java Apache-2.0 + §20.4.2.7) · gate 12 + assert media (drawn==EMU→px + ink pixel, counterfactual ×5) · parity-a2 + verify FULL exit 0 · ← T-A26 ← T-V1 · 03.10 · diagnostics 03.10 (T-V3) + DD V01 §5.4
 - [ ] ⬜ T-V4 · **Parity render vs oracle** (oracle CDP sdkjs): so viewer render ↔ render engine thật trên corpus — text content exact + số dòng + baseline ±ε; ε chốt sau khi đo sai số nền 2 canvas (OQ-V01-1) · ← T-V2 ← T-V3
 - [ ] ⬜ T-V5 · Wire UX: open docx → quick view (mặc định hay toggle — OQ-V01-3 user quyết), rút trigger env `NANO_OFFICE_QUICK_VIEW`; **RUNG A3 ĐÓNG** khi T-V4 parity + T-V2 gates đạt · ← T-V4
 
