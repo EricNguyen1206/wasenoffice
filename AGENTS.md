@@ -48,6 +48,9 @@ nanooffice/
    `harness/skills/bridge-shim/SKILL.md`.
 5. **Verification trước khi tuyên bố xong.** Lệnh kiểm chứng + exit code phải được nêu trong
    báo cáo. "ZCode/chrome devtools nói chạy được" ≠ đã verify.
+6b. **App boot nền.** Mọi lần agent khởi động app (dev/binary/smoke gates/verify) phải
+   chạy background — không đưa cửa sổ lên frontmost, không cướp focus màn user (user
+   chỉ thị 03.10; enforce: Tauri `visible/focus:false`, `open -g`).
 6. **MIT purity.** Không copy code/text từ `upstream/` vào code của mình (kể cả gián tiếp qua
    subagent); dependency mới phải qua license gate trong verify.sh; `engines/**` không commit.
    Xem `harness/rules/mit-purity.md`.
