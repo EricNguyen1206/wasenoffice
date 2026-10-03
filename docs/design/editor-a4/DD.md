@@ -107,7 +107,7 @@ Vẽ: `fillRect(x-0.75, baseline-lh+2, 1.5, lh-1)`.
 | Slice | Nội dung | XONG khi |
 |---|---|---|
 | **L0** (T-A27, phiên này) | vòng edit đầu chạy thật: DocSession + 4 command + caret + undo/redo + save thẳng + nút + env + **gate 15** | gate 15 positive exit 0 (edit thật → save → parse lại chứa text mới + media byte-exact → mở lại render đúng) + negative exit 1 ×2; verify FULL exit 0 |
-| L1+ (task sau) | selection kéo (shift+click/arrows) · IME tiếng Việt · blink · pgMar/spacing vào model (hợp流 T-V6) · hyperlink/settings/theme vào model hoặc refuse-được | theo parity matrix §5.1 + criterion đóng rung A4 |
+| L1+ (task sau) | selection kéo (shift+click/arrows) — **slice #1 = T-A28, §5.3** · IME tiếng Việt · blink · pgMar/spacing vào model (hợp流 T-V6) · hyperlink/settings/theme vào model hoặc refuse-được | theo parity matrix §5.1 + criterion đóng rung A4 |
 
 ## 5. Tiêu chí đo
 
@@ -174,6 +174,123 @@ test 33 shell (+5 test editor: verbs/carets, utf-16 surrogate, refuse
 bảng+control chars, session undo/dirty, save round-trip qua crate thật) +
 12 crate.
 
+### 5.3 Slice A4 #1 — selection kéo + arrows (T-A28, 03.10.2026 — design-first)
+
+> Phạm vi theo handoff: selection model + arrows + mouse + highlight overlay +
+> mutation range-aware + C5-full phần đụng contract + gate 15 mở rộng.
+> OUT (ceiling — ghi ở §10): IME composite (OQ-L01-3) · clipboard ·
+> double/triple-click · caret blink · selection/chỉnh sửa trong bảng · C4/C5 phần còn lại.
+
+**a) Model selection.** `SelRange { anchor, focus }` — 2 `Caret` (Rust
+`editor.rs` + TS `editor.ts` interface, 1 nhà camelCase có comment cross-ref
+C5). `anchor` = điểm bắt đầu gesture (đứng yên), `focus` = đầu di động;
+`anchor == focus` ≡ caret thường (Rust-side `sel = None`). **Ordering tổng**:
+`key(c) = (para, run, offset)` so từ điển — carets top-level (cell refuse)
+nên đây là total order đúng thứ tự tài liệu; selection rỗng không phải trạng
+thái riêng.
+
+**Chuẩn hoá toạ độ (quyết chính của slice): `Caret.para` = BODY BLOCK index**
+(= `Hit.block` của seam T-060), KHÔNG phải `pi` walk-counter. Lý do: `pi` đếm
+table = 1 block nên với doc có bảng, `pi` của paragraph top-level SAU bảng ≠
+body index — `paragraph_at` address qua `doc.body[para]` sẽ trúng sai block
+(im lặng, đã tái hiện bằng walk `layout.ts`) hoặc trúng bảng; selection
+cross-para mutate NHIỀU block nên bắt buộc địa chỉ đúng. Fix 3 điểm: editor.ts
+consume `h.block` (2 chỗ đặt caret); `caretXY` match theo `line.block` thay
+`line.para` (seam editor, KHÔNG phải đường parity draw — gate 14 sở hữu
+semantics, fixtures table-free nên số không đổi, thêm assert block-match trên
+fixture bảng); Rust không đổi (para đã là body index từ T-A27). Table-free:
+`block == pi` — hành vi byte-identical.
+
+**Đụng cell → REFUSE, không clamp**: endpoint có `cell ≠ null` → selection
+không được lập (collapse về plain caret tại endpoint đó). Lý do: mutation đã
+refuse trên cùng identity — lập highlight vào vùng không edit được tạo
+"selection chết"; clamp buộc chọn phía khi cả hai đầu trong cell — thêm nhánh
+không mua gì. Rust-side range op tự kiểm tra lại cả 2 endpoint (defense in
+depth, cùng message refuse cũ).
+
+**Undo snapshot mở rộng**: `(Document, Caret, Option<SelRange>)`. Caret/sel
+trong snapshot = cái **cmd mang** (thật tại thời điểm mutate), không phải
+`self.caret` — movement TS-side (arrows/click) giữa 2 lệnh không sync về
+session (không round-trip cho pure movement — ceiling); undo/redo trả lại
+cả caret lẫn sel của thời điểm đó, `EditOutcome` +`sel` để TS khôi phục
+highlight sau undo.
+
+**b) Bảng phím** (plain = di chuyển, shift+ = extend — anchor giữ, focus di;
+mọi test qua synthetic KeyboardEvent hoặc gọi trực tiếp handler, rule 6b):
+
+| Phím | Hành vi | Biên |
+|---|---|---|
+| Left/Right | ±1 ký tự (surrogate pair = 1 bước — khớp backspace) | qua biên run (run trước: offset = len(run trước)); qua biên paragraph (body index ±1, paragraph rỗng = (p,0,0)); chạm bảng/dưới document = no-op |
+| Up/Down | line-to-line trên `model.lines` ± 1 giữ **goal-x** | goal-x = x caret lúc BẮT ĐẦU gesture (null → set), hitTest tự clamp vào biên dòng; reset bởi mọi hành động ngang/chuột/mutation; dòng in-cell bị SKIP; dòng ảnh (ở `media`, không ở `lines`) bị bỏ qua (ceiling) |
+| Home/End | đầu/cuối **dòng layout** (không phải paragraph): `hitTest(line.x)` / `hitTest(line.x + line.total)` | hitTest clamp sẵn |
+| Cmd+Left/Right | đầu/cuối **paragraph** qua `body[para].runs` | paragraph rỗng → (p,0,0) |
+| Mouse | mousedown = anchor+focus (= hit); kéo: mousemove cập nhật focus; mouseup kết thúc; shift+click = extend | hit cell ≠ null → clamp về plain caret (mục a) |
+
+Probe gọi thẳng `mouseDownAt/mouseMoveAt/mouseUp` với toạ độ layout thật
+(WebKit không cho constructing `offsetX/Y` trên synthetic MouseEvent —
+ceiling ghi); phím thì dispatch KeyboardEvent thật qua handler (wiring E2E).
+
+**c) Mutation range-aware (Rust `EditorSession::apply`).** `EditCmd` 4 verb
+mang thêm `sel: Option<SelRange>` (serde default). Non-empty →
+`apply_delete_range(anchor, focus)` chạy TRƯỚC verb tại start caret:
+
+| Verb | Hành vi với range | Caret trả |
+|---|---|---|
+| insert | xoá range → chèn text tại start | start + len(text) |
+| backspace | xoá range (KHÔNG rơi vào xoá 1 ký tự) | start |
+| delete | xoá range | start |
+| enter | xoá range → tách paragraph tại start | (start.para+1, 0, 0) |
+
+`apply_delete_range` semantics: ordering 2 đầu; **cùng para**: cùng run =
+cut `[s..e)`; cross-run = head giữ prefix (images xoá — range phủ tới cuối
+text head), middle runs drop, tail giữ suffix từ `end.offset` (images giữ nếu
+cut trước cuối text). **Cross-para**: head giữ prefix + drop các run sau nó,
+các block giữa drop (**có Table → refuse TOÀN BỘ lệnh** — không drop im lặng,
+chống data loss), tail giữ suffix, tail runs ghép vào head para, **pPr của
+paragraph ĐẦU thắng** (Word). Ảnh theo run-text-end (parser flatten, DD §3.1):
+ảnh của 1 run bị xoá ⇔ range phủ đến CUỐI text run đó. Paragraph rỗng đầu/tail
+(virtual run 0/0) hợp lệ. Empty runs GIỮ nguyên (không splice) — caret
+`(start.para, start.run, start.offset)` luôn hợp lệ, thêm nhánh đổi caret run
+index là chỗ sinh bug. Refuse: endpoint cell ≠ null / range chứa Table /
+caret stale (run/offset OOB) → Err, model nguyên, không push snapshot.
+
+**d) Vẽ highlight — overlay parameter của `drawModel` (render.ts), KHÔNG fork
+layout.** Mỗi `TextLine`: span dòng = `[(block, first.ri, charStart) …
+(block, last.ri, charEnd)]`; ngoài `[start, end]` ordered → skip; phủ trọn →
+rect `(line.x, baseline−lh+2, total, lh−1)`; partial → x từ `caretXY(endpoint)`
+(x2−x1 ≤ 0 skip — đúng các biên "kết thúc ĐÚNG tại mép dòng"); dòng rỗng nằm
+trong range → sliver 2px; cell lines skip. Màu `rgba(0,120,255,0.28)`, caret
+đen vẽ SAU (trên highlight). `caretXY` return +`line` (index dòng) — additive,
+Up/Down/Home/End dùng.
+
+**e) Evidence + gate plan (ADDITIVE — log contract 9–15 đóng băng).**
+Log mới `nano light selection: anchor=p/r/o focus=p/r/o span=<n>` (span =
+khoảng cách ký tự giữa 2 endpoint ordered, cùng para; cross-para = −1) — emit
+từ keydown shift-extend + mouseup (KHÔNG emit trong mousemove — spam). Hằng
+`SMOKE_RE_NL_SEL` vào khối đóng băng smoke-lib CÙNG commit emitting end
+(editor.ts). Gate 15 mở rộng: probe dispatch shift+ArrowLeft ×4 (chọn " two"
+của dòng probe) → evidence span ≥ 3 → insert " T28-SELECT-REPL" thay selection
+→ undo → redo → save → parse-back chứa "paragraph T28-SELECT-REPL" (các assert
+cũ nguyên). Negative mới `NANO_LIGHT_NEGATIVE=seldoctor`: python assert
+span == 0 → cắn exit 1 (chứng minh gate ĐỌC số liệu selection, pattern doctor
+T-A27). Rust unit tests: range same-para/cross-para (+pPr đầu thắng + image
+rule + refuse) · verbs replace selection · undo snapshot kèm sel.
+
+**f) C5-full phần đụng contract.** SelRange camelCase 1 nhà (mục a); unify
+nốt `QuickView` snake→camel: `viewer.rs` `#[serde(rename_all = "camelCase")]`
++ `viewer.ts` fields `parse_ms→parseMs`, `media_base→mediaBase` (~15 dòng) —
+chuỗi log + evidence JSON KHÔNG đổi, gates GREEN nguyên số. `RenderDoc` giữ
+casing hiện có (riêng `rel_id`/`cx_emu` là contract của layout.ts parity asset
+— KHÔNG đụng trong slice này).
+
+**g) Ceilings mở/đóng** — ghi §10: ĐÓNG "selection kéo/mũi tên chưa có"; MỚI:
+IME composite (OQ-L01-3) · clipboard copy/cut/paste · double/triple-click ·
+select-all · caret blink (giữ) · selection/sửa trong bảng (refuse) · arrows
+không nhảy QUA bảng (no-op tại biên) · Up/Down bỏ qua dòng ảnh · goal-x clamp
+theo advance đo được (rule V01, không snap biên ký tự) · movement TS-side
+không sync caret về session giữa 2 lệnh (snapshot dùng cmd's caret — chính xác
+tại thời điểm mutate).
+
 ## 6. Rủi ro + mitigations
 
 | Rủi ro | Mitigation |
@@ -216,7 +333,9 @@ bảng+control chars, session undo/dirty, save round-trip qua crate thật) +
 
 ## 10. Ceilings vòng 1 (ponytail — ghi thẳng, không giả vờ)
 
-- Selection kéo/mũi tên di chuyển caret: chưa có (caret chỉ qua click = hitTest).
+- Selection kéo/mũi tên di chuyển caret: **ĐÓNG ở slice A4 #1 (T-A28, §5.3)** —
+  ceilings còn lại của selection ghi ở §5.3(g): IME/clipboard/double-click/
+  select-all/blink/sửa trong bảng/arrows không nhảy qua bảng.
 - Ảnh: vẫn own-line (ceiling V3 kế thừa); enter/backspace quanh run chứa ảnh giữ
   ảnh theo run (kèm rules §3.1).
 - Edit trong bảng: refuse (toạ độ `pi` cell mơ hồ — ceiling T-V7 walk).
