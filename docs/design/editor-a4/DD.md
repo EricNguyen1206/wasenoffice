@@ -291,6 +291,18 @@ theo advance đo được (rule V01, không snap biên ký tự) · movement TS-
 không sync caret về session giữa 2 lệnh (snapshot dùng cmd's caret — chính xác
 tại thời điểm mutate).
 
+**h) Kết quả slice (land 03.10.2026 — dd1a908 design → 9a1f923 rust →
+04a0d7b ts+gate15 → 29244c8 C5 → 9ed3351 ponytail cuts):**
+
+| Bằng chứng | Kết quả | Ghi |
+|---|---|---|
+| Gate 15 positive | exit 0 — first-draw **36.0 ms** (parse 8.1 ms) · selection evidence span 1→4 (shift+Left ×4 qua handler thật) · type-replace → save **2682 B / 1.6 ms** · parse-back chứa `paragraphT28` · reopen window 2 first-draw 14.0 ms | đích < 500 ms xa |
+| Gate 15 negative ×3 | garbage exit 1 (`nano light failed:` cắn) · doctor exit 1 (marker assert cắn trên pre-save) · **seldoctor exit 1** (`span 4 != 0` — gate ĐỌC số liệu selection, không chỉ presence) | pattern T-A27 |
+| Gate 14 | 90 → **93 checks** (+3 block-match trên fixture bảng: `caretXY(block 1)` vào cell line, `caretXY(block 2)` = line SAU bảng — pi collision không leak vào caret work) | seam caretXY |
+| Gate 12 (regression) | số KHÔNG đổi: 16 dòng · 601.7 · 600.5 · 750,-250,220 · lhs 17.9 · RSS tree 282 MB ≤ 300 | caretXY đổi không đụng đường draw |
+| parity-view | **6/6 PASS exit 0** — maxdy 0.64/4.07/0.00/6.47/2.73/2.73, maxdx 47.00 đúng bảng §5.5 (layout.ts CÓ đụng — caretXY block-match + `line` index additive; draw path px-identical) | OQ-V01-1 |
+| cargo test | 38 shell (+4: range same-para/cross-para+refuse, verbs-replace, undo-restore-sel) + 12 crate, tuần tự rc=0 | verify FULL 19 ▸ steps exit 0 ×2 |
+
 ## 6. Rủi ro + mitigations
 
 | Rủi ro | Mitigation |

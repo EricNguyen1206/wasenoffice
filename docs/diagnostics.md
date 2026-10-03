@@ -8,6 +8,49 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-03 · T-A28: A4 slice #1 — selection kéo + arrows trên seam T-060 (Nano Light)
+
+- **Bằng chứng (5 commit: dd1a908 design → 9a1f923 rust → 04a0d7b ts+gate15 →
+  29244c8 C5 → 9ed3351 ponytail cuts):** gate 15 positive exit 0 (first-draw
+  36.0 ms / parse 8.1 ms · selection evidence span 1→4 · type-replace → save
+  2682 B / 1.6 ms · parse-back chứa `paragraphT28` · reopen 14.0 ms) +
+  **negative ×3 exit 1** (garbage · doctor · **seldoctor** — assert
+  `span == 0` cắn trên evidence thật, chứng minh gate đọc số liệu selection).
+  verify FULL exit 0 **19 ▸ steps** ×2; gate 12 số KHÔNG đổi (16 dòng · 601.7
+  · 600.5 · 750,-250,220 · lhs 17.9 · RSS tree 282 MB ≤ 300); gate 14
+  90 → **93 checks**; **parity-view 6/6 exit 0** px-identical bảng §5.5 V01
+  (layout.ts CÓ đụng — caretXY block-match, draw path không đổi); cargo test
+  38 shell (+4 range/verbs/undo-sel) + 12 crate tuần tự rc=0; clippy -D
+  warnings sạch.
+- **Thiết kế chốt (DD L01 §5.3):** `SelRange{anchor,focus}` unordered, ordering
+  `(para,run,offset)`; **`Caret.para` = BODY BLOCK index** (`Hit.block`) — fix
+  pi≠block aliasing: `pi` đếm table = 1 block nên paragraph top-level SAU bảng
+  có pi ≠ body index, mutation address `doc.body[para]` trúng sai block (walk
+  layout tái hiện) — editor.ts consume `h.block`, caretXY match `line.block`,
+  Rust không đổi (table-free: block == pi, byte-identical). Đụng cell → REFUSE
+  selection (không clamp — mutation đã refuse trên cùng identity). Mutation
+  range-aware: 4 verb mang `sel`, non-empty → `apply_delete_range` TRƯỚC verb
+  (same-para cross-run giữ props từng run; cross-para pPr ĐẦU thắng; ảnh chết
+  khi range phủ cuối text run; **range chứa Table refuse TOÀN BỘ** — chống
+  data loss); snapshot undo `(doc, caret, sel)` dùng caret/sel CỦA CMD.
+- **Gotchas phiên:** (1) caret sau redo = vị trí TRƯỚC undo (redo push capture
+  pre-undo `self.caret` — hành vi T-A27 giữ nguyên) → probe đầu dispatch
+  shift+ArrowRight chọn nhầm 4 ký tự tail; fix = shift+ArrowLeft ×4 chọn
+  `" two"` + assert `paragraphT28`. (2) bug span emitSel: cùng-run trả
+  `len − offset` thay vì khoảng cách — gate bắt qua số 14 vô lý. (3) WebKit
+  không constructing `offsetX/Y` trên synthetic MouseEvent → probe gọi thẳng
+  `mouseDownAt/mouseMoveAt/mouseUp` (phím vẫn dispatch KeyboardEvent thật qua
+  handler). (4) **thay đổi lạ trong working tree KHÔNG của phiên** (logo
+  `src/assets/logo.png` + icons + main.ts + 3 html — mtime 00:11–00:13, trước
+  commit đầu của phiên): đã inspect diff (rebrand UI) + báo user, KHÔNG đụng,
+  KHÔNG commit — mọi `git add` scoped từng file.
+- **Còn cho slice A4 kế (#2 theo DD §4):** IME composite tiếng Việt
+  (OQ-L01-3) · clipboard copy/cut/paste · select-all/double-click · blink ·
+  parity matrix từng lớp = criterion đóng rung A4.
+- **Trạng thái:** confirmed — bằng chứng trong DD L01 §5.3(h) + báo cáo phiên.
+
+---
+
 ## 2026-10-03 · T-060: A4 pre-slice cleanup (C3+C1+C2 review #5) — refactor thuần, hành vi không đổi
 
 - **4 commit**: `1298b02` C3 hit-seam · `e4d7a40` C1 render.ts · `5e874d0` C2 Rust shared ·
