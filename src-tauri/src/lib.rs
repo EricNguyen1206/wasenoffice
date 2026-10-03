@@ -14,6 +14,7 @@ mod bridge;
 mod formats;
 mod protocol;
 mod sidecar;
+mod viewer;
 
 use serde::Serialize;
 use std::sync::Arc;
@@ -241,7 +242,8 @@ pub fn run() {
             get_startup_document,
             get_engine_base,
             get_document_for_delivery,
-            frontend_log
+            frontend_log,
+            viewer::viewer_open
         ])
         .setup(|app| {
             // Engine-facing document URLs must be loopback HTTP (see filesrv docs).
@@ -272,6 +274,18 @@ pub fn run() {
                 }
                 _ => String::new(),
             };
+            // V01 quick-view slice (DD docs/design/viewer-a3/DD.md §3.1): env
+            // trigger opens the dedicated viewer entry — no shim, no engine
+            // iframe. The normal boot path below is untouched.
+            if std::env::var("NANO_OFFICE_QUICK_VIEW").is_ok_and(|v| !v.is_empty()) {
+                let win =
+                    WebviewWindowBuilder::new(app, "main", WebviewUrl::App("viewer.html".into()))
+                        .title("NanoOffice — Quick View")
+                        .inner_size(1000.0, 700.0)
+                        .build()?;
+                let _ = win;
+                return Ok(());
+            }
             let win = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
                 .title("NanoOffice")
                 .inner_size(1280.0, 800.0)
