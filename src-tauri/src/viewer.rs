@@ -204,9 +204,9 @@ pub struct QuickView {
     pub media_base: Option<String>,
 }
 
-/// Distinct run font families in document order (deduped). Shared with the
-/// Nano Light editor window (L01) — one home, no drift.
-pub(crate) fn families(doc: &RenderDoc) -> Vec<String> {
+/// Distinct run font families in document order (deduped) — feeds the
+/// shared open pipeline's OS/2 metric lookup.
+fn families(doc: &RenderDoc) -> Vec<String> {
     fn walk_blocks(blocks: &[RBlock], out: &mut Vec<String>) {
         for b in blocks {
             match b {

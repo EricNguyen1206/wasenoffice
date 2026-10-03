@@ -23,7 +23,7 @@ import {
 
 // V5 scroll ceiling: WebKit caps canvas dimensions at 16384 device px — at
 // dpr 2 that is 8192 logical px. Taller documents clip (pagination post-A3).
-export const MAX_CANVAS_H = 8192;
+const MAX_CANVAS_H = 8192;
 
 /** Image OPC parts in document order (deduped) — same walk as the shell's. */
 function imageParts(blocks: Block[], out: Set<string>): void {
@@ -83,7 +83,7 @@ export function columnWidth(page: { w: number | null } | null | undefined, vw: n
 
 /** Canvas height the scroll view needs: the laid-out bottom (+margin), never
  * smaller than the viewport, capped at the WebKit ceiling. */
-export function docHeight(bottom: number, vh: number): number {
+function docHeight(bottom: number, vh: number): number {
   return Math.min(Math.max(Math.ceil(bottom) + MARGIN, vh), MAX_CANVAS_H);
 }
 
