@@ -8,6 +8,39 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-03 · Review kiến trúc #3 (T-055) — post-A2, focus cản A3 viewer
+
+- **Phương pháp:** bộ đôi improve-codebase-architecture + ponytail-audit (codebase-design từ vựng),
+  hot-spot `git 9b1dde5..HEAD` (T-A23 parity + T-A24 adapter, 8 commits) + bề mặt A2 nguyên vẹn;
+  3 claim chịu lực kiểm chứng first-hand: (1) crate = in-process lib-dep của app
+  (`src-tauri/src/sidecar/mod.rs:248-251` gọi `nanooffice_ooxml::parse_docx_file` trực tiếp — viewer
+  không cần CLI/JSON) · (2) `ImageRef` không mang bytes (`crates/.../src/lib.rs:95-108` — "S1 reads
+  relationships only, image bytes are not touched") · (3) đường open duy nhất = delivery-base64
+  (`src-tauri/src/lib.rs:131-198` `get_document_for_delivery`, đọc toàn file delivery.js). Explore
+  subagent quét styles/document/allfonts/formats/CLI/write/corpus (prompt kèm mit-purity).
+- **Phát hiện chính (C1, observed — bug fidelity sống):** canonical path thay ảnh thật bằng
+  placeholder PNG 1×1 trên MỌI docx có ảnh qua adapter ON (parse bỏ bytes → write placeholder →
+  x2t convert canonical) — invisible với toàn bộ gates vì corpus chỉ có PNG 1×1 / không ảnh
+  (make_docx_full, make_docx_edge, engine-save-t011). T-A24 đã ghi "fidelity ceiling LOSSY" như
+  limitation; review nâng thành việc TRƯỚC A3 vì bytes-aw-model cũng là điều kiện render ảnh viewer.
+- **Cản A3 còn lại:** C2 model S1 thiếu dữ liệu render (w:rFonts không parse, w:br/w:tab bị bỏ ở
+  `document.rs:243` `Event::Empty(_) => {}`, Run bool 2-state vs StyleDef 3-state, không rStyle/
+  w:default/color/spacing/tblGrid/pgSz) · C3 điểm cắm viewer = command layer song song delivery
+  (không có Tauri command parse-only, không có đường serve `word/media/*` bytes) — **sidecar seam
+  KHÔNG cắm viewer** (viewer bỏ qua x2t/Editor.bin; thêm shape viewer vào converter = wrong-home) ·
+  C4 font metrics: allfonts.rs parse đủ OS/2 line metrics nhưng toàn pub(crate) + struct private,
+  không có hmtx (advance thật) — quyết định (a) accessor rẻ vs (b) hmtx thuộc DD T-A25.
+- **Ponytail (C5):** make_docx_edge.py:223-224 dead `out/print` (delete) · png_1x1/chunk lặp ×3
+  generator → common (−~30 dòng) · write.rs:170-188 branch header-image chưa có corpus phủ ·
+  parity-a2.sh + adapter + parse_alt_content = lean/evidence-driven, giữ.
+- **Land:** T-A26 (C1, urgent, độc lập T-A25) + T-A25 nạp deps review #3 (C2/C3/C4) + T-056 (C5,
+  trigger chạm fixtures kế) + T-055 đặt lại ⬜ (nhịp, lần kế post-A3). Report HTML tạm
+  `$TMPDIR/architecture-review-20261003-t055.html` (không vào repo). Không mâu thuẫn QĐ1–QĐ9;
+  không đề xuất lại T-A14..T-054.
+- **Trạng thái:** confirmed (verify.sh chạy cuối phiên — kết quả trong báo cáo).
+
+---
+
 ## 2026-10-03 · T-A24: A2/S4 — adapter crate vào đường runtime (open-side canonical → x2t) — rung A2 milestone
 
 - **Chốt chỗ cắm (Bước 1, trước khi code):** save-side KHÔNG thay được — save hôm nay là x2t

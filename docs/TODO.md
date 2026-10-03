@@ -15,15 +15,15 @@ type: queue
 
 ## Tình hình nhanh
 
-▶ Kế tiếp: **T-055 review kiến trúc #3 (post-A2)** rồi T-A25 (A3 mở màn — **viewer Rust đọc-only** "quick view" không boot sdkjs, seed khi đóng rung A2 T-A24; DD sinh khi mở màn)
+▶ Kế tiếp: **T-A26 (fix canonical LOSSY media bytes — review #3 C1)** rồi **T-A25 (A3 mở màn — viewer Rust đọc-only "quick view" không boot sdkjs; DD sinh khi mở màn, mang deps review #3)**
 
 | Phase | Tổng | ✅ | 🟨 | ⏸ | ⬜ |
 |---|---|---|---|---|---|
 | PH-0 — ĐÃ ĐÓNG 27.09  |  6  | 6  | 0  | 0  | 0  |
 | PH-1  |  10 | 7  | 0  | 0  | 3  |
 | PH-4  |  3  | 0  | 0  | 0  | 3  |
-| Track A (QĐ9) |  11 | 10 | 0  | 0  | 1  |
-| META  | 12  | 8  | 0  | 0  | 4  |
+| Track A (QĐ9) |  12 | 10 | 0  | 0  | 2  |
+| META  | 13  | 8  | 0  | 0  | 5  |
 
 ## PH-0 — Spike editor + render DOCX (go/no-go) — ĐÃ ĐÓNG 27.09 · verdict GO WITH CAVEAT
 
@@ -57,7 +57,8 @@ type: queue
 > Rung hiện tại: **A3 — Viewer Rust** (H3; A1 ĐÓNG 02.10, A2 ĐÓNG 03.10). Task Track A bắt buộc đọc
 > `harness/rules/clean-room.md` trước khi làm; roadmap đầy đủ: `docs/vision.md` QĐ9.
 
-- [ ] ⬜ T-A25 · A3 mở màn — **viewer Rust đọc-only** ("quick view" không boot sdkjs, thang QĐ9): đọc model từ crate A2 + render đọc-only; XONG khi mở <500 ms + RAM <150 MB + parity render vs oracle; DD riêng (mã nhóm mới) sinh khi mở màn · ← T-A24
+- [ ] ⬜ T-A26 · Fix canonical LOSSY media bytes + mở đường ảnh cho A3 (**review #3 C1 — urgent, độc lập T-A25**): model mang media part bytes (hoặc hash+lazy) → writer nhúng bytes gốc thay placeholder 1×1 — hiện mọi docx có ảnh qua adapter ON bị thay ảnh thật (invisible với gates: corpus toàn PNG 1×1) · corpus + fixture ảnh thật đa kích thước + edge-header-image (C5 coverage hole write.rs:170-188) · parity so hash bytes, giữ invariant m-orig==m-crate · ← T-A24 · bằng chứng: diagnostics 03.10 (review #3)
+- [ ] ⬜ T-A25 · A3 mở màn — **viewer Rust đọc-only** ("quick view" không boot sdkjs, thang QĐ9): đọc model từ crate A2 + render đọc-only; XONG khi mở <500 ms + RAM <150 MB + parity render vs oracle; DD riêng (mã nhóm mới) sinh khi mở màn · ← T-A24 · **deps review #3 (03.10, diagnostics):** C2 mở model render-side theo spec đúng nhu cầu viewer (w:rFonts §17.3.2.26 foundational, w:br/w:tab đang bị bỏ document.rs:243, color/spacing/ind/tblGrid/pgSz cơ bản, Run bold/italic lên 3-state, rStyle + w:default flag) giữ invariant parity · C3 điểm cắm viewer = command layer song song delivery (Tauri command parse-only + serve word/media/* bytes; KHÔNG đụng sidecar seam — viewer bỏ qua x2t/Editor.bin; delivery.js engine-only giữ nguyên) · C4 chốt trong DD: font-metrics (a) accessor OS/2 line-height rẻ — allfonts.rs có metrics nhưng pub(crate)+private, hay (b) parser hmtx advance thật
 
 - [x] ✅ T-A20 · A2 mở màn DESIGN-FIRST (ponytail ULTRA): probe 2 phương án bằng số liệu — **P1** (Editor.bin): 1962 B docx → 1586 B Editor.bin **deterministic**, payload 926 B không nén, TLV `[u8 tag][u32 len]` 2 chuỗi lồng verify byte-exact (+5/mức), style resolve trong binary, preamble 42 B chưa decode, delta records = format thứ 2 (T-010) → ước lượng **tháng** + dead code sau A4 · **P2** (OOXML core): 100% spec ECMA-376, fixture 21 element types (5 parts, 2.5 KB), docx cơ bản ~85 element types → ước lượng **tuần** → **CHỐT P2** (không 50/50: P1 chỉ rút 113 MB x2t trong khi sdkjs 313 MB vẫn ship; P2 = nền bắt buộc A3/A4, ship mọi rung) · crate slice `src-tauri/crates/nanooffice-ooxml` (parse docx → model tối giản + CLI JSON; 3 test; deps quick-xml/zip qua license gate; workspace member + verify.sh cargo `--workspace`) · DD mã **K01** `docs/design/converter-a2/DD.md` · verify.sh 16 gates exit 0 · 02.10 · 0cc770a · diagnostics 02.10 + reference.map § Editor.bin
 - [x] ✅ T-A21 · A2 **S1 — docx read đầy đủ** (ponytail ULTRA chuỗi A2): crate `nanooffice-ooxml` từ model tối giản lên read đầy đủ — **OPC đúng chuẩn** (Content_Types + rels, part chính tra cứu `_rels/.rels` không hardcode, refuse content-type sai) + recursive-descent parser 1 hàm/construct + **table** (`w:tbl` §17.4.38/tr/tc, cell lồng) + **list** (`w:numPr` raw + `numbering.xml` resolve numId→abstractNum→lvl: numFmt/lvlText) + **image relationship-only** (`a:blip r:embed` → part, refuse rel sai loại/external, `wp:extent` EMU) + **styles.xml resolve** basedOn chain (con thắng cha, cycle/dangling → Err) + **headers/footers** (rel type, root check w:hdr/w:ftr, rels riêng từng part); refuse-unknown thay parse-sai; corpus mới `make_docx_full.py` (10 parts: style chain + run override + table 2×2 + 3 list + PNG 1×1 r:embed + hdr/ftr + tiếng Việt); fuzz 500 vòng seed 42 (LCG tự viết, XML+zip mutation) 0 panic; spec-ref verify từng số qua bảng Remarks open-xml-docs (mirror ISO/IEC 29500-1 1st ed) — sửa 2 comment cũ sai (w:i §17.3.2.16, w:t §17.3.3.31); CLI JSON xuất đủ model mới · cargo test --workspace 23 shell + 5 crate exit 0 · verify.sh FULL exit 0 · 02.10 · diagnostics 02.10
@@ -74,7 +75,8 @@ type: queue
 
 ## META — harness / docs / skills
 
-- [ ] ⬜ T-055 · **[ĐỊNH KỲ] Review kiến trúc** (`improve-codebase-architecture` + `ponytail-audit` ghép cặp) — chạy SAU MỖI RUNG Track A đóng / phase PH đóng (nhịp đã chứng minh: #1 post-PH-0 27.09, #2 post-A1 02.10); lần kế: **post-A2** (03.10, trước khi mở A3); sau mỗi lần chạy: candidates land thành task + task này ĐẶT LẠI ⬜ (vĩnh viễn kiểu nhịp, không sink ✅) · user chỉ thị 03.10
+- [ ] ⬜ T-056 · Ponytail cuts fixtures generator (review #3 C5): bỏ dead `out=argv…print` make_docx_edge.py:223-224 · png_1x1()+chunk() lặp ×3 generator → `docxgen_common.py` · **trigger: lần chạm fixtures kế (không mở phiên riêng)** · 03.10
+- [ ] ⬜ T-055 · **[ĐỊNH KỲ] Review kiến trúc** (`improve-codebase-architecture` + `ponytail-audit` ghép cặp) — chạy SAU MỖI RUNG Track A đóng / phase PH đóng (nhịp: #1 post-PH-0 27.09 · #2 post-A1 02.10 · **#3 post-A2 03.10 đã chạy** — candidates: T-A26 + deps T-A25 + T-056, report HTML tạm + diagnostics 03.10); lần kế: **post-A3** (trước khi mở A4); sau mỗi lần chạy: candidates land thành task + task này ĐẶT LẠI ⬜ (vĩnh viễn kiểu nhịp, không sink ✅) · user chỉ thị 03.10
 - [ ] ⬜ T-020 · Add 2 skill theo audit 26.09: `systematic-debugging` (superpowers) + `handoff` (mattpocock) qua cổng acceptance · **chờ user duyệt**
 - [ ] ⬜ T-021 · CI + gates số liệu size/RAM/startup · trigger: PH-4
 - [ ] ⬜ T-034 · Bật GitNexus index `upstream/sdkjs` phục vụ reverse font pipeline (trigger đã chạm: bridge first wave xong) · ← T-001 · skill: gitnexus-cli
