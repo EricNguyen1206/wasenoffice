@@ -82,6 +82,7 @@ async function mountEditor(doc: OpenedDoc): Promise<void> {
   if (format.isForm) params.set('isForm', format.isForm);
   const frame = document.createElement('iframe');
   frame.id = 'editor-frame';
+  frame.className = 'absolute inset-0 h-full w-full border-0';
   frame.src = `${boot}?${params.toString()}`;
   frame.allow = 'clipboard-read; clipboard-write';
   document.getElementById('editor-root')!.replaceChildren(frame);
@@ -107,16 +108,28 @@ function logLine(text: string): void {
 
 const log: HTMLDivElement = document.createElement('div');
 log.id = 'ph0-log';
+// was the `#ph0-log` rule (styles.css pre-T-058); font-mono's first family
+// ui-monospace renders the same face the old 2-family stack picked
+log.className = 'max-h-[4.5em] overflow-auto px-4 font-mono text-[0.72em] opacity-75';
+
+// Shared control skin (input + button) — one home; states/differences append.
+const CONTROL_SKIN =
+  'rounded-panel border border-transparent bg-panel px-[1.2em] py-[0.6em] text-[1em] font-medium font-[family-name:inherit] text-fg shadow-[0_2px_2px_rgba(0,0,0,0.2)] outline-none transition-[border-color] duration-[250ms] ease-[ease] dark:text-white';
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-  <header>
-    <h1>NanoOffice <small>PH-0 spike</small></h1>
-    <form id="open-form">
-      <input id="doc-path" type="text" placeholder="/absolute/path/to/document (.docx .xlsx .pptx .pdf)" />
-      <button type="submit">Open</button>
+  <header class="flex items-center gap-3 px-4 py-2">
+    <h1 class="m-0 text-[1.1em]">NanoOffice <small class="font-normal opacity-60">PH-0 spike</small></h1>
+    <form id="open-form" class="flex flex-1 gap-2">
+      <input
+        id="doc-path"
+        type="text"
+        placeholder="/absolute/path/to/document (.docx .xlsx .pptx .pdf)"
+        class="flex-1 ${CONTROL_SKIN}"
+      />
+      <button type="submit" class="cursor-pointer hover:border-edge active:border-edge active:bg-panel-active ${CONTROL_SKIN}">Open</button>
     </form>
   </header>
-  <main id="editor-root"></main>
+  <main id="editor-root" class="relative flex-1"></main>
 `;
 document.querySelector<HTMLDivElement>('#app')!.appendChild(log);
 

@@ -8,6 +8,39 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-03 · T-058: Tailwind v4 cho own-UI — 3 bẫy pixel-level (refactor style-infra, visual không đổi)
+
+- **Bối cảnh:** T-058 migrate start page + viewer chrome sang Tailwind v4 CSS-first (`@tailwindcss/vite`,
+  KHÔNG config file) trước T-V5; ràng buộc = visual pixel-identical. Bằng chứng: screenshot window
+  trước/sau (boot nền rule 6b; `screencapture -l<CGWindowID>` chụp được cả window off-Space) + diff
+  RGBA bằng script Swift CoreGraphics (/tmp tool, không dep repo).
+- **Bẫy 1 — preflight phải loại:** Tailwind v4 default reset toàn cục sẽ đổi 2 thứ UI đang dựa vào:
+  (a) body margin 8px UA (styles.css cũ không reset — page hiện có khung 8px), (b) box-sizing —
+  preflight border-box làm `input{flex:1}` hẹp ~padding so với content-box hiện tại. Import
+  `theme.css` + `utilities.css` có layer, KHÔNG import preflight.
+- **Bẫy 2 — canvas `fillText` theo font-smoothing của document (bẫy lớn, gate pixel bắt được):**
+  dùng chung styles.css cho 2 surface làm block `:root` typography (`-webkit-font-smoothing:
+  antialiased`, `text-rendering`, …) rơi vào viewer.html — chrome inline cũ của viewer KHÔNG có
+  chúng. Layout log GIỐNG HỆT từng số (16 dòng, lhs 17.9, baselines, inked 27392) nhưng screenshot
+  lệch 100 310 px = contour anti-aliasing từng glyph, không phải dịch vị trí. Fix: scope typography
+  vào `#app` (start page) thay `:root`; viewer về UA default → **0/2 800 000 px**. Bài học: CSS
+  "vô hại" trên DOM thường đổi raster của canvas — mọi style dùng chung phải scope khỏi surface
+  canvas.
+- **Bẫy 3 — Tailwind auto-detect crawl cả `src/shim/*.js`:** sinh candidate rác (`m-1391`,
+  `text-slate-900`, …) — CSS 20.74 kB. Clamp `@import … source(none)` + `@source` đúng 3 file
+  own-UI (index.html, viewer.html, main.ts) → 5.33 kB, deterministic.
+- **Ghi chú cấu trúc:** `@theme static` giữ slot chưa có ai dùng (`--color-accent`) greppable trong
+  dist (contract A5); dark mode = 1 token flip trong `@layer base` — layer order khai
+  `theme, base, utilities` nên override `:root` beat emission `@layer theme`, utility tham chiếu
+  `var(--slot)` tự theo; titlebar text AA lệch giữa các lần chụp = window đặt khác vị trí/display
+  (OS render) — so sánh vùng content (y ≥ 104 @2x); `font-mono` (ui-monospace đứng đầu) render
+  cùng mặt chữ với stack cũ `ui-monospace, monospace`.
+- **Trạng thái:** confirmed — verify FULL exit 0 (gates 9a-d/10/11/12 GREEN, gate 12 cùng số
+  layout), pnpm build exit 0 ×2 entry, 8 token slot + 46 utility class grep dist, CSS byte-identical
+  sau ponytail-review cuts.
+
+---
+
 ## 2026-10-03 · T-V4: A3/V4 — parity render viewer ↔ sdkjs qua oracle CDP (cursor-probe walk)
 
 - **Bối cảnh:** slice V4 viewer (A3) — chứng minh viewer render **parity** với engine sdkjs

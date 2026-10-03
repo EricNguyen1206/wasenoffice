@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite';
+import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
+  plugins: [tailwindcss()],
   // tauri.conf.json build.devUrl expects this exact port
   server: {
     port: 1420,
