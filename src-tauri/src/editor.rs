@@ -301,8 +301,9 @@ pub fn nano_light_reopen(
 }
 
 /// The Nano Light payload — same shape as the viewer's `QuickView` (the two
-/// frontends consume one contract), plus the caret and the file name for the
-/// window header.
+/// frontends consume one contract), plus the caret, the file name for the
+/// window header and the refuse-warn list (T-A31 — constructs the save will
+/// drop, DD L01 §5.6d).
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NanoLightDoc {
@@ -313,6 +314,7 @@ pub struct NanoLightDoc {
     pub media_base: Option<String>,
     pub caret: Caret,
     pub name: String,
+    pub warnings: Vec<String>,
 }
 
 #[tauri::command]
@@ -338,6 +340,12 @@ pub fn nano_light_open(
         &path,
         "nano light",
     )?;
+    // Refuse-warn (OQ-L01-2 closed: open + warn, never refuse — D1 keeps the
+    // engine as the advanced mode for everything the model drops on save).
+    let warnings = nanooffice_ooxml::detect_save_losses(&p.bytes);
+    if !warnings.is_empty() {
+        log::warn!("nano light warn: save will drop: {}", warnings.join(", "));
+    }
     let name = std::path::Path::new(&path)
         .file_name()
         .map(|f| f.to_string_lossy().into_owned())
@@ -377,6 +385,7 @@ pub fn nano_light_open(
         media_base: p.media_base,
         caret,
         name,
+        warnings,
     })
 }
 
@@ -1608,7 +1617,152 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    // ── T-A28 §5.3c: range-aware mutations ────────────────────────────────
+    // ── T-A31 §5.6: hyperlink + section ride the edits ────────────────────
+
+    fn link_run(text: &str) -> Run {
+        Run {
+            text: text.into(),
+            link: Some(nanooffice_ooxml::Hyperlink {
+                rel_id: Some("rIdL".into()),
+                anchor: None,
+                target: Some("https://example.com/nl".into()),
+                external: true,
+            }),
+            ..Default::default()
+        }
+    }
+
+    /// Typing INSIDE a hyperlink run keeps the group on the grown run; enter
+    /// splits the link to both halves and leaves the section mark on the HEAD
+    /// paragraph; undo restores the model; the crate round-trip keeps the
+    /// link (rel + target) and the section (pgSz + pgMar).
+    #[test]
+    fn link_and_section_ride_edits_and_roundtrip() {
+        let original = document(vec![
+            Block::Paragraph(Paragraph {
+                runs: vec![
+                    Run {
+                        text: "see ".into(),
+                        ..Default::default()
+                    },
+                    link_run("the link"),
+                ],
+                ..Default::default()
+            }),
+            Block::Paragraph(Paragraph {
+                runs: vec![Run {
+                    text: "sect para".into(),
+                    ..Default::default()
+                }],
+                sect: Some(Box::new(nanooffice_ooxml::Section {
+                    page: Some(nanooffice_ooxml::Page {
+                        w: Some(11906),
+                        ..Default::default()
+                    }),
+                    mar: Some(nanooffice_ooxml::PageMar {
+                        top: Some(1134),
+                        ..Default::default()
+                    }),
+                })),
+                ..Default::default()
+            }),
+        ]);
+        let mut s = session(original.clone());
+        let c = s
+            .apply(EditCmd::Insert {
+                text: "X".into(),
+                caret: Caret {
+                    para: 0,
+                    run: 1,
+                    offset: 4,
+                    cell: None,
+                    cell_para: None,
+                },
+                sel: None,
+            })
+            .unwrap();
+        assert_eq!(c.offset, 5);
+        let p0 = match &s.doc.body[0] {
+            Block::Paragraph(p) => p,
+            _ => unreachable!(),
+        };
+        assert_eq!(p0.runs[1].text, "the Xlink");
+        assert!(
+            p0.runs[1].link.is_some(),
+            "typed into the link run — link stays"
+        );
+
+        // enter mid-link: both halves carry the link, the section mark does
+        // NOT move to the new paragraph
+        let c = s
+            .apply(EditCmd::Enter {
+                caret: Caret {
+                    para: 0,
+                    run: 1,
+                    offset: 5,
+                    cell: None,
+                    cell_para: None,
+                },
+                sel: None,
+            })
+            .unwrap();
+        assert_eq!((c.para, c.run, c.offset), (1, 0, 0));
+        let head = match &s.doc.body[0] {
+            Block::Paragraph(p) => p,
+            _ => unreachable!(),
+        };
+        let tail = match &s.doc.body[1] {
+            Block::Paragraph(p) => p,
+            _ => unreachable!(),
+        };
+        assert_eq!(
+            head.runs[1].link, tail.runs[0].link,
+            "link rides both halves"
+        );
+        assert!(
+            head.sect.is_none(),
+            "the split head never carried the section"
+        );
+        assert!(
+            tail.sect.is_none(),
+            "a split must not duplicate the section break"
+        );
+        assert!(matches!(&s.doc.body[2], Block::Paragraph(p) if p.sect.is_some()));
+
+        // undo → the exact pre-edit model
+        s.apply(EditCmd::Undo).unwrap();
+        s.apply(EditCmd::Undo).unwrap();
+        assert_eq!(s.doc, original, "undo restores link + section intact");
+
+        // save through the REAL crate: link (rel + target) + section survive
+        let dir = std::env::temp_dir().join("nanooffice-test-nl-fidelity");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("fidelity.docx");
+        let bytes = nanooffice_ooxml::write_docx(&s.doc, None).unwrap();
+        std::fs::write(&path, &bytes).unwrap();
+        s.media_src = bytes;
+        s.path = path.clone();
+        save_session(&mut s).unwrap();
+        let back = nanooffice_ooxml::parse_docx_file(&path).unwrap();
+        let bp = match &back.body[0] {
+            Block::Paragraph(p) => p,
+            _ => unreachable!(),
+        };
+        assert_eq!(
+            bp.runs[1].link.as_ref().unwrap().target.as_deref(),
+            Some("https://example.com/nl")
+        );
+        let bs = match &back.body[1] {
+            Block::Paragraph(p) => p,
+            _ => unreachable!(),
+        };
+        assert_eq!(
+            bs.sect.as_ref().unwrap().mar.as_ref().unwrap().top,
+            Some(1134)
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     fn img(rel: &str) -> ImageRef {
         ImageRef {

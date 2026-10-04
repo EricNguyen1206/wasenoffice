@@ -42,6 +42,10 @@
 #            selection anchor/focus/span, cùng consumer gate 15)
 #            T-A29 thêm `nano light composition:` + `nano light clipboard:`
 #            (ADDITIVE — evidence IME compose + clipboard round, cùng consumer)
+#            T-A30 thêm `nano light cell:` (ADDITIVE — evidence edit trong
+#            cell, cùng consumer). T-A31 thêm `nano light warn:` (ADDITIVE —
+#            refuse-warn mất-khi-save, emit src-tauri/src/editor.rs
+#            nano_light_open, cùng consumer)
 set -u
 
 SMOKE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -78,6 +82,7 @@ SMOKE_RE_NL_SEL='nano light selection:'
 SMOKE_RE_NL_COMPOSE='nano light composition:'
 SMOKE_RE_NL_CLIP='nano light clipboard:'
 SMOKE_RE_NL_CELL='nano light cell:'
+SMOKE_RE_NL_WARN='nano light warn:'
 SMOKE_RE_NL_FAILED='nano light failed:'
 
 # ── Trạng thái dùng chung (consumer đọc, không ghi trực tiếp khi không cần) ──

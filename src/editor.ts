@@ -83,6 +83,8 @@ interface NanoLightDoc {
   mediaBase: string | null;
   caret: Caret;
   name: string;
+  /** T-A31 refuse-warn: constructs the save will drop (DD L01 §5.6d). */
+  warnings: string[];
 }
 
 interface EditOutcome {
@@ -116,6 +118,14 @@ async function main(): Promise<void> {
   try {
     const nl = await invoke<NanoLightDoc>('nano_light_open');
     nameEl.textContent = nl.name;
+    if (nl.warnings.length) {
+      // dynamic banner — editor.html is untouched (user-dirty rebrand)
+      const banner = document.createElement('div');
+      banner.textContent = `Nano Light giữ được văn bản cơ bản; sẽ MẤT khi save: ${nl.warnings.join(', ')}. Dùng chế độ nâng cao để giữ đủ.`;
+      banner.style.cssText =
+        'position:fixed;top:0;left:0;right:0;z-index:9;padding:6px 12px;background:#b45309;color:#fff;font:13px system-ui';
+      document.body.appendChild(banner);
+    }
     let body = nl.doc.body;
     let caret = nl.caret;
     let sel: SelRange | null = null;
@@ -803,6 +813,14 @@ async function main(): Promise<void> {
           await edit({ kind: 'insert', text: 'T30C', caret, sel: null });
           await edit({ kind: 'enter', caret, sel: null });
           await edit({ kind: 'insert', text: 'T30C2', caret, sel: null });
+        }
+        // T-A31 (§5.6f): type INSIDE the hyperlink text — the link group must
+        // survive the save with its rel + target + (grown) run text
+        const linkLine = model.lines.find((l) => l.items.some((it) => it.text.includes('fidelity')));
+        const linkItem = linkLine?.items.find((it) => it.text.includes('fidelity'));
+        if (linkLine && linkItem) {
+          const h = hitAt(linkItem.x + linkItem.w / 2, linkLine.baseline);
+          if (h) await edit({ kind: 'insert', text: 'T31LINK', caret: h, sel: null });
         }
         await save();
         await invoke('nano_light_reopen');

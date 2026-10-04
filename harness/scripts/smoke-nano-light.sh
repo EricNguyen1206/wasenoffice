@@ -32,6 +32,15 @@
 #      paragraph with T30P, typing+enter inside cell A yields 2 paragraphs —
 #      the crate parse-back proves cell text changed while the other cell and
 #      the table structure stay intact; `nano light cell:` evidence exists
+#  11. SAVE-FIDELITY round (T-A31, DD L01 §5.6): the fixture carries an
+#      external+internal hyperlink, a mid-document sectPr (pgSz+pgMar) and
+#      settings/theme/docProps parts; the probe types INSIDE the link text —
+#      the parse-back proves the link group survives (rel + target + runs),
+#      the section keeps pgSz+pgMar, settings/theme/docProps are byte-exact
+#      vs the pre-save snapshot, the saved rels carry the hyperlink with
+#      TargetMode="External", and NO `nano light warn:` fired on the clean
+#      fixture; positive asserts + NO warnings — the lossy-construct warning
+#      path is proven by the warndoor negative
 #   and no `nano light failed:` anywhere.
 # LOG CONTRACT: the `nano light` lines are frozen constants SMOKE_RE_NL_* in
 # harness/scripts/smoke-lib.sh — change in the SAME commit as the emitting
@@ -66,6 +75,15 @@
 #       hold 1 paragraph — contradicts the real enter-in-cell result (2) →
 #       exit 1 (proves the gate READS the cell structure from the parse-back
 #       — T-A30).
+#   NANO_LIGHT_NEGATIVE=linkdoctor harness/scripts/smoke-nano-light.sh
+#     → full positive run, but the hyperlink assert requires the link target
+#       'WRONG-TARGET' — contradicts the real preserved target → exit 1
+#       (proves the gate READS the link from the parse-back — T-A31).
+#   NANO_LIGHT_NEGATIVE=warndoor harness/scripts/smoke-nano-light.sh
+#     → fixture with a tracked-changes wrapper; the run completes, but the
+#       warn assert requires warnings naming 'hyperlinks' — contradicts the
+#       real 'tracked changes' warning → exit 1 (proves the gate READS the
+#       warn content AND detect fired on the real open path — T-A31).
 set -u
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -86,8 +104,12 @@ LOG="$(mktemp /tmp/nanooffice-smoke-nanolight-XXXXXX)"
 if [ "$NEGATIVE" = "garbage" ]; then
   printf 'not a docx package' > "$FIXTURE"
   echo "smoke: NEGATIVE proof (garbage) — expecting 'nano light failed:' to bite"
+elif [ "$NEGATIVE" = "warndoor" ]; then
+  python3 "$ROOT/harness/fixtures/make_docx_layout.py" "$FIXTURE" table fidelity tracked >/dev/null || {
+    echo "smoke: cannot generate fixture"; exit 1;
+  }
 else
-  python3 "$ROOT/harness/fixtures/make_docx_layout.py" "$FIXTURE" table >/dev/null || {
+  python3 "$ROOT/harness/fixtures/make_docx_layout.py" "$FIXTURE" table fidelity >/dev/null || {
     echo "smoke: cannot generate fixture"; exit 1;
   }
 fi
@@ -238,6 +260,40 @@ cell_evs = re.findall(r"nano light cell: op=(\S+) row=(\d+) col=(\d+) para=(\d+)
 need(len(cell_evs) >= 3, f"expected ≥3 `nano light cell:` evidence lines, got {cell_evs}")
 need(any(c[2] == "1" for c in cell_evs), f"no cell evidence for cell B (col=1) — {cell_evs}")
 
+# (11) T-A31 save-fidelity (DD L01 §5.6): the probe typed INSIDE the link
+# text; the parse-back must carry the hyperlink group (target + anchor +
+# grown run), the mid-document sectPr (pgSz+pgMar), and NO warn on the
+# clean fixture (the lossy-construct warning path is the warndoor negative).
+warns = re.findall(r"nano light warn: (.*)", "\n".join(lines))
+if negative == "warndoor":
+    need(warns and any("hyperlinks" in w for w in warns),
+         f"warndoor: warnings {warns} must name 'hyperlinks' — the assert must bite here (real: tracked changes)")
+else:
+    need(not warns, f"clean fidelity fixture must not warn, got {warns}")
+
+def walk_paras(blocks):
+    for b in blocks:
+        if "Paragraph" in b:
+            yield b["Paragraph"]
+        elif "Table" in b:
+            for row in b["Table"]["rows"]:
+                for cell in row:
+                    yield from walk_paras(cell["blocks"])
+
+link_runs = [r for p in walk_paras(mj["body"]) for r in p["runs"] if r.get("link")]
+ext = [r for r in link_runs if r["link"].get("target") == "https://example.com/nanooffice-fidelity"]
+if negative == "linkdoctor":
+    need(bool(ext) and all(r["link"].get("target") == "WRONG-TARGET" for r in ext),
+         f"linkdoctor: the real link target survived on {len(ext)} run(s) — the assert must bite here")
+else:
+    need(ext and any("T31LINK" in r["text"] for r in ext),
+         f"the external hyperlink must survive with the probe's insert inside it (link runs: {[(r['text'], r['link']) for r in link_runs]})")
+    need(any(r["link"].get("anchor") == "sect-anchor" for r in link_runs),
+         "the internal-anchor hyperlink must survive the save")
+    sects = [p["sect"] for p in walk_paras(mj["body"]) if p.get("sect")]
+    need(any(s["page"]["w"] == 11906 and s["mar"]["top"] == 1134 and s["mar"]["header"] == 720 for s in sects),
+         f"the mid-document sectPr must keep pgSz+pgMar through the save, got {sects}")
+
 # (5) media byte-exact vs the pre-save snapshot (per part sha256)
 def media_shas(path):
     with zipfile.ZipFile(path) as z:
@@ -250,6 +306,20 @@ def media_shas(path):
 before, after = media_shas(snapshot), media_shas(fixture)
 need(before, "snapshot carries no media parts (fixture regression?)")
 need(before == after, f"media parts changed on save: {sorted(set(before.items()) ^ set(after.items()))[:4]}")
+
+# passthrough parts byte-exact (T-A31) + the hyperlink rel in the saved rels
+def fidelity_shas(path):
+    names = ["word/settings.xml", "word/theme/theme1.xml", "docProps/core.xml", "docProps/app.xml"]
+    with zipfile.ZipFile(path) as z:
+        return {n: hashlib.sha256(z.read(n)).hexdigest() for n in names}
+
+need(fidelity_shas(snapshot) == fidelity_shas(fixture),
+     f"settings/theme/docProps changed on save: "
+     f"{sorted(set(fidelity_shas(snapshot).items()) ^ set(fidelity_shas(fixture).items()))[:4]}")
+if negative != "doctor":
+    saved_rels = zipfile.ZipFile(fixture).read("word/_rels/document.xml.rels").decode()
+    need('TargetMode="External"' in saved_rels and "nanooffice-fidelity" in saved_rels,
+         "the saved package must keep the hyperlink rel with TargetMode External")
 
 # (6) REOPEN: the LAST `nano light: opened` after the `nano light saved:`
 # line is the second window; an evidence JSON AFTER it must carry the marker
@@ -275,6 +345,8 @@ need(
 print(
     f"NL OK first-draw={ms}ms edits={len(edits)} sel-span={min(spans)}..{max(spans)} "
     f"compose={compose_ends[-1]!r} clip-ops={len(clips)} media={len(after)}B-exact "
+    f"link={'linkdoctor' if negative == 'linkdoctor' else 'preserved'} sect=yes "
+    f"passthrough=byte-exact warn={warns} "
     f"reopen-evidence-marker=yes (parse-back via crate CLI)"
 )
 PY
@@ -286,7 +358,7 @@ PY
 }
 
 if smoke_poll "$TIMEOUT" nano_light_signals "Nano Light edit round-trip evidence"; then
-  echo "smoke: ✓ first-draw < ${MAX_MS} ms · ✓ edit chain (insert/backspace/delete/enter/undo/redo) · ✓ selection span ≥ ${MIN_SPAN} + Cmd-A cross-para · ✓ dblclick word span 4 + triple-click paragraph · ✓ composition commits '${COMPOSE}' (1 undo unit) · ✓ clipboard copy→paste→copy-all round · ✓ single-cell round (cell text changed, other cell + structure intact) · ✓ type-replace → save (write_docx + atomic replace) · ✓ parse-back contains marker + 'paragraph${REPL}' + '${COMPOSE}' + paste result + T30 cell round · ✓ media byte-exact · ✓ reopen renders the edit"
+  echo "smoke: ✓ first-draw < ${MAX_MS} ms · ✓ edit chain (insert/backspace/delete/enter/undo/redo) · ✓ selection span ≥ ${MIN_SPAN} + Cmd-A cross-para · ✓ dblclick word span 4 + triple-click paragraph · ✓ composition commits '${COMPOSE}' (1 undo unit) · ✓ clipboard copy→paste→copy-all round · ✓ single-cell round (cell text changed, other cell + structure intact) · ✓ type-replace → save (write_docx + atomic replace) · ✓ parse-back contains marker + 'paragraph${REPL}' + '${COMPOSE}' + paste result + T30 cell round · ✓ hyperlink (rel+target+runs, insert inside) + mid sectPr + settings/theme/docProps byte-exact · ✓ media byte-exact · ✓ reopen renders the edit"
   grep -m1 "$SMOKE_RE_NL_FIRST_DRAW" "$LOG" | sed 's/^/smoke:   /' | cut -c1-160
   grep -m1 "$SMOKE_RE_NL_SEL" "$LOG" | sed 's/^/smoke:   /' | cut -c1-160
   grep -m1 "$SMOKE_RE_NL_COMPOSE" "$LOG" | sed 's/^/smoke:   /' | cut -c1-160
