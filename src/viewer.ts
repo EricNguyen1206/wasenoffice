@@ -11,9 +11,11 @@
 import {
   canvasMeasurer,
   columnWidth,
+  drawFatal,
   drawModel,
+  layoutMetricLine,
   loadMedia,
-  mediaInk,
+  mediaEvidenceLine,
   resizeRelayout,
   toEvidence,
 } from './viewer/render';
@@ -70,12 +72,10 @@ async function main(): Promise<void> {
     }
     const msg = `viewer first-draw ${ms.toFixed(1)} ms (parse ${qv.parseMs.toFixed(1)} ms, body blocks ${qv.doc.body.length}, inked ${inked}, canvas ${docH}px)`;
     await invoke('frontend_log', { level: 'info', message: msg });
-    const m = model.metrics;
-    const baselines = model.lines.slice(0, 40).map((l) => l.baseline.toFixed(1)).join(',');
-    const lhs = model.lines.slice(0, 40).map((l) => l.lh.toFixed(1)).join(',');
     // ADDITIVE log contract with harness/scripts/smoke-quick-view.sh (gate 12):
     // the gate parses `viewer layout:` — change both in the SAME commit.
-    const layout = `viewer layout: lines=${model.lines.length} colw=${colW.toFixed(1)} maxw=${model.maxw.toFixed(1)} metrics=${m ? `${m[0]},${m[1]},${m[2]}` : 'none'} lhs=${lhs} baselines=${baselines}`;
+    // Suffix built by the shared layoutMetricLine (review #6 C2 — byte-identical).
+    const layout = `viewer layout: ${layoutMetricLine(model, colW)}`;
     await invoke('frontend_log', { level: 'info', message: layout });
     // ADDITIVE log contract with harness/scripts/parity-view.sh (T-V4):
     // the parity harness parses `viewer evidence:` (one JSON line) — change
@@ -91,7 +91,7 @@ async function main(): Promise<void> {
     for (const media of model.media) {
       await invoke('frontend_log', {
         level: 'info',
-        message: `viewer media: part=${media.part} emu=${media.emu[0]}x${media.emu[1]} drawn=${media.w.toFixed(1)}x${media.h.toFixed(1)} at=${media.x.toFixed(1)},${media.y.toFixed(1)} ink=${mediaInk(ctx, media, dpr)}`,
+        message: `viewer media: ${mediaEvidenceLine(media, ctx, dpr)}`,
       });
     }
     // T-V7 gate-12 probe: round-trip every text line through hitTest (mid →
@@ -129,13 +129,7 @@ async function main(): Promise<void> {
     }
     resizeRelayout(() => render());
   } catch (e) {
-    cv.width = innerWidth * dpr;
-    cv.height = innerHeight * dpr;
-    cv.style.width = `${innerWidth}px`;
-    cv.style.height = `${innerHeight}px`;
-    ctx.scale(dpr, dpr);
-    ctx.fillStyle = '#000';
-    ctx.fillText(`quick view failed: ${e}`, MARGIN, MARGIN);
+    drawFatal(cv, ctx, dpr, innerWidth, innerHeight, `quick view failed: ${e}`);
     await invoke('frontend_log', { level: 'error', message: `viewer failed: ${e}` });
   }
 }

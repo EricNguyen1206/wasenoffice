@@ -81,6 +81,46 @@ export function columnWidth(page: { w: number | null } | null | undefined, vw: n
   return Math.min(pageW, vw) - 2 * MARGIN;
 }
 
+/** Layout metrics line WITHOUT the entry prefix — review #6 C2: the frozen
+ * log contract (`viewer layout:` gate 12 · `nano light layout:` gate 15)
+ * keeps ONE edit-point; each entry prepends its own tag. */
+export function layoutMetricLine(model: LineModel, colW: number): string {
+  const m = model.metrics;
+  const baselines = model.lines.slice(0, 40).map((l) => l.baseline.toFixed(1)).join(',');
+  const lhs = model.lines.slice(0, 40).map((l) => l.lh.toFixed(1)).join(',');
+  return `lines=${model.lines.length} colw=${colW.toFixed(1)} maxw=${model.maxw.toFixed(1)} metrics=${m ? `${m[0]},${m[1]},${m[2]}` : 'none'} lhs=${lhs} baselines=${baselines}`;
+}
+
+/** One media evidence line WITHOUT the entry prefix — same frozen contract
+ * (`viewer media:` / `nano light media:`). */
+export function mediaEvidenceLine(
+  media: LineModel['media'][number],
+  ctx: CanvasRenderingContext2D,
+  dpr: number,
+): string {
+  return `part=${media.part} emu=${media.emu[0]}x${media.emu[1]} drawn=${media.w.toFixed(1)}x${media.h.toFixed(1)} at=${media.x.toFixed(1)},${media.y.toFixed(1)} ink=${mediaInk(ctx, media, dpr)}`;
+}
+
+/** Size + clear the canvas for the fatal path and print the failure on it.
+ * The drawn text and the log line differ per entry (`quick view failed` vs
+ * `viewer failed`) — the caller keeps both frozen strings. */
+export function drawFatal(
+  cv: HTMLCanvasElement,
+  ctx: CanvasRenderingContext2D,
+  dpr: number,
+  vw: number,
+  vh: number,
+  drawMsg: string,
+): void {
+  cv.width = vw * dpr;
+  cv.height = vh * dpr;
+  cv.style.width = `${vw}px`;
+  cv.style.height = `${vh}px`;
+  ctx.scale(dpr, dpr);
+  ctx.fillStyle = '#000';
+  ctx.fillText(drawMsg, MARGIN, MARGIN);
+}
+
 /** Canvas height the scroll view needs: the laid-out bottom (+margin), never
  * smaller than the viewport, capped at the WebKit ceiling. */
 function docHeight(bottom: number, vh: number): number {

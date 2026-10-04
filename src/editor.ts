@@ -31,9 +31,11 @@
 import {
   canvasMeasurer,
   columnWidth,
+  drawFatal,
   drawModel,
+  layoutMetricLine,
   loadMedia,
-  mediaInk,
+  mediaEvidenceLine,
   resizeRelayout,
   toEvidence,
 } from './viewer/render';
@@ -50,8 +52,9 @@ import {
 } from './viewer/layout';
 
 interface Caret {
-  /** The BODY BLOCK index (DD L01 §5.3a — `Hit.block`; `Hit.para`'s `pi`
-   * shares values with table-cell content and cannot address the body). */
+  /** The BODY BLOCK index (DD L01 §5.3a — `Hit.caret.para`; the layout
+   * walk `pi` shares values with table-cell content and cannot address
+   * the body). */
   para: number;
   run: number;
   offset: number;
@@ -200,12 +203,9 @@ async function main(): Promise<void> {
      * SAME commit. Same shapes as the viewer's lines. */
     const logLayoutEvidence = (): void => {
       if (!model) return;
-      const m = model.metrics;
-      const baselines = model.lines.slice(0, 40).map((l) => l.baseline.toFixed(1)).join(',');
-      const lhs = model.lines.slice(0, 40).map((l) => l.lh.toFixed(1)).join(',');
       void invoke('frontend_log', {
         level: 'info',
-        message: `nano light layout: lines=${model.lines.length} colw=${colW.toFixed(1)} maxw=${model.maxw.toFixed(1)} metrics=${m ? `${m[0]},${m[1]},${m[2]}` : 'none'} lhs=${lhs} baselines=${baselines}`,
+        message: `nano light layout: ${layoutMetricLine(model, colW)}`,
       });
       void invoke('frontend_log', {
         level: 'info',
@@ -219,6 +219,15 @@ async function main(): Promise<void> {
     const cmpCaret = (a: Caret, b: Caret): number =>
       a.para - b.para || (a.cellPara ?? 0) - (b.cellPara ?? 0) || a.run - b.run || a.offset - b.offset;
     const sameCaret = (a: Caret, b: Caret): boolean => cmpCaret(a, b) === 0;
+    /** The selection ordered [start, end] — the anchor/focus ordering invariant
+     * (mirror of Rust `apply_delete_range`'s sort) in ONE place (review #6 C3);
+     * null when there is no non-collapsed selection. */
+    const ordered = (): [Caret, Caret] | null =>
+      sel && !sameCaret(sel.anchor, sel.focus)
+        ? cmpCaret(sel.anchor, sel.focus) <= 0
+          ? [sel.anchor, sel.focus]
+          : [sel.focus, sel.anchor]
+        : null;
 
     /** The Block[] holding the caret's paragraph + its index there (top level → body+para; cell → cell.blocks+cellPara; nested = null). */
     const containerOf = (c: Caret): { blocks: Block[]; idx: number } | null => {
@@ -285,7 +294,7 @@ async function main(): Promise<void> {
       while (k >= 0 && k < model.lines.length && !lineInCtx(c.cell, model.lines[k])) k += dir;
       if (k < 0 || k >= model.lines.length) return c;
       const h = hitTest(model, measure, goalX, model.lines[k].baseline);
-      return h ? { para: h.block, run: h.run, offset: h.offset, cell: h.cell, cellPara: h.cellPara } : c;
+      return h ? h.caret : c;
     };
 
     /** Home/End: start/end of the current LAYOUT line (not the paragraph). */
@@ -295,7 +304,7 @@ async function main(): Promise<void> {
       if (!cur) return c;
       const line = model.lines[cur.line];
       const h = hitTest(model, measure, end ? line.x + line.total : line.x, line.baseline);
-      return h ? { para: h.block, run: h.run, offset: h.offset, cell: h.cell, cellPara: h.cellPara } : c;
+      return h ? h.caret : c;
     };
 
     /** Cmd+Left/Right: paragraph start/end through the caret's own runs. */
@@ -340,9 +349,10 @@ async function main(): Promise<void> {
      * SMOKE_RE_NL_SEL in harness/scripts/smoke-lib.sh — change in the SAME
      * commit). span = char distance between the ORDERED endpoints (same paragraph or cell; cross-paragraph = -1). */
     const emitSel = (): void => {
-      if (!sel) return;
-      const [a, b] =
-        cmpCaret(sel.anchor, sel.focus) <= 0 ? [sel.anchor, sel.focus] : [sel.focus, sel.anchor];
+      const cur = sel;
+      const pair = ordered();
+      if (!cur || !pair) return;
+      const [a, b] = pair;
       const samePara =
         (a.cell == null && b.cell == null && a.para === b.para) ||
         (a.cell != null && b.cell != null && a.cellPara != null && a.cellPara === b.cellPara);
@@ -363,15 +373,15 @@ async function main(): Promise<void> {
       }
       void invoke('frontend_log', {
         level: 'info',
-        message: `nano light selection: anchor=${sel.anchor.para}/${sel.anchor.run}/${sel.anchor.offset} focus=${sel.focus.para}/${sel.focus.run}/${sel.focus.offset} span=${span}`,
+        message: `nano light selection: anchor=${cur.anchor.para}/${cur.anchor.run}/${cur.anchor.offset} focus=${cur.focus.para}/${cur.focus.run}/${cur.focus.offset} span=${span}`,
       });
     };
 
     /** Per-line highlight rects for the ordered [start, end] range (overlay of drawModel; lines outside the selection's context are skipped). */
     const drawSelection = (c: CanvasRenderingContext2D, m: LineModel): void => {
-      if (!sel || sameCaret(sel.anchor, sel.focus)) return;
-      const [s, e] =
-        cmpCaret(sel.anchor, sel.focus) <= 0 ? [sel.anchor, sel.focus] : [sel.focus, sel.anchor];
+      const se = ordered();
+      if (!se) return;
+      const [s, e] = se;
       c.fillStyle = 'rgba(0, 120, 255, 0.28)';
       for (const line of m.lines) {
         if (!lineInCtx(s.cell, line)) continue;
@@ -473,9 +483,9 @@ async function main(): Promise<void> {
 
     /** Plain text of the ordered selection — walked over the selection's own container; cross-para joins '\n'. */
     const selectionText = (): string | null => {
-      if (!sel || sameCaret(sel.anchor, sel.focus)) return null;
-      const [s, e] =
-        cmpCaret(sel.anchor, sel.focus) <= 0 ? [sel.anchor, sel.focus] : [sel.focus, sel.anchor];
+      const se = ordered();
+      if (!se) return null;
+      const [s, e] = se;
       const k = containerOf(s);
       if (!k) return null;
       const eIdx = e.cell ? (e.cellPara ?? 0) : e.para;
@@ -582,8 +592,7 @@ async function main(): Promise<void> {
     // — synthetic MouseEvents cannot carry offsetX/Y in WebKit ──
     const hitAt = (x: number, y: number): Caret | null => {
       if (!model) return null;
-      const h = hitTest(model, measure, x, y);
-      return h ? { para: h.block, run: h.run, offset: h.offset, cell: h.cell, cellPara: h.cellPara } : null;
+      return hitTest(model, measure, x, y)?.caret ?? null;
     };
     /** Double-click = the word at the caret (non-space run over the layout's word/space tokens); triple = the whole paragraph. */
     const selectWordAt = (h: Caret): void => {
@@ -742,7 +751,7 @@ async function main(): Promise<void> {
     for (const media of model.media) {
       await invoke('frontend_log', {
         level: 'info',
-        message: `nano light media: part=${media.part} emu=${media.emu[0]}x${media.emu[1]} drawn=${media.w.toFixed(1)}x${media.h.toFixed(1)} at=${media.x.toFixed(1)},${media.y.toFixed(1)} ink=${mediaInk(ctx, media, dpr)}`,
+        message: `nano light media: ${mediaEvidenceLine(media, ctx, dpr)}`,
       });
     }
 
@@ -829,13 +838,7 @@ async function main(): Promise<void> {
       }
     }
   } catch (e) {
-    cv.width = box.clientWidth * dpr;
-    cv.height = box.clientHeight * dpr;
-    cv.style.width = `${box.clientWidth}px`;
-    cv.style.height = `${box.clientHeight}px`;
-    ctx.scale(dpr, dpr);
-    ctx.fillStyle = '#000';
-    ctx.fillText(`nano light failed: ${e}`, MARGIN, MARGIN);
+    drawFatal(cv, ctx, dpr, box.clientWidth, box.clientHeight, `nano light failed: ${e}`);
     await invoke('frontend_log', { level: 'error', message: `nano light failed: ${e}` });
   }
 }

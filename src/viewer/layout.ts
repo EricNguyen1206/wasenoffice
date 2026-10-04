@@ -397,21 +397,23 @@ export function layoutBlocks(input: LayoutInput): LineModel {
   return { lines, media, maxw, metrics, bottom };
 }
 
-/** The hit-test result: caret position — `line` indexes `LineModel.lines`,
- * `para` the body block, `run` the paragraph's runs array, `offset` the char
- * offset INSIDE that run's text (0..=len; the caret sits BEFORE char
- * `offset`). Image/tab items resolve to their run-text position.
- * T-060 C3 (additive): `block` is the TOP-LEVEL body block (tables own their
- * cells' lines — `para` alone cannot tell a cell line from the block after
- * the table); `cell` is the `[row, col]` identity for in-cell lines, null
- * for top-level ones — the edit layer refuses on `cell !== null`. T-A30
- * §5.5a (additive): `cellPara` locates the paragraph inside the cell's
- * blocks (null at top level / nested — refused). */
+/** The hit-test result: `caret` is the editor-coordinate caret — `para` is
+ * the TOP-LEVEL body block (tables own their cells' lines — the walk `pi`
+ * cannot address the body and is deliberately NOT exposed here); `cell` is
+ * the `[row, col]` identity for in-cell lines, null for top-level ones —
+ * the edit layer refuses on `cell !== null`; `cellPara` locates the
+ * paragraph inside the cell's blocks (null at top level / nested —
+ * refused). `caret` feeds `caretXY` unchanged (round-trip without glue —
+ * review #6 C1); `line`/`run`/`offset` stay top-level for the probe's
+ * per-line checks. Image/tab items resolve to their run-text position. */
 export interface Hit {
-  para: number;
-  block: number;
-  cell: [number, number] | null;
-  cellPara: number | null;
+  caret: {
+    para: number;
+    run: number;
+    offset: number;
+    cell: [number, number] | null;
+    cellPara: number | null;
+  };
   line: number;
   run: number;
   offset: number;
@@ -439,7 +441,12 @@ export function hitTest(model: LineModel, measure: Measurer, x: number, y: numbe
     if (di < dk || (di === dk && inSpan(ls[i]) && !inSpan(ls[k]))) k = i;
   }
   const line = ls[k];
-  const hit = (run: number, offset: number): Hit => ({ para: line.para, block: line.block, cell: line.cell, cellPara: line.cellPara, line: k, run, offset });
+  const hit = (run: number, offset: number): Hit => ({
+    caret: { para: line.block, run, offset, cell: line.cell, cellPara: line.cellPara },
+    line: k,
+    run,
+    offset,
+  });
   if (line.items.length === 0) return hit(0, 0); // empty line (hard break): caret at paragraph start
   const first = line.items[0];
   const last = line.items[line.items.length - 1];
@@ -473,13 +480,12 @@ export function hitTest(model: LineModel, measure: Measurer, x: number, y: numbe
  * empty paragraph resolves to its line start (hitTest's placeholder
  * semantics). T-060 C3: moved here from src/editor.ts so the hit seam
  * (hitTest ↔ caretXY) lives in one tested module — gate 14 asserts their
- * round-trip. T-A28 §5.3a: `para` matches the BODY BLOCK index (the editor
- * `Caret.para` coordinate — equal to `Hit.block`; `Hit.para`'s `pi` shares
- * values with table-cell content and cannot address the body). `line` rides
- * along (additive) for the editor's Up/Down/Home/End line moves.
- * T-A30 §5.5a (additive): carets carrying cell identity also require the line to
- * carry it; carets without those fields stay block-only (byte-identical).
- */
+ * round-trip (review #6 C1: `hitTest(...).caret` goes in unmodified).
+ * `para` matches the BODY BLOCK index (the editor `Caret.para` coordinate);
+ * `line` rides along (additive) for the editor's Up/Down/Home/End moves.
+ * T-A30 §5.5a: the cell identity is REQUIRED (explicit nulls at top level) —
+ * the match is one code path; block-only carets at a TABLE block resolve to
+ * nothing (cell lines carry identity; such carets are refused upstream). */
 export function caretXY(
   model: LineModel,
   measure: Measurer,
@@ -487,20 +493,18 @@ export function caretXY(
     para: number;
     run: number;
     offset: number;
-    cell?: [number, number] | null;
-    cellPara?: number | null;
+    cell: [number, number] | null;
+    cellPara: number | null;
   },
 ): { x: number; y: number; lh: number; line: number } | null {
   const cellEq = (
-    a: [number, number] | null | undefined,
-    b: [number, number] | null | undefined,
-  ): boolean => (a == null || b == null ? a == b : a[0] === b[0] && a[1] === b[1]);
+    a: [number, number] | null,
+    b: [number, number] | null,
+  ): boolean => (a === null || b === null ? a === b : a[0] === b[0] && a[1] === b[1]);
   let fallback: { x: number; y: number; lh: number; line: number } | null = null;
   for (const [li, line] of model.lines.entries()) {
     if (line.block !== caret.para) continue;
-    if (caret.cell != null || caret.cellPara != null) {
-      if ((line.cellPara ?? null) !== (caret.cellPara ?? null) || !cellEq(line.cell, caret.cell)) continue;
-    }
+    if ((line.cellPara ?? null) !== caret.cellPara || !cellEq(line.cell, caret.cell)) continue;
     if (line.items.length === 0) {
       fallback ??= { x: line.x, y: line.baseline, lh: line.lh, line: li };
       continue;
