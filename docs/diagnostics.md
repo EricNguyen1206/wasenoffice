@@ -8,6 +8,66 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-03 · T-A30: A4 slice #3 — double/triple-click + blink + mở edit trong bảng single-cell (bỏ refuse §2)
+
+- **Bằng chứng (3 commit: f1e8409 design → 3f35db4 ts+rust → f8da488 ponytail
+  cuts):** gate 15 positive exit 0 (first-draw 66.0 ms / parse 8.4 ms · body
+  blocks 7 = 6 + bảng · selection span 4 = dblclick "Beta" · save 2611 B /
+  1.9 ms · parse-back: `T30B`/`T30P`/`T30C`/`T30C2` có, "Beta" +
+  "bundled font metrics" MẤT, JSON cell A 2 para + cell B "T30B cell" · media
+  byte-exact · reopen render marker) + **negative ×5 exit 1** (garbage ·
+  doctor · seldoctor · clipdoctor nguyên vẹn + **celldoctor** — assert cell A
+  1 para cắn trên cấu trúc thật 2 para). verify FULL exit 0 **19 ▸ steps** ×2
+  (trước + sau cuts); gate 12 số KHÔNG đổi (16 dòng · 601.7 · 600.5 ·
+  750,-250,220 · lhs 17.9 · RSS 252 MB); gate 14 **93→103 checks**; **parity
+  6/6 exit 0 ×2 px-identical** (0.64/4.07/0.00/6.47/2.73/2.73, maxdx 47.00 —
+  layout.ts đụng, cuts = comment-only); cargo 40 shell (+3 cell −1 obsolete)
+  + 12 crate rc=0 tuần tự; clippy -D warnings sạch.
+- **Thiết kế chốt (DD L01 §5.5):** `cellPara` additive 3 tầng — Rust `Caret`
+  +`cell_para` serde-default; layout `walk` chỉ stamp cellPara cho cell CẤP 1
+  (nested = null → refuse, chặn silent-wrong-cell); `caretXY` full-identity
+  refine khi caret mang cell (legacy block-only byte-identical). Rust verbs
+  generic trên `Vec<Block>` + `dispatch` rebase/unrebase (para ↔ cellPara);
+  refuse mixed Cell↔top/Cell↔Cell, same-cell cross-cellPara OK. dblclick =
+  click-count thủ công 500 ms/4 px (WebKit không có triple event; probe gọi
+  `mouseDownAt(x,y,extend,clicks)` — tiền đề offsetX); word = expand non-space
+  trong run text (tokens có sẵn, không regex mới). Blink 500 ms repaint từ
+  model cache. Cmd-A GIỮ top-level (cell content sẽ bị refuse cross-cell từ
+  đầu — §5.5g).
+- **Gotchas phiên:** (1) **hitTest tie-break bắt buộc cho cell cùng hàng** —
+  2 cell side-by-side có baseline TRÙNG (y-pick cũ greedy-so-kề giữ dòng
+  TRƯỚC) → MỌI click vào cell phải resolve về cell trái; fix = so-with-best +
+  tie-break theo x-span (dòng chứa x thắng khi baseline bằng) — table-free
+  byte-identical, draw path không qua hitTest nên parity không chịu ảnh
+  hưởng; gate 14 +checks trên cặp collision. (2) **bug caret junction
+  apply_backspace merge (cũ, drive-by fix):** `at_run`/`at` tính từ runs của
+  paragraph CHỨA CARET thay vì paragraph TRƯỚC → caret rơi sai điểm nối khi
+  merge (test cell verbs bắt); fix = tính từ `prev_p` trước extend. (3)
+  **clippy sau đổi signature:** `&mut Vec<Block>` → slice chỉ nơi body thật
+  sự không cần Vec (remove/insert/drain giữ Vec — ptr_arg tự đúng); lifetime
+  `'a` elide; `Table`/`TableCell` import phải xuống test module (top-level
+  bị "unused" ở build non-test). (4) **zsh PIPESTATUS cắn lần 2** (T-A29
+  lặp lại): `${PIPESTATUS[0]:-$?}` sau `gate | tail` trả rc của tail —
+  celldoctor suýt báo rc=0; bắt exit TRƯỚC pipe. (5) **parity-view flake
+  font-timing phía oracle (lần đầu thấy):** run 4 FAIL layout-fixture
+  maxdy 15.93 ("break-point drift (wrap ceiling, font-metric)" — wrap point
+  dịch giữa oracle/viewer) + edge-multilevel-list maxdy 464.60 (classified
+  numbering ceiling, PASS) trong khi runs 1/2/3/5/6 đều 6/6 px-identical số
+  chuẩn; cuts trên layout.ts comment-only (diff verified) + draw path không
+  qua hitTest → code loại trừ; nghi ngờ font state của instance oracle
+  ONLYOFFICE cũ còn nằm (`--remote-debugging-port=9222` PID 25215 từ phiên
+  trước) — 2 chạy lại liên tiếp PASS số chuẩn; ghi nhận để version sau nếu
+  tái hiện thì kill oracle cũ trước khi parity.
+- **Còn cho slice #4 (T-A31, ceilings §5.5i/§10):** hyperlink/sectPr-một-đoạn
+  + settings/theme + refuse-warn (OQ-L01-2) · Tab/Shift-Tab nav giữa cell ·
+  tạo/xoá bảng/hàng/cột · merge/split cell · cross-cell selection ·
+  tblPr/tcPr styling · arrows nhảy qua bảng · nested-table editing · word
+  vắt run / kéo-theo-word sau dblclick · Cmd-A bao gồm cell content · hidden
+  editable sink (real IME) · paste RTF/HTML.
+- **Trạng thái:** confirmed — bằng chứng trong DD L01 §5.5 + báo cáo phiên.
+
+---
+
 ## 2026-10-03 · T-A29: A4 slice #2 — IME composite tiếng Việt (đóng OQ-L01-3) + clipboard plain-text + Cmd-A
 
 - **Bằng chứng (3 commit: 3ada9e8 design → 5a1a0e5 ts+gate15 → 9a2f24f ponytail

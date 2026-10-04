@@ -132,6 +132,11 @@ def need(cond, msg):
         print(f"NL FAIL {msg}")
         sys.exit(1)
 
+def wait(cond, msg):
+    if not cond:
+        print(f"NL WAIT {msg}")
+        sys.exit(2)
+
 lines = open(log_path, errors="replace").read().splitlines()
 
 m = re.search(r"nano light first-draw ([\d.]+) ms", "\n".join(lines))
@@ -254,7 +259,7 @@ opened_idx = max(
     (i for i, l in enumerate(lines) if i > saved_idx and "nano light: opened" in l),
     default=None,
 )
-need(opened_idx is not None, "no reopen after the save (nano_light_reopen window)")
+wait(opened_idx is not None, "reopen window not up yet (nano_light_reopen)")
 evidences = []
 for l in lines[opened_idx:]:
     if "nano light evidence: " in l:
@@ -262,7 +267,7 @@ for l in lines[opened_idx:]:
             evidences.append(json.loads(l.split("nano light evidence: ", 1)[1]))
         except json.JSONDecodeError:
             pass
-need(evidences, "reopen window logged no evidence")
+wait(evidences, "reopen window evidence not logged yet")
 need(
     any(marker in ln.get("t", "") for ev in evidences for ln in ev.get("lines", [])),
     f"reopen evidence does not contain the marker {marker!r} — saved file did not re-render the edit",
@@ -276,7 +281,7 @@ PY
 )
   local rc=$?
   SMOKE_SUMMARY="$SMOKE_NL_REPORT"
-  [ "$rc" -ne 0 ] && SMOKE_ABORT=1 # asserts bit — stop polling (negatives land here)
+  [ "$rc" -eq 1 ] && SMOKE_ABORT=1 # hard asserts bit (exit 1); exit 2 = reopen still loading — keep polling
   return "$rc"
 }
 
