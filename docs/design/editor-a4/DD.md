@@ -372,8 +372,9 @@ Hằng `SMOKE_RE_NL_COMPOSE` + `SMOKE_RE_NL_CLIP` vào khối đóng băng smoke
 CÙNG commit emitting end. Gate 15 mở rộng — chain ADDITIVE sau T28 redo,
 TRƯỚC save (1 save phủ mọi parse-back assert): compose telex-style
 `Xin chao` → `Xin chào` (2 bước preedit) → commit → `undo`/`redo` (1 unit
-proof) → shift+Left ×8 chọn `Xin chào` → copy → ArrowLeft ×4 (collapse, caret
-trước `chào`) → paste (chèn giữa → `Xin Xin chàochào`) → Cmd-A → copy-all
+proof) → shift+Left ×8 chọn `Xin chào` → copy → ArrowRight ×4 (caret sau
+shift-extend = **focus** 23, không phải anchor — ArrowRight đưa về 27, trước
+`chào`) → paste (chèn giữa tail → `Xin Xin chàochào`) → Cmd-A → copy-all
 (text chứa marker + `paragraphT28` + `Xin Xin chàochào`; `chars` == len của
 text unescaped — assert tự-consistent) → ArrowRight (collapse) → save →
 parse-back assert marker + `paragraphT28` + `Xin chào` + `Xin Xin chàochào`.

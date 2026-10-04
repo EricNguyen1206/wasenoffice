@@ -18,8 +18,15 @@
 #      renders evidence containing the marker — "mở lại render đúng nội dung
 #      đã edit" (DD L01 §5)
 #   7. SELECTION evidence (T-A28): `nano light selection:` lines exist and
-#      the last one reports span ≥ NANO_LIGHT_MIN_SPAN — the shift+arrow
-#      selection really happened (DD L01 §5.3e)
+#      the max span ≥ NANO_LIGHT_MIN_SPAN — the shift+arrow selection really
+#      happened (DD L01 §5.3e); min span == -1 pins the Cmd-A cross-para
+#      select-all (T-A29, DD L01 §5.4)
+#   8. COMPOSITION evidence (T-A29, DD L01 §5.4a): the telex-style chain
+#      commits `Xin chào` (`nano light composition:` — last end line)
+#   9. CLIPBOARD round (T-A29, DD L01 §5.4b): op=copy carries the committed
+#      string, op=paste re-inserts it mid-word ("Xin Xin chàochào"), op=copy-all
+#      after Cmd-A walks the WHOLE document (marker + T28-replace + paste
+#      result; chars == unescaped length)
 #   and no `nano light failed:` anywhere.
 # LOG CONTRACT: the `nano light` lines are frozen constants SMOKE_RE_NL_* in
 # harness/scripts/smoke-lib.sh — change in the SAME commit as the emitting
@@ -31,6 +38,7 @@
 #        NANO_LIGHT_MAX_MS=500         first-draw budget (ms)
 #        NANO_LIGHT_MARKER=…           the inserted marker (default fixed)
 #        NANO_LIGHT_MIN_SPAN=3         selection span floor (gate 15, T-A28)
+#        NANO_LIGHT_COMPOSE=…          the IME-committed string (default 'Xin chào')
 # Negative proofs (asserts must bite; documented in docs/diagnostics.md T-A27
 # and T-A28):
 #   NANO_LIGHT_NEGATIVE=garbage harness/scripts/smoke-nano-light.sh
@@ -44,6 +52,10 @@
 #     → full positive run, but the selection assert requires span == 0 —
 #       contradicts the real selection evidence → exit 1 (proves the gate
 #       READS the selection numbers, not just their presence — T-A28).
+#   NANO_LIGHT_NEGATIVE=clipdoctor harness/scripts/smoke-nano-light.sh
+#     → full positive run, but the clipboard assert requires text 'WRONG-CLIP'
+#       with chars 999999 — contradicts the real clipboard evidence → exit 1
+#       (proves the gate READS the clipboard numbers — T-A29).
 set -u
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -54,6 +66,7 @@ TIMEOUT="${SMOKE_NANO_LIGHT_TIMEOUT:-360}"
 MAX_MS="${NANO_LIGHT_MAX_MS:-500}"
 MARKER="${NANO_LIGHT_MARKER:-NL01-EDITED-BY-NANOLIGHT}"
 MIN_SPAN="${NANO_LIGHT_MIN_SPAN:-3}"
+COMPOSE="${NANO_LIGHT_COMPOSE:-Xin chào}"
 REPL='T28'
 NEGATIVE="${NANO_LIGHT_NEGATIVE:-}"
 FIXTURE=/tmp/nanooffice-nanolight.docx
@@ -73,7 +86,7 @@ fi
 cp "$FIXTURE" "$SNAPSHOT"
 
 smoke_init "$FIXTURE"
-echo "smoke: fixture=$FIXTURE log=$LOG timeout=${TIMEOUT}s budget=${MAX_MS}ms marker=$MARKER (NL probe driver${NEGATIVE:+, negative=$NEGATIVE})"
+echo "smoke: fixture=$FIXTURE log=$LOG timeout=${TIMEOUT}s budget=${MAX_MS}ms marker=$MARKER compose=$COMPOSE (NL probe driver${NEGATIVE:+, negative=$NEGATIVE})"
 
 smoke_boot "NANO_OFFICE_NANO_LIGHT=$FIXTURE" "NANO_OFFICE_NL_PROBE=$MARKER" "NANO_OFFICE_DEVTOOLS=0" "RUST_LOG=info" "$LOG"
 
@@ -92,7 +105,7 @@ nano_light_signals() {
   grep -q "$SMOKE_RE_NL_PROBE_DONE" "$LOG" 2>/dev/null || { SMOKE_SUMMARY="probe chain not done yet"; return 1; }
   # full asserts as the poll body (pattern gate 12): the reopen evidence may
   # trail the probe-done line, so keep polling until the python check passes
-  SMOKE_NL_REPORT=$(python3 - "$LOG" "$MAX_MS" "$MARKER" "$SNAPSHOT" "$FIXTURE" "$CLI" "$NEGATIVE" "$MIN_SPAN" "$REPL" <<'PY' 2>&1
+  SMOKE_NL_REPORT=$(python3 - "$LOG" "$MAX_MS" "$MARKER" "$SNAPSHOT" "$FIXTURE" "$CLI" "$NEGATIVE" "$MIN_SPAN" "$REPL" "$COMPOSE" <<'PY' 2>&1
 import hashlib
 import json
 import re
@@ -100,7 +113,7 @@ import subprocess
 import sys
 import zipfile
 
-log_path, max_ms, marker, snapshot, fixture, cli, negative, min_span, repl = sys.argv[1:10]
+log_path, max_ms, marker, snapshot, fixture, cli, negative, min_span, repl, compose = sys.argv[1:11]
 max_ms = float(max_ms)
 min_span = int(min_span)
 
@@ -123,17 +136,48 @@ for cmd, n in [("insert", 2), ("backspace", 3), ("enter", 1), ("undo", 1), ("red
 # (7) SELECTION evidence (T-A28): the shift+arrow selection really happened.
 # The seldoctor negative requires span == 0 — contradicting the real chain —
 # so the assert bites (the gate READS the selection numbers, not just their
-# presence).
+# presence). T-A29: min span == -1 pins the Cmd-A cross-para select-all.
 sels = re.findall(
     r"nano light selection: anchor=(\d+)/(\d+)/(\d+) focus=(\d+)/(\d+)/(\d+) span=(-?\d+)",
     "\n".join(lines),
 )
 need(bool(sels), "no `nano light selection:` evidence line")
-span = int(sels[-1][6])
+spans = [int(s[6]) for s in sels]
 if negative == "seldoctor":
-    need(span == 0, f"seldoctor: selection span {span} != 0 — the assert must bite here")
+    need(max(spans) == 0, f"seldoctor: selection span {max(spans)} != 0 — the assert must bite here")
 else:
-    need(span >= min_span, f"selection span {span} < {min_span} ({sels[-1]})")
+    need(max(spans) >= min_span, f"selection span {max(spans)} < {min_span} ({sels[-1]})")
+    need(min(spans) == -1, f"no cross-para selection (Cmd-A select-all) — spans {spans}")
+
+# (8) COMPOSITION (T-A29, DD L01 §5.4a): the telex-style preedit committed.
+compose_ends = re.findall(r"nano light composition: state=end data=(.*)", "\n".join(lines))
+need(bool(compose_ends), "no `nano light composition:` end evidence")
+need(compose_ends[-1] == compose, f"composition committed {compose_ends[-1]!r} != {compose!r}")
+
+# (9) CLIPBOARD round (T-A29, DD L01 §5.4b): copy carries the committed string,
+# paste re-inserts it mid-word, copy-all after Cmd-A walks the whole document.
+clips = re.findall(r"nano light clipboard: op=(\S+) chars=(\d+) sys=(\S+) text=(.*)", "\n".join(lines))
+need(clips, "no `nano light clipboard:` evidence")
+copies = [c for c in clips if c[0] == "copy"]
+need(bool(copies), "no op=copy evidence")
+copy_text, copy_chars = copies[-1][3], int(copies[-1][1])
+if negative == "clipdoctor":
+    need(copy_text == "WRONG-CLIP" and copy_chars == 999999,
+         f"clipdoctor: clipboard copy {copy_text!r}/{copy_chars} != 'WRONG-CLIP'/999999 — the assert must bite here")
+else:
+    need(copy_text == compose and copy_chars == len(compose),
+         f"clipboard copy {copy_text!r} ({copy_chars}) != {compose!r} ({len(compose)})")
+pastes = [c for c in clips if c[0] == "paste"]
+need(bool(pastes), "no op=paste evidence")
+need(int(pastes[-1][1]) == len(compose), f"paste chars {pastes[-1][1]} != {len(compose)}")
+copied_all = [c for c in clips if c[0] == "copy-all"]
+need(bool(copied_all), "no op=copy-all evidence (Cmd-A select-all)")
+all_text = copied_all[-1][3].replace("\\n", "\n")
+need(int(copied_all[-1][1]) == len(all_text),
+     f"copy-all chars {copied_all[-1][1]} != unescaped length {len(all_text)}")
+need(marker in all_text, "copy-all text misses the marker")
+need(f"paragraph{repl}" in all_text, "copy-all text misses the T28 replace")
+need(f"Xin {compose}chào" in all_text, f"copy-all text misses the paste result 'Xin {compose}chào'")
 
 need(any("nano light saved:" in l for l in lines), "no saved line")
 
@@ -147,6 +191,8 @@ need(model.returncode == 0, f"crate CLI failed on {parse_target}: {model.stderr[
 need(marker in model.stdout, f"marker {marker!r} not found in the crate-parsed model of {parse_target}")
 if negative != "doctor":
     need(f"paragraph{repl}" in model.stdout, f"selection replace not joined to 'paragraph' in the parse-back of {parse_target} — expected 'paragraph{repl}' (the probe replaces the selected ' two')")
+    need(compose in model.stdout, f"composed string {compose!r} not in the parse-back of {parse_target}")
+    need(f"Xin {compose}chào" in model.stdout, f"paste result 'Xin {compose}chào' not in the parse-back of {parse_target}")
 
 # (5) media byte-exact vs the pre-save snapshot (per part sha256)
 def media_shas(path):
@@ -183,7 +229,8 @@ need(
     f"reopen evidence does not contain the marker {marker!r} — saved file did not re-render the edit",
 )
 print(
-    f"NL OK first-draw={ms}ms edits={len(edits)} sel-span={span} media={len(after)}B-exact "
+    f"NL OK first-draw={ms}ms edits={len(edits)} sel-span={min(spans)}..{max(spans)} "
+    f"compose={compose_ends[-1]!r} clip-ops={len(clips)} media={len(after)}B-exact "
     f"reopen-evidence-marker=yes (parse-back via crate CLI)"
 )
 PY
@@ -195,9 +242,11 @@ PY
 }
 
 if smoke_poll "$TIMEOUT" nano_light_signals "Nano Light edit round-trip evidence"; then
-  echo "smoke: ✓ first-draw < ${MAX_MS} ms · ✓ edit chain (insert/backspace/delete/enter/undo/redo) · ✓ selection span ≥ ${MIN_SPAN} · ✓ type-replace → save (write_docx + atomic replace) · ✓ parse-back contains marker + 'paragraph${REPL}' · ✓ media byte-exact · ✓ reopen renders the edit"
+  echo "smoke: ✓ first-draw < ${MAX_MS} ms · ✓ edit chain (insert/backspace/delete/enter/undo/redo) · ✓ selection span ≥ ${MIN_SPAN} + Cmd-A cross-para · ✓ composition commits '${COMPOSE}' (1 undo unit) · ✓ clipboard copy→paste→copy-all round · ✓ type-replace → save (write_docx + atomic replace) · ✓ parse-back contains marker + 'paragraph${REPL}' + '${COMPOSE}' + paste result · ✓ media byte-exact · ✓ reopen renders the edit"
   grep -m1 "$SMOKE_RE_NL_FIRST_DRAW" "$LOG" | sed 's/^/smoke:   /' | cut -c1-160
   grep -m1 "$SMOKE_RE_NL_SEL" "$LOG" | sed 's/^/smoke:   /' | cut -c1-160
+  grep -m1 "$SMOKE_RE_NL_COMPOSE" "$LOG" | sed 's/^/smoke:   /' | cut -c1-160
+  grep -m1 "$SMOKE_RE_NL_CLIP" "$LOG" | sed 's/^/smoke:   /' | cut -c1-160
   grep -m1 "$SMOKE_RE_NL_SAVED" "$LOG" | sed 's/^/smoke:   /' | cut -c1-160
   echo "smoke: PASSED — full log kept at $LOG"
   exit 0

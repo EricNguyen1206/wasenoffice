@@ -18,7 +18,9 @@
  * `caretXY` matches on block). Typing is plain `keydown` (no synthetic
  * keystrokes anywhere — rule 6b); the gate-15 probe (NANO_OFFICE_NL_PROBE)
  * drives the SAME edit()/navigation the handlers use. No engine shim is
- * loaded on this page.
+ * loaded on this page. T-A29 (DD §5.4): IME composition (preedit overlay,
+ * commit = 1 insert = 1 undo unit), plain-text clipboard (Cmd-C/X/V via
+ * `navigator.clipboard` + a session stash fallback) and Cmd-A select-all.
  */
 import {
   canvasMeasurer,
@@ -39,6 +41,19 @@ import {
   type LineModel,
   type Run,
 } from './viewer/layout';
+
+/** Preedit measurer fallback when the caret paragraph has no run. */
+const PLAIN_RUN: Run = {
+  text: '',
+  font: null,
+  size: null,
+  bold: false,
+  italic: false,
+  underline: null,
+  color: null,
+  spacing: null,
+  images: [],
+};
 
 interface Caret {
   /** The BODY BLOCK index (DD L01 §5.3a — `Hit.block`; `Hit.para`'s `pi`
@@ -113,6 +128,10 @@ async function main(): Promise<void> {
     let goalX: number | null = null;
     let dragging = false;
     let dirty = false;
+    let composing = false;
+    let preedit = '';
+    /** In-page clipboard fallback — WKWebView gates `readText`/`writeText` on user activation (DD §5.4b). */
+    let clipStash: string | null = null;
     let model: LineModel | null = null;
     let colW = 0;
     const bitmaps = new Map<string, ImageBitmap>();
@@ -140,6 +159,11 @@ async function main(): Promise<void> {
         if (at) {
           c.fillStyle = '#000';
           c.fillRect(at.x - 0.75, at.y - at.lh + 2, 1.5, at.lh - 1);
+          if (preedit) {
+            const w = measure(runsOf(caret.para)?.[caret.run] ?? PLAIN_RUN, preedit);
+            c.fillText(preedit, at.x, at.y);
+            c.fillRect(at.x, at.y + 2, w, 1); // inline displacement is a ceiling (DD §5.4a)
+          }
         }
       });
       model = m;
@@ -367,6 +391,132 @@ async function main(): Promise<void> {
       }
     };
 
+    // ── IME composition (DD §5.4a) + plain-text clipboard + Cmd-A (§5.4b); the probe drives the SAME fns. ──
+    const emitCompose = (state: string, data: string): void => {
+      void invoke('frontend_log', {
+        level: 'info',
+        message: `nano light composition: state=${state} data=${data}`,
+      });
+    };
+    const compositionStart = (): void => {
+      composing = true;
+      preedit = '';
+      emitCompose('start', '');
+      render();
+    };
+    const compositionUpdate = (data: string): void => {
+      preedit = data;
+      emitCompose('update', data);
+      render();
+    };
+    const compositionEnd = (data: string): Promise<void> => {
+      composing = false;
+      preedit = '';
+      emitCompose('end', data);
+      render();
+      return data ? edit({ kind: 'insert', text: data, caret, sel }) : Promise.resolve();
+    };
+    window.addEventListener('compositionstart', () => compositionStart());
+    window.addEventListener('compositionupdate', (ev) => compositionUpdate(ev.data));
+    window.addEventListener('compositionend', (ev) => void compositionEnd(ev.data));
+
+    /** Plain text of the ordered selection (walk the model; cross-para joins '\n', tables contribute nothing). */
+    const selectionText = (): string | null => {
+      if (!sel || sameCaret(sel.anchor, sel.focus)) return null;
+      const [s, e] =
+        cmpCaret(sel.anchor, sel.focus) <= 0 ? [sel.anchor, sel.focus] : [sel.focus, sel.anchor];
+      const parts: string[] = [];
+      for (let p = s.para; p <= e.para && p < body.length; p++) {
+        const runs = runsOf(p);
+        if (!runs) continue;
+        const t = (i: number): string => runs[i]?.text ?? '';
+        if (p === s.para && p === e.para && s.run === e.run) {
+          parts.push(t(s.run).slice(s.offset, e.offset));
+        } else if (p === s.para && p === e.para) {
+          parts.push(
+            t(s.run).slice(s.offset) +
+              runs.slice(s.run + 1, e.run).map((r) => r.text).join('') +
+              t(e.run).slice(0, e.offset),
+          );
+        } else if (p === s.para) {
+          parts.push(t(s.run).slice(s.offset) + runs.slice(s.run + 1).map((r) => r.text).join(''));
+        } else if (p === e.para) {
+          parts.push(runs.slice(0, e.run).map((r) => r.text).join('') + t(e.run).slice(0, e.offset));
+        } else {
+          parts.push(runs.map((r) => r.text).join(''));
+        }
+      }
+      return parts.join('\n');
+    };
+
+    /** `nano light clipboard:` — ADDITIVE gate-15 evidence (frozen SMOKE_RE_NL_CLIP, smoke-lib — same-commit rule). */
+    const emitClip = (op: string, chars: number, sys: string, text: string): void => {
+      void invoke('frontend_log', {
+        level: 'info',
+        message: `nano light clipboard: op=${op} chars=${chars} sys=${sys} text=${text.split('\n').join('\\n')}`,
+      });
+    };
+    const copySelection = async (op: 'copy' | 'copy-all' | 'cut'): Promise<boolean> => {
+      const text = selectionText();
+      if (text === null) return false;
+      clipStash = text;
+      let sys = 'fail';
+      try {
+        await navigator.clipboard.writeText(text);
+        sys = 'ok';
+      } catch {
+        sys = 'fail'; // stash still serves the in-page round (DD §5.4b)
+      }
+      emitClip(op, text.length, sys, text);
+      return true;
+    };
+    const cutSelection = async (): Promise<void> => {
+      if (await copySelection('cut')) await edit({ kind: 'backspace', caret, sel });
+    };
+    const pasteFromClipboard = async (): Promise<void> => {
+      let text: string | null = null;
+      let sys = 'stash';
+      try {
+        text = await navigator.clipboard.readText();
+        sys = 'system';
+      } catch {
+        text = null; // permission/activation-gated — the stash is the fallback
+      }
+      if (!text) {
+        if (clipStash === null) return;
+        text = clipStash;
+        sys = 'stash';
+      }
+      const parts = text.replace(/\r\n?/g, '\n').split('\n');
+      for (let i = 0; i < parts.length; i++) {
+        if (i > 0) await edit({ kind: 'enter', caret, sel: null });
+        if (parts[i]) await edit({ kind: 'insert', text: parts[i], caret, sel: i === 0 ? sel : null });
+      }
+      emitClip('paste', text.length, sys, text);
+    };
+    const selectAll = (): void => {
+      let last = -1;
+      for (let p = body.length - 1; p >= 0; p--) {
+        if (runsOf(p)) {
+          last = p;
+          break;
+        }
+      }
+      if (last < 0) return;
+      const runs = runsOf(last)!;
+      const anchor: Caret = { para: 0, run: 0, offset: 0, cell: null };
+      const focus: Caret = {
+        para: last,
+        run: Math.max(runs.length - 1, 0),
+        offset: runs.length ? runs[runs.length - 1].text.length : 0,
+        cell: null,
+      };
+      sel = sameCaret(anchor, focus) ? null : { anchor, focus };
+      caret = focus;
+      render();
+      emitSel();
+    };
+
     // ── mouse selection (§5.3b): the gate probe calls these three directly
     // — synthetic MouseEvents cannot carry offsetX/Y in WebKit ──
     const hitAt = (x: number, y: number): Caret | null => {
@@ -395,6 +545,7 @@ async function main(): Promise<void> {
     window.addEventListener('mouseup', () => mouseUp());
     saveBtn.addEventListener('click', () => void save());
     window.addEventListener('keydown', (ev) => {
+      if (composing || ev.isComposing) return; // the IME owns the keys while composing (DD §5.4a)
       const meta = ev.metaKey || ev.ctrlKey;
       if (meta && ev.key.toLowerCase() === 'z') {
         ev.preventDefault();
@@ -404,6 +555,26 @@ async function main(): Promise<void> {
       if (meta && ev.key.toLowerCase() === 's') {
         ev.preventDefault();
         void save();
+        return;
+      }
+      if (meta && ev.key.toLowerCase() === 'a') {
+        ev.preventDefault();
+        selectAll();
+        return;
+      }
+      if (meta && ev.key.toLowerCase() === 'c') {
+        ev.preventDefault();
+        void copySelection('copy');
+        return;
+      }
+      if (meta && ev.key.toLowerCase() === 'x') {
+        ev.preventDefault();
+        void cutSelection();
+        return;
+      }
+      if (meta && ev.key.toLowerCase() === 'v') {
+        ev.preventDefault();
+        void pasteFromClipboard();
         return;
       }
       const nav = (next: Caret, vertical = false): void => {
@@ -498,6 +669,25 @@ async function main(): Promise<void> {
         await edit({ kind: 'insert', text: 'T28', caret, sel });
         await edit({ kind: 'undo' });
         await edit({ kind: 'redo' });
+        // T-A29: composition + clipboard round + Cmd-A — dispatched events, SAME handlers (DD §5.4)
+        window.dispatchEvent(new CompositionEvent('compositionstart'));
+        window.dispatchEvent(new CompositionEvent('compositionupdate', { data: 'Xin chao' }));
+        window.dispatchEvent(new CompositionEvent('compositionupdate', { data: 'Xin chào' }));
+        await compositionEnd('Xin chào');
+        await edit({ kind: 'undo' });
+        await edit({ kind: 'redo' });
+        for (let i = 0; i < 8; i++) {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', shiftKey: true }));
+        }
+        await copySelection('copy');
+        // after shift-extend caret = FOCUS (23) — ArrowRight ×4 lands before "chào" (DD §5.4c)
+        for (let i = 0; i < 4; i++) {
+          window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+        }
+        await pasteFromClipboard();
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', metaKey: true }));
+        await copySelection('copy-all');
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
         await save();
         await invoke('nano_light_reopen');
         await invoke('frontend_log', { level: 'info', message: 'nano light probe: chain done (edit → save → reopen)' });
