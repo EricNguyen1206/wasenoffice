@@ -8,6 +8,49 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-04 · T-055 #6: review kiến trúc post-rung A4 (3 reviewer song song — 7 LAND / 4 DEFER / 7 REJECT)
+
+- **Bằng chứng (3 commit, mỗi cụm 1 lần verify FULL exit 0):** `712bee4` TS C1+C2+C3
+  (Hit seam: hitTest trả `{caret,line,run,offset}` — round-trip `caretXY(hitTest(x,y).caret)`
+  không glue, xoá pi khỏi Hit, caretXY full-identity bắt buộc; evidence/log builders
+  `layoutMetricLine`/`mediaEvidenceLine`/`drawFatal` 1 nhà render.ts — byte-identical
+  chuỗi frozen; `ordered()` 1 nhà invariant thứ tự selection) → gate 14 **103 checks** +
+  verify FULL exit 0 · `3a8df66` Rust C8 — `editor/mod.rs` (1691) + `editor/mutations.rs`
+  (462, 12 fn `pub(super)` thuần `Vec<Block>+Caret→Caret`, move verbatim, tests dùng lại
+  qua `use super::*`) → cargo 41 rc=0 · clippy lib 0 · verify FULL exit 0 · `2cad6ff`
+  crate C1+C4+C5 — OPC plumbing 1 nhà `opc.rs` (`load_rels/find_target/part_dir/
+  file_name/RelsList/utf8` + **`main_document_part()`**: invariant "main part là data"
+ từ 3 shape/3 error-policy → 1; parse_docx giữ content-type check; detect map
+  err→no-warn; writer bỏ dup + `crate::` gọi chéo) + docs invariant hyperlink
+  (`rel_id` ⇒ `target`/`external`, writer REFUSE — error mode là phần interface) + gộp
+  2 warn-door arm (flag `tracked|tblstyle`) → cargo + crate rc=0 · gate 15 positive
+  exit 0 + warndoor/tbldoctor exit 1 · **verify FULL exit 0 ALL CHECKS PASSED**.
+- **DEFER có trigger:** Rust C9 gộp surface shell viewer↔editor (surface thứ 3 / C4 #5)
+  · TS C5 selection-math module (consumer thứ 2 đọc body theo caret) · TS C6 clipboard
+  drift seam — range↔text 2 ngữ + ordering key 2 implementation + paste N-undo-unit
+  (clipboard fidelity) · Crate C2 PackageAcc gom 7 `&mut` (kênh state mới trong
+  write_docx). **REJECT có deletion-test:** session-lifecycle module · UndoStack type ·
+  gộp atomic_replace · overlay draw module · detect_save_losses tách module/parser-
+  driven · tests/parse.rs tách file · table-driven negatives + doctor-lib chung (1
+  adapter — tiền lệ C4 #5).
+- **Normal-review findings (không sửa trong review):** (1) paste chứa `\t`: TS
+  pasteFromClipboard chỉ split newline, không lọc control chars; Rust apply_insert từ
+  chối `\t` → paste nhiều dòng có tab đứt giữa chừng, phần trước đã chèn (không
+  transaction) — fix thuộc TS C6 trigger. (2) Silent-drop policy: `w:hyperlink` trong
+  `mc:Choice` + `mc:AlternateContent` block-level (textbox `w:pict`/`w:txbxContent`)
+  bị skip KÈM text, `detect_save_losses` chưa có pattern → mất mà warn không bắn
+  (policy gap matrix §5.1 — hẹn slice detect kế). (3) clone-per-keystroke + resolve()
+  toàn model mỗi edit — chủ đích DD L01 §2, theo dõi khi document lớn. (4) comment
+  single-slot race sai phạm vi — ĐÃ sửa trong C8.
+- **Gotchas:** (1) `cargo fmt --check` của verify dùng `--all` (workspace) — chạy fmt
+  thủ công KHÔNG `--all` bỏ lỡ member `nanooffice-ooxml` (2 lần verify exit 1 từ
+  blank-line thừa ở lib.rs sau xoá helpers — bài học: fmt luôn `--all` bằng đúng lệnh
+  của gate). (2) Edit tool khớp fuzzy theo text — chép old_string TỪ file thật, không
+  gõ lại từ nhớ (2 lần: render.ts columnWidth displaced, opc.rs attr body typo).
+  (3) Bulk-regex trên layout.test.ts bỏ lỡ literal chứa `cell: [0, 0]` (comma trong
+  `[^,]+`) — 2 tie-break assert sửa tay; pattern bulk phải liệt kê đủ hình dạng.
+- **Report:** `$TMPDIR/architecture-review-20261004-a4.html` (đã mở cho user).
+
 ## 2026-10-04 · T-A32: A4 closure slice — tblPr/tcPr detect+warn (đóng dòng mất-im-lặng cuối matrix §5.1) + ĐÓNG RUNG A4
 
 - **Bằng chứng (2 commit: 321c68f design → a2381b5 crate+gate15):** gate 15 standalone ×3 —
