@@ -389,7 +389,17 @@ probe E2E gate 15; real-IME engagement (hidden editable sink) là ceiling §10
 (phụ thuộc WebKit IME routing, không phải pipeline — thử khi user gõ thật,
 không chặn slice này).
 
-**e) Kết quả slice — điền khi land.**
+**e) Kết quả slice (land 03.10.2026 — 3ada9e8 design → 5a1a0e5 ts+gate15 →
+9a2f24f ponytail cuts):**
+
+| Bằng chứng | Kết quả | Ghi |
+|---|---|---|
+| Gate 15 positive | exit 0 — first-draw 91–110 ms (parse 3.7–9.0 ms) · composition evidence 4 dòng, end `Xin chào` · clipboard `op=copy chars=8 sys=fail` → `op=paste sys=stash` (stash fallback proven — WebKit chặn async clipboard không user activation) → `op=copy-all chars=1425` · selection span min −1 (Cmd-A) max 8 · save 2699 B / 2.0 ms · parse-back chứa marker + `paragraphT28` + `Xin chào` + `Xin Xin chàochào` · media byte-exact · reopen 15 ms | đích < 500 ms xa |
+| Gate 15 negative ×4 | garbage exit 1 · doctor exit 1 (marker assert cắn trên pre-save) · seldoctor exit 1 (`span 8 != 0`) · **clipdoctor exit 1** (`'Xin chào'/8 != 'WRONG-CLIP'/999999` — gate ĐỌC số liệu clipboard) | pattern T-A27/T-A28 |
+| Gate 14 (regression) | 93 checks — KHÔNG đổi | layout.ts 0 diff |
+| Gate 12 (regression) | số KHÔNG đổi: 16 dòng · 601.7 · 600.5 · 750,-250,220 · lhs 17.9 · RSS 243–281 MB ≤ 300 | preedit vẽ ở overlay editor.ts |
+| parity-view | **KHÔNG chạy — `layout.ts` KHÔNG đụng** (0 diff; render.ts/viewer.ts cũng 0) | điều kiện parity chỉ khi đụng asset |
+| cargo test | 38 shell + 12 crate rc=0 tuần tự — KHÔNG đổi (Rust 0 đổi: paste = chuỗi insert/enter, cut = ranged backspace T-A28) | verify FULL exit 0 ×2, 19 ▸ steps |
 
 ## 6. Rủi ro + mitigations
 

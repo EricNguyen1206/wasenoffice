@@ -8,6 +8,56 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-03 · T-A29: A4 slice #2 — IME composite tiếng Việt (đóng OQ-L01-3) + clipboard plain-text + Cmd-A
+
+- **Bằng chứng (3 commit: 3ada9e8 design → 5a1a0e5 ts+gate15 → 9a2f24f ponytail
+  cuts):** gate 15 positive exit 0 (first-draw 91–110 ms / parse 3.7–9.0 ms ·
+  composition evidence 4 dòng, end `Xin chào` · clipboard `op=copy chars=8
+  sys=fail` → `op=paste sys=stash` → `op=copy-all chars=1425` · selection span
+  min −1 (Cmd-A) max 8 · save 2699 B / 2.0 ms · parse-back chứa marker +
+  `paragraphT28` + `Xin chào` + `Xin Xin chàochào` · media byte-exact · reopen
+  15 ms) + **negative ×4 exit 1** (garbage · doctor · seldoctor · **clipdoctor**
+  — `'Xin chào'/8 != 'WRONG-CLIP'/999999` cắn trên evidence thật). verify FULL
+  exit 0 **19 ▸ steps** ×2 (trước + sau cuts); gate 12 số KHÔNG đổi (16 dòng ·
+  601.7 · 600.5 · 750,-250,220 · lhs 17.9 · RSS 243–281 MB ≤ 300); gate 14 93
+  checks; **parity-view KHÔNG chạy — layout.ts 0 diff** (preedit vẽ ở overlay
+  editor.ts; render.ts/viewer.ts cũng 0); cargo test 38 shell + 12 crate rc=0
+  tuần tự (**Rust 0 đổi** — paste = chuỗi insert/enter có sẵn, cut = ranged
+  backspace T-A28); clippy -D warnings sạch.
+- **Thiết kế chốt (DD L01 §5.4):** composition = state machine 3 fn
+  (start/update/end) mirror bảng DD 1:1 — `compositionEnd(data)` là core fn cả
+  listener lẫn probe gọi; commit = 1 insert = 1 undo snapshot (semantics `apply`
+  giữ nguyên); keydown guard `composing || isComposing` ĐẦU handler (IME sở hữu
+  phím, non-IME đường cũ nguyên vẹn); preedit = text + underline tại caretXY,
+  KHÔNG displacement inline (ceiling). Clipboard chốt **navigator.clipboard +
+  session stash fallback, KHÔNG Tauri plugin** (dep + license gate không mua gì);
+  paste `\n` = split qua enter cmd (N dòng = N undo units — ceiling gộp); Cmd-A
+  anchor đầu / focus cuối paragraph block cuối (span −1). Đóng OQ-L01-3:
+  pipeline per spec + probe E2E; real-IME engagement (hidden editable sink) =
+  ceiling §10 — WebKit cần editable để giao marked text, pipeline sẵn sàng nhận.
+- **Gotchas phiên:** (1) **zsh không có `PIPESTATUS`** (bash-only) —
+  `${PIPESTATUS[0]:-$?}` sau `gate | tail` trả rc CỦA `tail` → suýt tuyên bố
+  gate PASSED khi đang FAILED; phát hiện vì banner PASSED vắng trong output.
+  Bài học: bắt exit code TRƯỚC pipe, kể cả khi "chỉ xem output". (2) **sai số
+  học probe: sau shift-extend `caret` = FOCUS** (không phải anchor) —
+  ArrowLeft ×4 từ 31 đưa về 19 (giữa "paragrap|h") thay vì 27; gate bắt qua
+  assert `paragraphT28` biến mất khỏi copy-all → mổ log thấy paste cắm offset
+  19; fix = ArrowRight ×4 từ focus 23 (DD §5.4c sửa theo run thật). (3)
+  **WKWebView CompositionEvent constructing mang `data` đúng** — không cần
+  fallback gọi handler trực tiếp (khác tiền lệ offsetX của MouseEvent T-A28);
+  `navigator.clipboard.writeText/readText` bị chặn không user activation
+  (`sys=fail`) — stash fallback giữ trọn round copy→paste (`src=stash`).
+  (4) `readText` resolve chuỗi rỗng → rơi về stash (đúng ý — clipboard trống
+  không xóa selection). (5) File rebrand UI của user vẫn dirty nguyên trạng
+  (không đụng, không commit — scoped add từng file suốt phiên).
+- **Còn cho slice A4 #3 (ceilings §10):** double/triple-click chọn word/para ·
+  caret blink · selection/sửa trong bảng (kèm bỏ refuse §2 + tblPr/tcPr) ·
+  arrows nhảy qua bảng · hidden editable sink (real IME) · paste format
+  RTF/HTML · hyperlink/sectPr-một-đoạn + refuse-warn (OQ-L01-2).
+- **Trạng thái:** confirmed — bằng chứng trong DD L01 §5.4(e) + báo cáo phiên.
+
+---
+
 ## 2026-10-03 · T-A28: A4 slice #1 — selection kéo + arrows trên seam T-060 (Nano Light)
 
 - **Bằng chứng (5 commit: dd1a908 design → 9a1f923 rust → 04a0d7b ts+gate15 →
