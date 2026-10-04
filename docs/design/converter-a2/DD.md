@@ -151,12 +151,23 @@ Harness: `harness/scripts/parity-a2.sh` — 3-way model compare trên canonical 
   mọi trường null, semantically empty); (d) **hex color lowercase** (`FF0000` → `ff0000`,
   ST_HexColor case-insensitive). Cả hai chỉ thấy được sau khi model V1 mở các construct này —
   invariant m-orig==m-crate vẫn 9/9, 0 diff không phân loại.
+- **Bổ sung T-A31 (04.10) — 3 construct mới vào model + passthrough:** hyperlink
+  (`w:hyperlink` §17.16.22 — `Run.link`, rel TargetMode External re-emit), sectPr
+  pgMar (§17.6.11 — body + mid-doc `w:pPr/w:sectPr` §17.6.18), settings/theme/docProps
+  passthrough byte-exact (check (e) của parity-a2). Corpus + `corpus-a2/fidelity-ta31.docx`
+  (generator `make_docx_fidelity.py`) — invariant giữ, diff x2t-side của file mới 4 dòng
+  = 2 lớp vô hại CŨ (hex lowercase + rel_id renumber `rIdLink`→`rId6`, target/text/
+  external nguyên vẹn); x2t không đòi thêm construct nào. Số clause verify hôm đó qua
+  mirror open-xml-docs (ISO/IEC 29500-1 1st ed): hyperlink §17.16.22 parent `p`
+  §17.3.1.22; pgMar §17.6.11 / pgSz §17.6.13 (bảng con của sectPr — LƯU Ý: comment cũ
+  trong code crate ghi pgSz §17.6.11, lệch số với bảng này, chưa sửa — không re-litigate
+  trong slice).
 - **Ceiling + điều kiện 100%:** model-level đã đạt parity đầy đủ trên corpus — khác biệt còn
   lại là normalization phía x2t, không phải lệch model. Blind-spot ghi rõ: `rStyle` (character
   style trên run) không nằm trong model — cả 2 phía cùng bỏ nên parity "mù" ở construct đó;
   `Run.bold/italic` 2-state vẫn invisible ở model level (x2t giữ explicit `w:val="false"` trên
-  output của nó, obs corpus) — nâng 3-state chỉ khi render/A4 đòi. sectPr chưa surface —
-  không tạo diff (hdr/ftr đã surface qua rels cả 2 phía). Fuzz vẫn ở crate tests (T-A21/A22,
+  output của nó, obs corpus) — nâng 3-state chỉ khi render/A4 đòi. sectPr surface dần
+  (pgSz từ V1, pgMar từ T-A31) — không tạo diff. Fuzz vẫn ở crate tests (T-A21/A22,
   500 vòng 0 panic) — harness này đo corpus, không đo fuzz.
 
 ## 6. Rủi ro + mitigations

@@ -135,13 +135,17 @@ mỗi mục ghi giữ-được/mất + criterion nâng.
 | list numbering resolve | ✅ | giữ (numPr raw + numbering part) | — |
 | ảnh (part + extent + bytes) | ✅ (bytes qua `media_src`) | **giữ byte-exact** (T-A26) | — |
 | headers/footers (blocks + rels) | ✅ | giữ | render header = slice sau |
-| sectPr CUỐI tài liệu (pgSz) | ✅ (chỉ pgSz) | giữ pgSz; **mất pgMar + các con của sectPr khác** | T-V6 (pgMar) |
-| **sectPr GIỮA tài liệu** | ❌ (bỏ khi parse) | **MẤT** (section break bị drop) | khi corpus có — nâng model + refuse tạm nếu user đụng |
-| **hyperlink (`w:hyperlink`)** | ❌ (skip subtree khi parse — document.rs policy S1) | **MẤT CẢ TEXT bên trong** — data loss thật, phải biết | vòng gần nhất: tối thiểu surface text runs con; đúng chuẩn là vào model |
-| settings.xml (defaultTabStop…) | ❌ | **mất** (tab stop về 720 quy ước) | khi tab edit đòi |
-| theme fonts (`asciiTheme`…) | ❌ | **mất** (rFonts literal giữ nguyên) | khi corpus thật đòi |
-| docProps (core/app) | ❌ | **mất** (metadata tạo lại tối giản) | A5+ nếu cần |
-| tracked changes (`w:ins`/`w:del`), footnotes, fields | ❌ | **mất** (skip subtree) | refuse-warn khi phát hiện (xem §8 OQ-L01-2) |
+| sectPr CUỐI tài liệu | ✅ (pgSz) | giữ pgSz + **pgMar** (T-A31); con khác của sectPr = **warn** | render pgMar = T-V6 |
+| **sectPr GIỮA tài liệu** | ✅ (T-A31 — `Paragraph.sect` typed-minimal pgSz+pgMar) | **giữ** pgSz+pgMar; con khác = **warn** | gate 15 parse-back JSON + parity-a2 invariant |
+| **hyperlink (`w:hyperlink`)** | ✅ (T-A31 — `Run.link` {rel_id, anchor, target, external}, runs flatten) | **giữ** nhóm link + runs (edit xuyên như text thường) | gate 15 parse-back rel+target+run text (T31LINK trong link run) + parity-a2 invariant |
+| settings.xml | ✅ (T-A31 — passthrough byte-exact, KHÔNG vào model) | **giữ byte-exact** | parity-a2 check (e) + gate 15 sha256 |
+| theme fonts | ✅ (T-A31 — passthrough byte-exact) | **giữ byte-exact** | parity-a2 check (e) + gate 15 sha256 |
+| docProps (core/app) | ✅ (T-A31 — passthrough byte-exact) | **giữ byte-exact** | parity-a2 check (e) + gate 15 sha256 |
+| tracked changes (`w:ins`/`w:del`), footnotes, fields | ❌ (skip subtree) | vẫn mất + **WARN khi mở** (`nano light warn:` + banner — T-A31, ĐÓNG OQ-L01-2) | detect unit tests + gate 15 `warndoor` |
+
+Dòng MẤT còn lại (trung thực): tblPr/tcPr (styling bảng) · tracked changes/footnotes/
+fields (nội dung — chỉ detect+warn) · con khác của sectPr (cols/docGrid/header-ref —
+chỉ detect+warn). Mỗi dòng còn lại có warning hoặc criterion nâng riêng ở §10.
 
 Đây là danh sách THÀNH THẬN cho criterion đóng rung A4: từng lớp tính năng vào
 matrix thì mới tính "thay được" — vòng 1 chỉ claim đúng dòng "giữ".
@@ -656,7 +660,21 @@ smoke-lib CÙNG commit emitting end) + payload `NanoLightDoc` +`warnings: string
   (hiện 103); parity-view chỉ bắt buộc nếu đụng layout.ts — **KHÔNG đụng** (resolve/layout
   0 diff).
 
-**g) Kết quả slice — ghi khi land.**
+**g) Kết quả slice (land 04.10.2026 — 9823571 design → 24158d6 crate → 61c617f
+editor+gate15 → b5ecd3c ponytail cuts):**
+
+| Bằng chứng | Kết quả | Ghi |
+|---|---|---|
+| Gate 15 positive | exit 0 ×2 (trước + sau cuts) — first-draw 50.0/99.0 ms (parse 7.8/4.7 ms) · save **3.2 ms / 4503 B** · parse-back: link target `https://example.com/nanooffice-fidelity` còn với **T31LINK trong link run** + anchor nội bộ còn + mid sectPr pgSz 11906/pgMar 1134/720 còn · **settings/theme/docProps sha256 == snapshot** · rels đã-save mang `TargetMode="External"` · **positive KHÔNG có `nano light warn:`** | đích < 500 ms xa |
+| Gate 15 negative | **7/7 exit 1**: garbage · doctor · seldoctor · clipdoctor · celldoctor (re-proven trên fixture fidelity) · **linkdoctor** (đòi `WRONG-TARGET` — cắn trên target thật) · **warndoor** (fixture tiêm `w:ins` → warn thật `'save will drop: tracked changes'`, assert đòi 'hyperlinks' → cắn — detect bắn đúng đường open E2E) | pattern doctor T-A27..A30 |
+| parity-a2 | exit 0 **×2** (11 file, hard-fails 0) — corpus + `fidelity-ta31.docx`; INVARIANT 11/11; check (e) passthrough mới; diff fidelity 4 dòng = 2 lớp vô hại đã phân loại (hex lowercase + rel_id renumber — DD K01 §5.1) | x2t giữ nguyên link target qua oracle |
+| Gate 12/14 | số KHÔNG đổi: 16 dòng · 601.7 · 600.5 · 750,-250,220 · lhs 17.9 · RSS 133 MB; gate 14 **103 checks** | layout.ts 0 diff — parity-view không chạy (điều kiện chỉ khi đụng) |
+| Bonus engine-oracle | `smoke-render.sh <file-NL-đã-save>` exit 0 — file ghi bằng writer mới (hyperlink + 2 sectPr + 4 part passthrough) mở render GREEN trong ENGINE (canonical open-side T-A24 hưởng writer mới) | smoke log /tmp/nanooffice-smoke-ZoMhTL |
+| cargo test | 41 shell lib (+1 link/sect ride edits/undo/round-trip) + **16 crate** (+4: fidelity parse, detect flags/spares, fidelity round-trip byte-exact, passthrough-silent) rc=0 tuần tự | verify FULL exit 0 **19 ▸ steps** ×2 |
+
+Matrix §5.1: **6 dòng MẤT → GIỮ** (hyperlink, sectPr giữa, pgMar cuối, settings,
+theme, docProps) + tracked changes/footnotes/fields lênwarn — criterion từng dòng
+ghi sẵn trong bảng §5.1; **OQ-L01-2 ĐÓNG** (mở + cảnh báo, §8).
 
 **h) Ceilings mở/đóng — ghi §10:** ĐÓNG "hyperlink/sectPr (OQ-L01-2 = slice #4)" của
 §5.5(i). MỚI: UI tạo/sửa/xoá link · link styling render · link semantics đầy đủ Word
@@ -702,9 +720,12 @@ vào viewer layout (T-V6).
 
 - [ ] **OQ-L01-1:** default-switch mở docx = Nano Light (thay engine) — quyết
   A4 muộn/A5 (D1 không hard-cut); vòng 1 mặc định vẫn engine. Ghi khi có chỉ thị user.
-- [ ] **OQ-L01-2:** khi mở file chứa construct MẤT trong matrix §5.1 (hyperlink/
-  sectPr giữa/ins-del): Nano Light nên refuse-mở (an toàn dữ liệu) hay mở + cảnh báo
-  mất-khi-save? Vòng 1: mở im lặng (matrix công khai); chạm user thật thì quyết.
+- [x] **OQ-L01-2: CHỐT ở §5.6(d) (T-A31, 04.10) —** mở + cảnh báo mất-khi-save,
+  KHÔNG refuse-mở: banner trong editor window (tạo động, editor.html không đụng) +
+  log `nano light warn: save will drop: …` + payload `warnings`. Lý do: D1 — engine
+  AGPL vẫn là chế độ nâng cao cho construct ngoài model; refuse-mở chỉ đổi lỗi thành
+  block mà không cứu dữ liệu nào. Detect = `detect_save_losses` (byte scan) — unit
+  tests + negative warndoor chứng minh cả detect lẫn UX.
 - [x] **OQ-L01-3: CHỐT ở §5.4 (T-A29, 03.10) —** composition pipeline per spec
   UI Events (`compositionstart/update/end`, commit = 1 insert = 1 undo unit,
   preedit overlay, keydown tắt khi composing) + probe E2E gate 15; real-IME
@@ -728,6 +749,14 @@ vào viewer layout (T-V6).
   ảnh theo run (kèm rules §3.1).
 - Edit trong bảng: **ĐÓNG ở slice A4 #3 (T-A30, §5.5)** — refuse §2 bỏ (identity
   block+cell+cellPara giải tọa độ); ceilings còn lại của bảng ghi ở §5.5(i).
+- Save-fidelity: **ĐÓNG ở slice A4 #4 (T-A31, §5.6)** — hyperlink/sectPr vào model,
+  settings/theme/docProps passthrough, refuse-warn (OQ-L01-2 đóng); ceilings còn lại
+  ghi ở §5.6(h): UI tạo/sửa/xoá link · link styling render · link semantics Word đầy
+  đủ (tách/gộp nhóm khi edit cắt biên — đang giữ link run đầu) · `w:history`/tooltip/
+  tgtFrame · sectPr con khác (cols/docGrid/header-ref — đang warn) · fields/footnotes/
+  tracked-changes VÀO model (đang detect+warn) · docGrid/lnNumType · settings.xml vào
+  model (defaultTabStop consume — đang passthrough byte) · pgMar consume vào viewer
+  layout (T-V6).
 - Canvas cao = toàn tài liệu, cap 8192 px logic (ceiling V5 kế thừa; pagination
   post-A3).
 - Blink caret: **ĐÓNG ở slice A4 #3 (T-A30, §5.5f)** — 500 ms toggle, repaint từ model

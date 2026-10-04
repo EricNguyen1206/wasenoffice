@@ -8,6 +8,61 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-04 · T-A31: A4 slice #4 — save-fidelity: hyperlink/sectPr vào model + settings/theme/docProps passthrough + refuse-warn (ĐÓNG OQ-L01-2)
+
+- **Bằng chứng (4 commit: 9823571 design → 24158d6 crate → 61c617f editor+gate15 →
+  b5ecd3c cuts):** gate 15 positive exit 0 ×2 (first-draw 50.0/99.0 ms / parse
+  7.8/4.7 ms · save 3.2 ms / 4503 B · parse-back: link target + **T31LINK trong link
+  run** + anchor nội bộ + mid sectPr pgSz/pgMar · settings/theme/docProps sha256 ==
+  snapshot · rels `TargetMode="External"` · positive không warn) + **negative 7/7
+  exit 1** (5 cũ re-proven trên fixture fidelity + **linkdoctor** + **warndoor** —
+  warn thật `'save will drop: tracked changes'`, assert đòi 'hyperlinks' cắn).
+  parity-a2 exit 0 ×2 (11 file, hard-fails 0, INVARIANT 11/11, check (e) passthrough
+  mới; diff fidelity 4 dòng = 2 lớp vô hại cũ: hex lowercase + rel_id renumber).
+  verify FULL exit 0 **19 ▸ steps** ×2; gate 12 số KHÔNG đổi (16 dòng · 601.7 ·
+  600.5 · 750,-250,220 · lhs 17.9 · RSS 133 MB); gate 14 103 checks; **layout.ts 0
+  diff — parity-view không chạy**; cargo 41 shell lib (+1) + 16 crate (+4) rc=0 tuần
+  tự; **bonus**: smoke-render file-NL-đã-save trong ENGINE exit 0 (writer mới sống
+  qua x2t/canonical).
+- **Thiết kế chốt (DD L01 §5.6):** hyperlink = `Run.link` (flatten nhóm `w:hyperlink`
+  §17.16.22 — runs giữ địa chỉ hitTest, 0 dòng mutation đổi, enter nhân bản link cả
+  2 nửa, gộp run giữ link run ĐẦU); sectPr = `PageMar` + `Paragraph.sect` (Box —
+  clippy large_enum_variant, None = 0 chi phí) + `Document.page_mar`; enter giữ sect
+  ở HEAD (không nhân bản section break); passthrough = writer-side discovery trong
+  `media_src` (model + JSON CLI bất biến, content-type verbatim từ nguồn, skip-im
+  khi nguồn thiếu/hỏng); refuse-warn = `detect_save_losses` byte-scan (ins/del/
+  fldChar/instrText/footnote/endnote/sectPr-lạ) → log + banner + payload `warnings`.
+  **OQ-L01-2 ĐÓNG: mở + cảnh báo, không refuse** (D1). **GO sectPr** (ước lượng nửa
+  ngày < ngưỡng 1 ngày — không rơi nhánh fallback).
+- **Matrix §5.1:** 6 dòng MẤT → GIỮ (hyperlink · sectPr giữa · pgMar cuối · settings ·
+  theme · docProps) + tracked/footnotes/fields lên warn. **Còn MẤT (trung thực)**:
+  tblPr/tcPr · nội dung tracked/footnotes/fields · con khác của sectPr (warn) —
+  đánh giá đóng rung A4 để orchestrator/user chốt (khuyến nghị: matrix đủ để đóng
+  "save-fidelity văn bản cơ bản"; slice kế nếu muốn = selection render styling link
+  hoặc T-V6 parity render).
+- **Gotchas phiên:** (1) **bug `_rels/.rels` passthrough im lặng** — gọi
+  `load_rels(src, "", ".rels")` sinh `_rels/.rels.rels` (fn là rels CỦA PART, tự thêm
+  `.rels`) → root rels rỗng → passthrough copy 0 part, KHÔNG lỗi (thiết kế skip-silent
+  che bug) — phát hiện vì gate tự-so sha cắn ngay lần chạy đầu; fix = đọc
+  `_rels/.rels` trực tiếp (cùng bug ở `main_part` của detect). Bài học: skip-silent
+  phải đi kèm gate khẳng định-side (check (e) parity-a2 + sha256 gate 15). (2)
+  **clippy sau mở model**: `large_enum_variant` (Section 184 B vào Paragraph) →
+  `Option<Box<Section>>`; `type_complexity` trên tuple trả về 3 phần tử của
+  `parse_body` → struct `BodyParse` — 2 lint bắt đúng chỗ đáng cảm ơn. (3) **pgSz
+  clause lệch số**: mirror open-xml-docs (ISO/IEC 29500-1 1st ed) bảng con của
+  sectPr ghi pgSz §17.6.13 / pgMar §17.6.11, trong khi comment crate cũ (T-A21)
+  ghi pgSz §17.6.11 — ghi nhận, không sửa comment cũ trong slice (K01 §5.1 bổ sung
+  ghi LƯU Ý). (4) fixture `make_docx_layout.py` +flag `fidelity` chèn LINK/SECT
+  para TRƯỚC MEDIUM để `lastTop` (triple-click T-A30) vẫn trúng MEDIUM — sai chỗ
+  là assert "bundled font metrics" vỡ. (5) probe T31LINK dùng word-token 'fidelity'
+  (tokens không nguyên câu — item 'fidelity link' không tồn tại, hitTest theo item
+  mid-x + baseline dòng).
+- **Còn kế tiếp (đánh giá đóng rung A4 theo §5.1 / T-055 #6 nếu user chốt):** matrix
+  còn dòng warn-only + tblPr/tcPr + T-V6; default-switch = OQ-L01-1 (A4 muộn/A5).
+- **Trạng thái:** confirmed — bằng chứng trong DD L01 §5.6(g) + báo cáo phiên.
+
+---
+
 ## 2026-10-03 · T-A30: A4 slice #3 — double/triple-click + blink + mở edit trong bảng single-cell (bỏ refuse §2)
 
 - **Bằng chứng (3 commit: f1e8409 design → 3f35db4 ts+rust → f8da488 ponytail
