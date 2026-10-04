@@ -12,16 +12,13 @@
 
 use quick_xml::events::{BytesStart, Event};
 
-use crate::opc::{self, attr, Rel};
+use crate::opc::{self, attr, RelsList};
 use crate::{
     xml_err, Block, Hyperlink, ImageRef, Ind, NumRef, Page, PageMar, Paragraph, ParseError, RFonts,
     Run, Section, Table, TableCell,
 };
 
 const W_NS: &str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
-
-/// Relationship table of the part being parsed (for `r:embed` resolution).
-type RelsList = Vec<(String, Rel)>;
 
 struct Parser<'a> {
     reader: quick_xml::Reader<&'a [u8]>,

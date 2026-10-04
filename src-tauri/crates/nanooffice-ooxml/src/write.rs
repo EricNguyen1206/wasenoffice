@@ -28,6 +28,11 @@
 //! writes the explicit `<w:b w:val="false"/>` override; `StyleDef`/
 //! `DocDefaults` props are three-state `Option`s all the way. Break controls
 //! in `Run.text` map back to `w:tab`/`w:br` elements (§17.3.3.34/§17.3.3.3).
+//! Hyperlinks carry a hard model invariant — `rel_id` ⇒ (`target`,
+//! `external`) consistent, stamped by the parser's `resolve_link`; the
+//! writer REFUSES a `Run.link` whose `rel_id` does not re-resolve to its
+//! `target` rather than guessing (that error mode is part of the model's
+//! interface, review #6 C4).
 //! T-A31: hyperlinks re-group consecutive equal-link runs (§17.16.22),
 //! `sectPr` carries pgSz+pgMar (body + mid-document), and settings/theme/
 //! docProps are copied BYTE-EXACT from the source package when present.
@@ -41,6 +46,7 @@ use std::io::Write as _;
 use quick_xml::escape::escape;
 
 use crate::opc;
+use crate::opc::{file_name, part_dir};
 use crate::{
     Block, DocDefaults, Document, Hyperlink, ImageRef, Ind, NumLvl, Page, PageMar, Paragraph,
     RFonts, Run, StyleDef, StyleKind, Table, TableCell, WriteError,
@@ -749,11 +755,11 @@ fn passthrough_parts(
         pkg_rels.push((id, rel.rel_type.clone(), part, false));
     }
     // settings/theme: document-level relationships of the source main part.
-    let Ok(Some(main)) = crate::find_target(&root_rels, opc::RT_OFFICE_DOCUMENT, "") else {
+    let Ok(Some(main)) = opc::find_target(&root_rels, opc::RT_OFFICE_DOCUMENT, "") else {
         return Ok(());
     };
     let (dir, file) = (part_dir(&main), file_name(&main));
-    let doc_src_rels = crate::load_rels(src, &dir, &file).unwrap_or_default();
+    let doc_src_rels = opc::load_rels(src, &dir, &file).unwrap_or_default();
     for rel in doc_src_rels.iter().map(|(_, r)| r) {
         if rel.rel_type != opc::RT_SETTINGS && rel.rel_type != opc::RT_THEME {
             continue;
@@ -1013,19 +1019,7 @@ fn image_content_type(ext: &str) -> Result<&'static str, WriteError> {
     })
 }
 
-/// Directory part of a package path (`word/media/x.png` → `word`).
-fn part_dir(part: &str) -> String {
-    part.rsplit_once('/')
-        .map(|(d, _)| d.to_string())
-        .unwrap_or_default()
-}
-
-/// File name of a package path (`word/header1.xml` → `header1.xml`).
-fn file_name(part: &str) -> String {
-    part.rsplit_once('/')
-        .map(|(_, f)| f.to_string())
-        .unwrap_or_else(|| part.to_string())
-}
+// `part_dir`/`file_name` live in `opc` (review #6 C1 — one home).
 
 /// Relationship target of `part`, owned by a source part in `base_dir`:
 /// the model stores package paths, relationship targets are relative to the

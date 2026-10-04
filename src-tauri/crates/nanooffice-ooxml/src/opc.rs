@@ -206,3 +206,65 @@ pub(crate) fn attr(
     }
     Ok(None)
 }
+
+// --- relationships plumbing (review #6 C1: ONE home for the "main part is
+// --- data, never hard-coded" invariant and the rels/path helpers) ---------
+
+/// UTF-8 decode of a package part with the part name in the error.
+pub(crate) fn utf8(bytes: Vec<u8>, what: &str) -> Result<String, ParseError> {
+    String::from_utf8(bytes).map_err(|e| ParseError(format!("utf-8 {what}: {e}")))
+}
+
+/// All relationships of one part, in relationship-file order.
+pub(crate) type RelsList = Vec<(String, Rel)>;
+
+/// All relationships of one part (`<dir>/_rels/<file>.rels`); a missing rels
+/// stream is legal — an empty list, not an error.
+pub(crate) fn load_rels(zip_bytes: &[u8], dir: &str, file: &str) -> Result<RelsList, ParseError> {
+    let rels_part = if dir.is_empty() {
+        format!("_rels/{file}.rels")
+    } else {
+        format!("{dir}/_rels/{file}.rels")
+    };
+    match try_part_bytes(zip_bytes, &rels_part) {
+        Some(bytes) => parse_rels(&utf8(bytes, &rels_part)?),
+        None => Ok(Vec::new()), // a part may legally carry no relationships
+    }
+}
+
+/// Target of the first relationship of the given type, resolved against the
+/// source part's directory.
+pub(crate) fn find_target(
+    rels: &RelsList,
+    rel_type: &str,
+    dir: &str,
+) -> Result<Option<String>, ParseError> {
+    rels.iter()
+        .find(|(_, r)| r.rel_type == rel_type)
+        .map(|(_, r)| resolve_target(dir, &r.target))
+        .transpose()
+}
+
+/// Directory part of a package path (`word/media/x.png` → `word`).
+pub(crate) fn part_dir(part: &str) -> String {
+    part.rsplit_once('/')
+        .map(|(d, _)| d.to_string())
+        .unwrap_or_default()
+}
+
+/// File name of a package path (`word/header1.xml` → `header1.xml`).
+pub(crate) fn file_name(part: &str) -> String {
+    part.rsplit_once('/')
+        .map(|(_, f)| f.to_string())
+        .unwrap_or_else(|| part.to_string())
+}
+
+/// Main document part name of a package — looked up through the
+/// PACKAGE-level relationships. `_rels/.rels` is read directly here:
+/// `load_rels` is for a PART's rels and would look for `_rels/.rels.rels`
+/// (the T-A31 bug class, now structurally impossible to re-import).
+pub(crate) fn main_document_part(zip_bytes: &[u8]) -> Result<String, ParseError> {
+    let rels = parse_rels(&utf8(part_bytes(zip_bytes, "_rels/.rels")?, "_rels/.rels")?)?;
+    find_target(&rels, RT_OFFICE_DOCUMENT, "")?
+        .ok_or_else(|| ParseError("no officeDocument relationship in _rels/.rels".into()))
+}

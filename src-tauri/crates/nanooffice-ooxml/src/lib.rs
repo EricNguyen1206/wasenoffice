@@ -22,6 +22,8 @@ pub use opc::try_part_bytes;
 pub use resolve::{resolve, RBlock, RCell, RParagraph, RRun, RTable, RenderDoc};
 pub use write::{write_docx, write_docx_file};
 
+use opc::{file_name, find_target, load_rels, part_dir, utf8};
+
 use std::collections::BTreeMap;
 
 use serde::Serialize;
@@ -91,6 +93,12 @@ pub struct Section {
 /// `w:hyperlink` (§17.16.22) link reference carried by EVERY run inside the
 /// element (parser flattens the group, T-A31; the writer re-groups runs with
 /// equal links).
+///
+/// INVARIANT (the model's interface, review #6 C4): `rel_id` ⇒ (`target`,
+/// `external`) consistent — the parser stamps all three from ONE
+/// relationship (`resolve_link`). A hand-built model that violates it is
+/// REFUSED by the writer (`hyperlink_open` re-resolves `rel_id`); the
+/// `WriteError` is the documented error mode, not a guess.
 #[derive(Debug, Default, PartialEq, Serialize, Clone)]
 pub struct Hyperlink {
     /// `r:id` — the target relationship (resolved into `target`).
@@ -193,6 +201,8 @@ pub struct Run {
     pub images: Vec<ImageRef>,
     /// `w:hyperlink` (§17.16.22) group membership — `Some` when this run was
     /// parsed inside a hyperlink (T-A31; edits ride the run, link included).
+    /// The writer refuses a `link` whose `rel_id` does not re-resolve to its
+    /// `target` (see the `Hyperlink` invariant).
     pub link: Option<Hyperlink>,
 }
 
@@ -359,16 +369,7 @@ pub fn parse_docx(zip_bytes: &[u8]) -> Result<Document, ParseError> {
         opc::part_bytes(zip_bytes, "[Content_Types].xml")?,
         "[Content_Types].xml",
     )?)?;
-    let root_rels = opc::parse_rels(&utf8(
-        opc::part_bytes(zip_bytes, "_rels/.rels")?,
-        "_rels/.rels",
-    )?)?;
-    let doc_rel = root_rels
-        .iter()
-        .find(|(_, r)| r.rel_type == opc::RT_OFFICE_DOCUMENT)
-        .map(|(_, r)| r)
-        .ok_or_else(|| ParseError("no officeDocument relationship in _rels/.rels".into()))?;
-    let doc_part = opc::resolve_target("", &doc_rel.target)?;
+    let doc_part = opc::main_document_part(zip_bytes)?;
     match ct.get(&doc_part) {
         Some(t) if t == opc::CT_MAIN_DOCUMENT => {}
         Some(t) => {
@@ -379,10 +380,7 @@ pub fn parse_docx(zip_bytes: &[u8]) -> Result<Document, ParseError> {
         None => return Err(ParseError(format!("no content type declared for part {doc_part}"))),
     }
 
-    let (dir, file) = doc_part
-        .rsplit_once('/')
-        .map(|(d, f)| (d.to_string(), f.to_string()))
-        .unwrap_or_default();
+    let (dir, file) = (opc::part_dir(&doc_part), opc::file_name(&doc_part));
     let rels = load_rels(zip_bytes, &dir, &file)?;
 
     // Accessory parts resolve through the document part's relationships
@@ -445,9 +443,9 @@ pub fn parse_docx_file(path: impl AsRef<std::path::Path>) -> Result<Document, Pa
 /// an unreadable package (parse would refuse it anyway) warns nothing.
 pub fn detect_save_losses(zip_bytes: &[u8]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
-    let doc_part = match main_part(zip_bytes) {
-        Some(p) => p,
-        None => return out,
+    // unreadable package (parse would refuse it anyway) warns nothing
+    let Ok(doc_part) = opc::main_document_part(zip_bytes) else {
+        return out;
     };
     let xml = match opc::try_part_bytes(zip_bytes, &doc_part) {
         Some(b) => String::from_utf8_lossy(&b).into_owned(),
@@ -480,15 +478,6 @@ pub fn detect_save_losses(zip_bytes: &[u8]) -> Vec<String> {
     out
 }
 
-/// Main document part name of a package (`_rels/.rels` read directly — `load_rels` is for a PART's rels).
-fn main_part(zip_bytes: &[u8]) -> Option<String> {
-    let bytes = opc::try_part_bytes(zip_bytes, "_rels/.rels")?;
-    let rels = opc::parse_rels(&String::from_utf8(bytes).ok()?).ok()?;
-    find_target(&rels, opc::RT_OFFICE_DOCUMENT, "")
-        .ok()
-        .flatten()
-}
-
 /// True when any `w:sectPr` block carries a child element other than
 /// `w:pgSz`/`w:pgMar` (those two are modelled since T-A31).
 fn sect_beyond_page(xml: &str) -> bool {
@@ -513,42 +502,5 @@ fn sect_beyond_page(xml: &str) -> bool {
     false
 }
 
-/// All relationships of one part, in relationship-file order.
-type RelsList = Vec<(String, opc::Rel)>;
-
-fn load_rels(zip_bytes: &[u8], dir: &str, file: &str) -> Result<RelsList, ParseError> {
-    let rels_part = if dir.is_empty() {
-        format!("_rels/{file}.rels")
-    } else {
-        format!("{dir}/_rels/{file}.rels")
-    };
-    match opc::try_part_bytes(zip_bytes, &rels_part) {
-        Some(bytes) => opc::parse_rels(&utf8(bytes, &rels_part)?),
-        None => Ok(Vec::new()), // a part may legally carry no relationships
-    }
-}
-
-/// Target of the first relationship of the given type, resolved against the
-/// source part's directory.
-fn find_target(rels: &RelsList, rel_type: &str, dir: &str) -> Result<Option<String>, ParseError> {
-    rels.iter()
-        .find(|(_, r)| r.rel_type == rel_type)
-        .map(|(_, r)| opc::resolve_target(dir, &r.target))
-        .transpose()
-}
-
-fn part_dir(part: &str) -> String {
-    part.rsplit_once('/')
-        .map(|(d, _)| d.to_string())
-        .unwrap_or_default()
-}
-
-fn file_name(part: &str) -> String {
-    part.rsplit_once('/')
-        .map(|(_, f)| f.to_string())
-        .unwrap_or_else(|| part.to_string())
-}
-
-fn utf8(bytes: Vec<u8>, what: &str) -> Result<String, ParseError> {
-    String::from_utf8(bytes).map_err(|e| ParseError(format!("utf-8 {what}: {e}")))
-}
+// `utf8`/`load_rels`/`find_target`/`part_dir`/`file_name`/`RelsList` live in
+// `opc` (review #6 C1 — one home for the package-path/rels plumbing).

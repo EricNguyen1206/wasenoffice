@@ -110,12 +110,13 @@ LOG="$(mktemp /tmp/nanooffice-smoke-nanolight-XXXXXX)"
 if [ "$NEGATIVE" = "garbage" ]; then
   printf 'not a docx package' > "$FIXTURE"
   echo "smoke: NEGATIVE proof (garbage) — expecting 'nano light failed:' to bite"
-elif [ "$NEGATIVE" = "warndoor" ]; then
-  python3 "$ROOT/harness/fixtures/make_docx_layout.py" "$FIXTURE" table fidelity tracked >/dev/null || {
-    echo "smoke: cannot generate fixture"; exit 1;
-  }
-elif [ "$NEGATIVE" = "tbldoctor" ]; then
-  python3 "$ROOT/harness/fixtures/make_docx_layout.py" "$FIXTURE" table fidelity tblstyle >/dev/null || {
+elif [ "$NEGATIVE" = "warndoor" ] || [ "$NEGATIVE" = "tbldoctor" ]; then
+  # both warn-doors share the shape (review #6 C5): a fixture whose REAL warn
+  # is contradicted by the assert — warndoor wraps a tracked change,
+  # tbldoctor styles the table (tblPr/tcPr → 'table styling')
+  warnflag=tracked
+  [ "$NEGATIVE" = "tbldoctor" ] && warnflag=tblstyle
+  python3 "$ROOT/harness/fixtures/make_docx_layout.py" "$FIXTURE" table fidelity "$warnflag" >/dev/null || {
     echo "smoke: cannot generate fixture"; exit 1;
   }
 else
