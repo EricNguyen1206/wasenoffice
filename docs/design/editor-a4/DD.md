@@ -131,7 +131,7 @@ mỗi mục ghi giữ-được/mất + criterion nâng.
 | Mục | Trong `Document`? | Qua Nano Light save | Criterion nâng |
 |---|---|---|---|
 | paragraph/text/pStyle/jc/numPr/ind, b/i/u/sz/rFonts/color/spacing (literal), rStyle 3-state | ✅ | **giữ** (round-trip bất biến, parity-a2 15/15) | — |
-| bảng grid + rows + nested | ✅ (không tblPr/tcPr) | giữ cấu trúc; **mất tblPr/tcPr** (border/width cell) | khi edit bảng thật đòi (cùng lúc bỏ refuse §2) |
+| bảng grid + rows + nested | ✅ (không tblPr/tcPr) | giữ cấu trúc; **mất tblPr/tcPr + WARN khi mở** (`table styling` — T-A32 `detect_save_losses`) | vào model khi render/edit bảng styling thật đòi (lớp bảng kế, post-A4) |
 | list numbering resolve | ✅ | giữ (numPr raw + numbering part) | — |
 | ảnh (part + extent + bytes) | ✅ (bytes qua `media_src`) | **giữ byte-exact** (T-A26) | — |
 | headers/footers (blocks + rels) | ✅ | giữ | render header = slice sau |
@@ -143,9 +143,10 @@ mỗi mục ghi giữ-được/mất + criterion nâng.
 | docProps (core/app) | ✅ (T-A31 — passthrough byte-exact) | **giữ byte-exact** | parity-a2 check (e) + gate 15 sha256 |
 | tracked changes (`w:ins`/`w:del`), footnotes, fields | ❌ (skip subtree) | vẫn mất + **WARN khi mở** (`nano light warn:` + banner — T-A31, ĐÓNG OQ-L01-2) | detect unit tests + gate 15 `warndoor` |
 
-Dòng MẤT còn lại (trung thực): tblPr/tcPr (styling bảng) · tracked changes/footnotes/
-fields (nội dung — chỉ detect+warn) · con khác của sectPr (cols/docGrid/header-ref —
-chỉ detect+warn). Mỗi dòng còn lại có warning hoặc criterion nâng riêng ở §10.
+Dòng MẤT còn lại (trung thực, TOÀN BỘ detect+warn từ T-A32 — **hết dòng mất im lặng**):
+tblPr/tcPr (styling bảng — `table styling`) · tracked changes/footnotes/fields (nội dung —
+chỉ detect+warn) · con khác của sectPr (cols/docGrid/header-ref — chỉ detect+warn).
+Criterion nâng từng dòng ở §10.
 
 Đây là danh sách THÀNH THẬN cho criterion đóng rung A4: từng lớp tính năng vào
 matrix thì mới tính "thay được" — vòng 1 chỉ claim đúng dòng "giữ".
@@ -684,6 +685,22 @@ fields/footnotes/tracked-changes vào model (đang detect+warn) · docGrid/lnNum
 settings.xml VÀO model (defaultTabStop consume — đang passthrough byte) · pgMar consume
 vào viewer layout (T-V6).
 
+### 5.7 Slice A4 closure — tblPr/tcPr detect+warn (T-A32, 04.10)
+
+Dòng mất-im-lặng CUỐI của matrix §5.1: criterion nâng của tblPr/tcPr ghi
+"khi edit bảng thật đòi (cùng lúc bỏ refuse §2)" — và T-A30 ĐÃ bỏ refuse →
+trigger cháy: user sửa 1 ô rồi save là mất border/width không hay biết.
+Fix = detect, không phải model: `detect_save_losses` +pattern `<w:tblPr>`/`<w:tblPr `
++ `<w:tcPr>`/`<w:tcPr ` (khớp đúng biên tag — `<w:tblPrChange>`/`<w:tblPrEx>` không
+dính) → warn `table styling` trên đường open. WARN BẮT CẢ FILE KHÔNG BỊ SỬA: save
+Nano Light drop tblPr/tcPr của MỌI bảng trong tài liệu bất kể user đụng đâu —
+đúng semantic OQ-L01-2 (cảnh báo mất-khi-save, không phải cảnh báo những gì user
+vừa làm). Model/writer KHÔNG đổi — tblPr/tcPr vẫn skip (document.rs, `w:tbl`
+§17.4.38 / `w:tc` §17.4.66 — "tblPr/tcPr skipped"); criterion nâng = vào model khi
+lớp bảng render/edit styling thật đòi (post-A4). Fixture +flag `tblstyle`; gate 15
++negative **tbldoctor** (mirror warndoor — assert đòi 'hyperlinks' cắn trên warn
+thật 'table styling').
+
 ## 6. Rủi ro + mitigations
 
 
@@ -754,7 +771,8 @@ vào viewer layout (T-V6).
   ghi ở §5.6(h): UI tạo/sửa/xoá link · link styling render · link semantics Word đầy
   đủ (tách/gộp nhóm khi edit cắt biên — đang giữ link run đầu) · `w:history`/tooltip/
   tgtFrame · sectPr con khác (cols/docGrid/header-ref — đang warn) · fields/footnotes/
-  tracked-changes VÀO model (đang detect+warn) · docGrid/lnNumType · settings.xml vào
+  tracked-changes VÀO model (đang detect+warn) · tblPr/tcPr VÀO model (detect+warn
+  từ T-A32 — dòng mất im lặng cuối đã đóng) · docGrid/lnNumType · settings.xml vào
   model (defaultTabStop consume — đang passthrough byte) · pgMar consume vào viewer
   layout (T-V6).
 - Canvas cao = toàn tài liệu, cap 8192 px logic (ceiling V5 kế thừa; pagination
