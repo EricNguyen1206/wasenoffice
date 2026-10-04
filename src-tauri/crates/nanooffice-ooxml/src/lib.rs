@@ -151,11 +151,25 @@ pub struct Paragraph {
     /// `w:ind` (§17.3.1.12) — direct paragraph indentation; style-chain
     /// resolution happens in [`crate::resolve`].
     pub ind: Option<Ind>,
+    /// `w:spacing` (§17.3.1.33, pPr-level) — vertical spacing around the
+    /// paragraph (T-V6). NOT the run-level `w:spacing` §17.3.2.33 character
+    /// spacing (`Run.spacing`).
+    pub spacing: Option<Spacing>,
     /// `w:sectPr` (§17.6.18, inside `w:pPr` §17.3.1.26) — the section ENDING
     /// at this paragraph's mark (T-A31, typed-minimal — see [`Section`]);
     /// boxed: sections are rare, `None` must stay free.
     pub sect: Option<Box<Section>>,
     pub runs: Vec<Run>,
+}
+
+/// `w:spacing` (§17.3.1.33, pPr-level): `w:before`/`w:after` in twips
+/// (signed per ST_TwipsMeasure). `@w:beforeAuto`/`@w:afterAuto` are not
+/// modelled (T-V6 ceiling); style-level spacing is not carried by
+/// `StyleDef` (same ceiling).
+#[derive(Debug, Default, PartialEq, Serialize, Clone)]
+pub struct Spacing {
+    pub before: Option<i32>,
+    pub after: Option<i32>,
 }
 
 /// A `w:numPr` reference: `w:numId w:val` (§17.9.19) + `w:ilvl w:val`

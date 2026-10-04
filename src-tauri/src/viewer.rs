@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 use serde::Serialize;
 use tauri::{State, WebviewUrl, WebviewWindowBuilder};
 
-use nanooffice_ooxml::{Document, Page, RBlock, RenderDoc};
+use nanooffice_ooxml::{Document, Page, PageMar, RBlock, RenderDoc};
 
 use crate::protocol::FileRegistry;
 
@@ -106,6 +106,8 @@ pub(crate) struct RenderPayload {
     pub render: RenderDoc,
     pub fonts: BTreeMap<String, [i16; 3]>,
     pub page: Option<Page>,
+    /// `w:pgMar` (§17.6.11) of the final section (T-V6).
+    pub mar: Option<PageMar>,
     pub media_base: Option<String>,
     pub parse_ms: f64,
 }
@@ -140,6 +142,7 @@ pub(crate) fn render_payload(
     let parse_ms = started.elapsed().as_secs_f64() * 1000.0;
     Ok(RenderPayload {
         page: doc.page.clone(),
+        mar: doc.page_mar.clone(),
         doc,
         bytes,
         render,
@@ -182,6 +185,7 @@ pub fn viewer_open(
         doc: p.render,
         fonts: p.fonts,
         page: p.page,
+        mar: p.mar,
         media_base: p.media_base,
     })
 }
@@ -202,6 +206,8 @@ pub struct QuickView {
     pub fonts: BTreeMap<String, [i16; 3]>,
     /// `w:pgSz` (§17.6.11) of the final section — the wrap column's source.
     pub page: Option<Page>,
+    /// `w:pgMar` (§17.6.11) of the final section (T-V6) — text origin + margins.
+    pub mar: Option<PageMar>,
     /// V3: origin + fileId prefix for image parts — `<media_base>/<OPC part>`
     /// fetches those bytes from the loopback filesrv. `None` when the file
     /// could not be registered.

@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use nanooffice_ooxml::{Document, Page, RenderDoc};
+use nanooffice_ooxml::{Document, Page, PageMar, RenderDoc};
 
 use crate::protocol::FileRegistry;
 use crate::viewer::render_payload;
@@ -318,6 +318,8 @@ pub struct NanoLightDoc {
     pub doc: RenderDoc,
     pub fonts: BTreeMap<String, [i16; 3]>,
     pub page: Option<Page>,
+    /// `w:pgMar` of the final section (T-V6) — text origin + margins.
+    pub mar: Option<PageMar>,
     pub media_base: Option<String>,
     pub caret: Caret,
     pub name: String,
@@ -389,6 +391,7 @@ pub fn nano_light_open(
         doc: p.render,
         fonts: p.fonts,
         page: p.page,
+        mar: p.mar,
         media_base: p.media_base,
         caret,
         name,

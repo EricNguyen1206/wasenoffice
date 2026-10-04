@@ -8,10 +8,13 @@
 //! `w:docDefaults` (§17.7.5.1). The frontend receives this model and merges
 //! nothing.
 
+use std::collections::BTreeMap;
+
 use serde::Serialize;
 
 use crate::{
-    Block, DocDefaults, Document, ImageRef, Ind, Paragraph, Run, StyleDef, StyleKind, Table,
+    Block, DocDefaults, Document, ImageRef, Ind, NumRef, Paragraph, Run, Spacing, StyleDef,
+    StyleKind, Table,
 };
 
 /// A document with every value resolved to its final render form.
@@ -45,6 +48,13 @@ pub struct RCell {
 pub struct RParagraph {
     pub align: Option<String>,
     pub ind: Option<Ind>,
+    /// `w:spacing` (§17.3.1.33) as written in the direct pPr (T-V6; direct
+    /// only — style-level spacing is a ceiling).
+    pub spacing: Option<Spacing>,
+    /// Rendered list mark ("1. " / "• " — T-V6): derived from `w:numPr` +
+    /// `Document.numbering` with per-`numId` sequential counters; NOT model
+    /// text (the mark is not editable in Nano Light — ceiling DD V01 §5.8).
+    pub mark: Option<String>,
     pub runs: Vec<RRun>,
 }
 
@@ -82,11 +92,12 @@ pub fn resolve(doc: &Document) -> RenderDoc {
         .styles
         .values()
         .find(|s| s.kind == StyleKind::Paragraph && s.default);
+    let mut counters: BTreeMap<u32, [u32; 9]> = BTreeMap::new();
     RenderDoc {
         body: doc
             .body
             .iter()
-            .map(|b| rblock(b, doc, &defaults, default_para))
+            .map(|b| rblock(b, doc, &defaults, default_para, &mut counters))
             .collect(),
     }
 }
@@ -96,10 +107,13 @@ fn rblock(
     doc: &Document,
     defaults: &DocDefaults,
     default_para: Option<&StyleDef>,
+    counters: &mut BTreeMap<u32, [u32; 9]>,
 ) -> RBlock {
     match block {
-        Block::Paragraph(p) => RBlock::Paragraph(rparagraph(p, doc, defaults, default_para)),
-        Block::Table(t) => RBlock::Table(rtable(t, doc, defaults, default_para)),
+        Block::Paragraph(p) => {
+            RBlock::Paragraph(rparagraph(p, doc, defaults, default_para, counters))
+        }
+        Block::Table(t) => RBlock::Table(rtable(t, doc, defaults, default_para, counters)),
     }
 }
 
@@ -108,6 +122,7 @@ fn rtable(
     doc: &Document,
     defaults: &DocDefaults,
     default_para: Option<&StyleDef>,
+    counters: &mut BTreeMap<u32, [u32; 9]>,
 ) -> RTable {
     RTable {
         rows: t
@@ -119,7 +134,7 @@ fn rtable(
                         blocks: cell
                             .blocks
                             .iter()
-                            .map(|b| rblock(b, doc, defaults, default_para))
+                            .map(|b| rblock(b, doc, defaults, default_para, counters))
                             .collect(),
                     })
                     .collect()
@@ -133,6 +148,7 @@ fn rparagraph(
     doc: &Document,
     defaults: &DocDefaults,
     default_para: Option<&StyleDef>,
+    counters: &mut BTreeMap<u32, [u32; 9]>,
 ) -> RParagraph {
     // pStyle names a PARAGRAPH style; an unknown reference degrades to "no
     // style layer" rather than an error (a quick view must not refuse a
@@ -153,6 +169,12 @@ fn rparagraph(
             .clone()
             .or(para_style.as_ref().and_then(|s| s.ind.clone()))
             .or(defaults.ind.clone()),
+        // direct pPr only (T-V6 — style-level spacing is a ceiling)
+        spacing: p.spacing.clone(),
+        mark: p
+            .numbering
+            .as_ref()
+            .and_then(|n| numbering_mark(n, doc, counters)),
         runs: p
             .runs
             .iter()
@@ -210,6 +232,117 @@ fn rrun(r: &Run, doc: &Document, defaults: &DocDefaults, para_style: Option<&Sty
             .or(defaults.spacing),
         images: r.images.clone(),
     }
+}
+
+/// Bijective base-26 letters (1→a … 27→aa) — `lowerLetter`/`upperLetter`
+/// (§17.18.59).
+fn letters(mut n: u32, upper: bool) -> String {
+    let mut out = Vec::new();
+    while n > 0 {
+        out.push(b'a' + ((n - 1) % 26) as u8);
+        n = (n - 1) / 26;
+    }
+    out.reverse();
+    let s = String::from_utf8(out).unwrap_or_default();
+    if upper {
+        s.to_uppercase()
+    } else {
+        s
+    }
+}
+
+/// Classic roman numerals (1→i … 3999) — `lowerRoman`/`upperRoman` (§17.18.59).
+fn roman(mut n: u32, upper: bool) -> String {
+    const PAIRS: [(u32, &str); 13] = [
+        (1000, "m"),
+        (900, "cm"),
+        (500, "d"),
+        (400, "cd"),
+        (100, "c"),
+        (90, "xc"),
+        (50, "l"),
+        (40, "xl"),
+        (10, "x"),
+        (9, "ix"),
+        (5, "v"),
+        (4, "iv"),
+        (1, "i"),
+    ];
+    let mut out = String::new();
+    for (value, sym) in PAIRS {
+        while n >= value {
+            out.push_str(sym);
+            n -= value;
+        }
+    }
+    if upper {
+        out.to_uppercase()
+    } else {
+        out
+    }
+}
+
+/// Mark text of a numbered paragraph (T-V6): per-`numId` sequential counters
+/// (9 levels — deeper levels reset when a shallower one advances);
+/// `decimal` formats the `lvlText` `%N` tokens, every other `numFmt` (bullets
+/// included) uses the `lvlText` as written, `none` → no mark. `w:start` is
+/// not modelled — counters begin at 1 (DD V01 §5.8 ceiling).
+fn numbering_mark(
+    num: &NumRef,
+    doc: &Document,
+    counters: &mut BTreeMap<u32, [u32; 9]>,
+) -> Option<String> {
+    if num.ilvl >= 9 {
+        return None;
+    }
+    let levels = doc.numbering.get(&num.num_id)?;
+    let lvl = levels.get(&num.ilvl)?;
+    if lvl.num_fmt == "none" {
+        return None;
+    }
+    let row = counters.entry(num.num_id).or_default();
+    row[num.ilvl as usize] += 1;
+    row[(num.ilvl as usize + 1)..9].fill(0);
+    // `%N` token → the level-N counter, rendered per ST_NumberFormat
+    // (§17.18.59) — the classic set the corpus exercises (decimal/letters/
+    // romans; oracle-obs T-V6: "a)" lowerLetter, "i." lowerRoman); unknown
+    // numeric formats fall back to decimal (ceiling). Non-`%` lvlText
+    // (bullets) is the symbol as written.
+    let token = |idx: usize| -> String {
+        let n = row.get(idx).copied().unwrap_or(0);
+        match lvl.num_fmt.as_str() {
+            "lowerLetter" => letters(n, false),
+            "upperLetter" => letters(n, true),
+            "lowerRoman" => roman(n, false),
+            "upperRoman" => roman(n, true),
+            _ => n.to_string(), // decimal + unknown numeric formats
+        }
+    };
+    let mut out = if lvl.lvl_text.contains('%') {
+        let mut out = String::new();
+        let mut rest = lvl.lvl_text.as_str();
+        while let Some(pct) = rest.find('%') {
+            out.push_str(&rest[..pct]);
+            let digit = rest[pct + 1..].chars().next()?;
+            let idx = digit.to_digit(10)? as usize;
+            if idx == 0 || idx > 9 {
+                return None;
+            }
+            out.push_str(&token(idx - 1));
+            rest = &rest[pct + 2..];
+        }
+        out.push_str(rest);
+        out
+    } else {
+        lvl.lvl_text.clone()
+    };
+    // oracle-obs (CDP, T-V6): the engine's GetText renders the mark FOLLOWED
+    // BY ONE SPACE ("1. Gạch…" / "• mục") — the separator is not part of
+    // lvlText; the viewer matches that text sequence exactly.
+    if !out.ends_with(' ') {
+        out.push(' ');
+    }
+    Some(out)
 }
 
 /// Style lookup restricted to the kind the referencing slot expects — an

@@ -191,6 +191,7 @@ fn write_edge_xml_special_and_vietnamese() {
                 align: Some("both".to_string()),
                 numbering: Some(NumRef { num_id: 7, ilvl: 3 }),
                 ind: None,
+                spacing: None,
                 sect: None,
                 runs: vec![
                     Run {
@@ -291,6 +292,7 @@ fn fuzz_write_reparse_never_panics_and_preserves_model() {
                 align: Some("center".to_string()),
                 numbering: Some(NumRef { num_id: 1, ilvl: 0 }),
                 ind: None,
+                spacing: None,
                 sect: None,
                 runs: vec![Run {
                     text: "Tiếng Việt & <junk> “smart” — base".to_string(),

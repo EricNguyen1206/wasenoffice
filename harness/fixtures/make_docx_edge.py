@@ -205,8 +205,30 @@ def make_image_multi() -> None:
     })
 
 
+def make_spacing() -> None:
+    """`w:spacing` before/after (§17.3.1.33) — direct pPr, signed twips
+    (T-V6); cả 3 hình dạng: before+after · chỉ after · before âm."""
+    body = (
+        '<w:p><w:pPr><w:spacing w:before="120" w:after="200"/></w:pPr>'
+        '<w:r><w:t>Khoảng cách trước 120 sau 200.</w:t></w:r></w:p>'
+        '<w:p><w:pPr><w:spacing w:after="80"/></w:pPr>'
+        '<w:r><w:t>Chỉ sau 80 (không có before).</w:t></w:r></w:p>'
+        '<w:p><w:pPr><w:spacing w:before="-40"/></w:pPr>'
+        '<w:r><w:t>Before âm theo signed twips.</w:t></w:r></w:p>'
+    )
+    package({
+        "__name__": "edge-spacing.docx",
+        "[Content_Types].xml": content_types(""),
+        "_rels/.rels": ROOT_RELS,
+        "word/_rels/document.xml.rels": doc_rels(""),
+        "word/styles.xml": f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles {W}/>',
+        "word/document.xml": document(body),
+    })
+
+
 if __name__ == "__main__":
     make_multilevel_list()
     make_nested_table()
     make_style_override()
     make_image_multi()
+    make_spacing()

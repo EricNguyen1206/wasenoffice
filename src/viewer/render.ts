@@ -15,6 +15,7 @@ import {
   MARGIN,
   PT_PX,
   runFont,
+  twip,
   type Block,
   type LineModel,
   type Measurer,
@@ -74,11 +75,29 @@ export function canvasMeasurer(ctx: CanvasRenderingContext2D): Measurer {
   };
 }
 
-/** Wrap column width: `pgSz` when declared (twips → px), clamped to the
- * viewport, minus the two fixed margins (pgMar is not in the model — V01). */
-export function columnWidth(page: { w: number | null } | null | undefined, vw: number): number {
+/** Wrap column width: pgSz − pgMar left/right (T-V6 §5.8), clamped to the
+ * viewport; missing margins fall back to the 1in default — byte-identical
+ * with the pre-V6 behavior for files without pgMar. */
+export function columnWidth(
+  page: { w: number | null } | null | undefined,
+  mar: { left: number | null; right: number | null } | null | undefined,
+  vw: number,
+): number {
   const pageW = page?.w ? (page.w / 20) * PT_PX : vw;
-  return Math.min(pageW, vw) - 2 * MARGIN;
+  const left = mar?.left != null ? twip(mar.left) : MARGIN;
+  const right = mar?.right != null ? twip(mar.right) : MARGIN;
+  return Math.min(pageW, vw) - left - right;
+}
+
+/** Text origin (x0, first-baseline y) from pgMar (T-V6 §5.8) — y keeps the
+ * historical +16 half-leading offset; missing margins fall back to 1in. */
+export function pageOrigin(
+  mar: { top: number | null; left: number | null } | null | undefined,
+): { x0: number; y: number } {
+  return {
+    x0: mar?.left != null ? twip(mar.left) : MARGIN,
+    y: (mar?.top != null ? twip(mar.top) : MARGIN) + 16,
+  };
 }
 
 /** Layout metrics line WITHOUT the entry prefix — review #6 C2: the frozen

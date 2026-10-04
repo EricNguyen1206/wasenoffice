@@ -1023,3 +1023,100 @@ fn zip_bytes(parts: &[(String, Vec<u8>)]) -> Vec<u8> {
     }
     w.finish().unwrap().into_inner()
 }
+
+// ── T-V6 (DD V01 §5.8): resolve renders list marks — per-numId sequential
+// counters, ST_NumberFormat §17.18.59 (decimal/letters/romans), ONE SPACE
+// after the mark (oracle-obs: engine GetText "1. ").
+#[test]
+fn resolve_numbering_marks_formats_counters_and_separator() {
+    use nanooffice_ooxml::{NumLvl, NumRef, Paragraph, Run, Spacing};
+    let doc = Document {
+        body: vec![
+            Block::Paragraph(Paragraph {
+                numbering: Some(NumRef { num_id: 1, ilvl: 0 }),
+                runs: vec![Run::default()],
+                ..Default::default()
+            }),
+            Block::Paragraph(Paragraph {
+                numbering: Some(NumRef { num_id: 1, ilvl: 0 }),
+                runs: vec![Run::default()],
+                ..Default::default()
+            }),
+            Block::Paragraph(Paragraph {
+                numbering: Some(NumRef { num_id: 1, ilvl: 1 }),
+                runs: vec![Run::default()],
+                ..Default::default()
+            }),
+            Block::Paragraph(Paragraph {
+                numbering: Some(NumRef { num_id: 2, ilvl: 0 }),
+                runs: vec![Run::default()],
+                ..Default::default()
+            }),
+            Block::Paragraph(Paragraph {
+                spacing: Some(Spacing {
+                    before: Some(120),
+                    after: Some(-40),
+                }),
+                runs: vec![Run::default()],
+                ..Default::default()
+            }),
+        ],
+        numbering: {
+            let mut levels1 = std::collections::BTreeMap::new();
+            levels1.insert(
+                0,
+                NumLvl {
+                    num_fmt: "decimal".into(),
+                    lvl_text: "%1.".into(),
+                },
+            );
+            levels1.insert(
+                1,
+                NumLvl {
+                    num_fmt: "lowerRoman".into(),
+                    lvl_text: "(%2)".into(),
+                },
+            );
+            let mut levels2 = std::collections::BTreeMap::new();
+            levels2.insert(
+                0,
+                NumLvl {
+                    num_fmt: "bullet".into(),
+                    lvl_text: "\u{2022}".into(),
+                },
+            );
+            let mut numbering = std::collections::BTreeMap::new();
+            numbering.insert(1, levels1);
+            numbering.insert(2, levels2);
+            numbering
+        },
+        headers: vec![],
+        footers: vec![],
+        styles: Default::default(),
+        doc_defaults: None,
+        page: None,
+        page_mar: None,
+    };
+    let r = nanooffice_ooxml::resolve(&doc);
+    let mark = |i: usize| match &r.body[i] {
+        nanooffice_ooxml::RBlock::Paragraph(p) => p.mark.clone().unwrap(),
+        _ => panic!("expected paragraph"),
+    };
+    assert_eq!(mark(0).as_str(), "1. ", "decimal %1. + separator");
+    assert_eq!(mark(1).as_str(), "2. ", "sequential counter");
+    assert_eq!(mark(2).as_str(), "(i) ", "lowerRoman token + separator");
+    assert_eq!(
+        mark(3).as_str(),
+        "\u{2022} ",
+        "bullet lvlText raw + separator"
+    );
+    let sp = match &r.body[4] {
+        nanooffice_ooxml::RBlock::Paragraph(p) => p.spacing.as_ref().map(|s| (s.before, s.after)),
+        _ => panic!("expected paragraph"),
+    };
+    assert_eq!(
+        sp,
+        Some((Some(120), Some(-40))),
+        "direct pPr spacing passes through resolve"
+    );
+}

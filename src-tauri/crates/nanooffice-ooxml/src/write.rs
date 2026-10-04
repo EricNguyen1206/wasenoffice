@@ -422,6 +422,7 @@ impl PartWriter {
             || p.align.is_some()
             || p.numbering.is_some()
             || p.ind.is_some()
+            || p.spacing.is_some()
             || p.sect.is_some()
         {
             self.out.push_str("<w:pPr>");
@@ -437,6 +438,18 @@ impl PartWriter {
             }
             if let Some(ind) = &p.ind {
                 self.out.push_str(&ind_xml(ind));
+            }
+            // `w:spacing` (§17.3.1.33) — each attribute only when modelled
+            if let Some(sp) = &p.spacing {
+                let mut out = String::from("<w:spacing");
+                if let Some(before) = sp.before {
+                    out.push_str(&format!(" w:before=\"{before}\""));
+                }
+                if let Some(after) = sp.after {
+                    out.push_str(&format!(" w:after=\"{after}\""));
+                }
+                out.push_str("/>");
+                self.out.push_str(&out);
             }
             if let Some(align) = &p.align {
                 self.out

@@ -447,6 +447,8 @@ NUMBERING_HEAD = re.compile(r"^[0-9a-z ivx.)\u2022\u2013-]{1,8}$", re.I)
 numbered = []
 if ov != vv:
     for i, (a, b) in enumerate(zip(ov, vv)):
+        if len(oparas_cmp[i].get("lines") or []) != len(vparas[i]["lines"]):
+            continue  # wrap-split differs — the M1 count branch classifies it
         head, _, tail = a.partition(" ")
         if tail == b and head and NUMBERING_HEAD.match(head):
             numbered.append(i)
@@ -459,6 +461,17 @@ if ov != vv:
     if numbered:
         classified.append(f"{len(numbered)} numbered paragraph(s): engine GetText carries the"
                           " list mark, viewer does not render numbering — numbering ceiling")
+else:
+    # T-V6 §5.8: the viewer RENDERS the mark — texts align exactly; detect
+    # numbered paragraphs from the text head so the numbering geometry
+    # ceilings (lvl ind) still classify below
+    for i, a in enumerate(ov):
+        head, _, _ = a.partition(" ")
+        if head and NUMBERING_HEAD.match(head):
+            numbered.append(i)
+    if numbered:
+        classified.append(f"{len(numbered)} numbered paragraph(s): mark text matches the"
+                          " engine (T-V6) — mark geometry (lvl ind) = numbering ceiling")
 
 # M1/M2/M3 — per paragraph
 for i, (o, v) in enumerate(zip(oparas_cmp, vparas)):
@@ -492,8 +505,19 @@ for i, (o, v) in enumerate(zip(oparas_cmp, vparas)):
             classified.append(f"para#{i}: shift re-anchored after skipped table/image"
                               " block — flow-offset ceiling")
             continue
-        if shift is None:
-            shift, xshift = lv["y"] - lo["y"], lv["x"] - lo["x"]
+        if j == 0:
+            # T-V6 §5.8: PER-PARAGRAPH anchor — the load-bearing claim is the
+            # WITHIN-paragraph line-height; the flow gap AT the paragraph
+            # bound (upstream wrap drift, spacing/pgMar flow) is a classified
+            # ceiling, reported once per paragraph
+            para_shift, para_xshift = lv["y"] - lo["y"], lv["x"] - lo["x"]
+            if shift is None:
+                shift, xshift = para_shift, para_xshift
+            elif abs(para_shift - shift) > eps_y or abs(para_xshift - xshift) > eps_x:
+                classified.append(f"para#{i}: flow gap |Δy|={abs(para_shift - shift):.2f}"
+                                  f" |Δx|={abs(para_xshift - xshift):.2f}px at paragraph bound"
+                                  " — spacing/pgMar flow ceiling (T-V6)")
+                shift, xshift = para_shift, para_xshift
             continue
         dy, dx = abs((lv["y"] - shift) - lo["y"]), abs((lv["x"] - xshift) - lo["x"])
         maxdy, maxdx = max(maxdy, dy), max(maxdx, dx)
@@ -506,15 +530,10 @@ for i, (o, v) in enumerate(zip(oparas_cmp, vparas)):
                 # oracle — this is the core font-metric claim (ε measured, DD §5)
                 hard.append(f"M3 para#{i} line#{j}: |dy|={dy:.2f}>{eps_y} within paragraph"
                             f" (oracle y={lo['y']} viewer y={lv['y']})")
-            elif i in numbered:
+            else:
+                # numbered lines: level spacing/indent not modelled (T-V6 ceiling)
                 classified.append(f"para#{i} line#{j}: |dy|={dy:.2f}px under numbering —"
                                   " numbering ceiling (level spacing/indent not modeled)")
-            else:
-                # first line of a paragraph: w:spacing before/after is not in
-                # the model (DD V01 §3.2) — the flow gap at paragraph bounds
-                # is a documented ceiling
-                classified.append(f"para#{i} line#{j}: |dy|={dy:.2f}px at paragraph bound —"
-                                  " spacing ceiling (w:spacing not in model)")
         if dx > eps_x:
             if i in numbered:
                 # the mark + its indent shift every line — numbering ceiling

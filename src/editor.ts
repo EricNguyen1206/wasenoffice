@@ -36,6 +36,7 @@ import {
   layoutMetricLine,
   loadMedia,
   mediaEvidenceLine,
+  pageOrigin,
   resizeRelayout,
   toEvidence,
 } from './viewer/render';
@@ -43,7 +44,6 @@ import {
   caretXY,
   hitTest,
   layoutBlocks,
-  MARGIN,
   type Block,
   type FontMetrics,
   type LineModel,
@@ -82,6 +82,8 @@ interface NanoLightDoc {
   fonts: FontMetrics;
   /** `w:pgSz` of the final section, twips (§17.6.11). */
   page: { w: number | null; h: number | null; orient: string | null } | null;
+  /** `w:pgMar` of the final section (T-V6) — text origin + wrap margins. */
+  mar: { top: number | null; right: number | null; bottom: number | null; left: number | null } | null;
   /** `<origin>/media/<fileId>` prefix (loopback filesrv); null = media off. */
   mediaBase: string | null;
   caret: Caret;
@@ -183,12 +185,11 @@ async function main(): Promise<void> {
     };
 
     const render = (): LineModel => {
-      colW = columnWidth(nl.page, box.clientWidth);
+      colW = columnWidth(nl.page, nl.mar, box.clientWidth);
       const m = layoutBlocks({
         blocks: body,
-        x0: MARGIN,
+        ...pageOrigin(nl.mar),
         w: colW,
-        y: MARGIN + 16,
         fonts: nl.fonts,
         measure,
       });

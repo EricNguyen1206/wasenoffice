@@ -16,10 +16,11 @@ import {
   layoutMetricLine,
   loadMedia,
   mediaEvidenceLine,
+  pageOrigin,
   resizeRelayout,
   toEvidence,
 } from './viewer/render';
-import { hitTest, layoutBlocks, MARGIN, type Block, type FontMetrics, type LineModel } from './viewer/layout';
+import { hitTest, layoutBlocks, type Block, type FontMetrics, type LineModel } from './viewer/layout';
 
 /** T-A28 C5: mirrors the Rust `QuickView` payload (src-tauri/src/viewer.rs)
  * in the ONE camelCase casing — every Rust→JS payload struct is
@@ -30,6 +31,8 @@ interface QuickView {
   fonts: FontMetrics;
   /** `w:pgSz` of the final section, twips (§17.6.11). */
   page: { w: number | null; h: number | null; orient: string | null } | null;
+  /** `w:pgMar` of the final section (T-V6) — text origin + wrap margins. */
+  mar: { top: number | null; right: number | null; bottom: number | null; left: number | null } | null;
   /** V3: `<origin>/media/<fileId>` prefix — append the OPC part name to
    * fetch image bytes from the loopback filesrv; null = media disabled. */
   mediaBase: string | null;
@@ -49,12 +52,11 @@ async function main(): Promise<void> {
     if (qv.mediaBase) await loadMedia(qv.doc.body, qv.mediaBase, bitmaps, 'viewer', invoke);
     const measure = canvasMeasurer(ctx);
     const render = (): { colW: number; model: LineModel; docH: number } => {
-      const colW = columnWidth(qv.page, innerWidth);
+      const colW = columnWidth(qv.page, qv.mar, innerWidth);
       const model = layoutBlocks({
         blocks: qv.doc.body,
-        x0: MARGIN,
+        ...pageOrigin(qv.mar),
         w: colW,
-        y: MARGIN + 16,
         fonts: qv.fonts,
         measure,
       });

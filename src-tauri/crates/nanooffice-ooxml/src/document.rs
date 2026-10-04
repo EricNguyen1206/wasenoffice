@@ -15,7 +15,7 @@ use quick_xml::events::{BytesStart, Event};
 use crate::opc::{self, attr, RelsList};
 use crate::{
     xml_err, Block, Hyperlink, ImageRef, Ind, NumRef, Page, PageMar, Paragraph, ParseError, RFonts,
-    Run, Section, Table, TableCell,
+    Run, Section, Spacing, Table, TableCell,
 };
 
 const W_NS: &str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
@@ -303,6 +303,7 @@ impl Parser<'_> {
                     b"w:jc" => para.align = attr(&e, b"w:val")?,
                     b"w:numPr" => para.numbering = Some(self.parse_numpr()?),
                     b"w:ind" => para.ind = Some(parse_ind(&e)?),
+                    b"w:spacing" => para.spacing = Some(parse_spacing(&e)?),
                     // mid-document section mark (§17.6.18 inside w:pPr) —
                     // typed-minimal (pgSz + pgMar, T-A31)
                     b"w:sectPr" => {
@@ -315,6 +316,7 @@ impl Parser<'_> {
                     b"w:pStyle" => para.style = attr(&e, b"w:val")?,
                     b"w:jc" => para.align = attr(&e, b"w:val")?,
                     b"w:ind" => para.ind = Some(parse_ind(&e)?),
+                    b"w:spacing" => para.spacing = Some(parse_spacing(&e)?),
                     _ => {} // e.g. <w:numPr/> — carries no reference to model
                 },
                 Event::End(e) if e.name().as_ref() == b"w:pPr" => return Ok(()),
@@ -747,6 +749,22 @@ pub(crate) fn parse_ind(e: &BytesStart<'_>) -> Result<Ind, ParseError> {
         right: signed(attr(e, b"w:right")?)?,
         first_line: signed(attr(e, b"w:firstLine")?)?,
         hanging: signed(attr(e, b"w:hanging")?)?,
+    })
+}
+
+/// `w:spacing` (§17.3.1.33, pPr-level): `w:before`/`w:after` twips; each is
+/// optional as written. `@w:beforeAuto`/`@w:afterAuto` ignored (T-V6 ceiling).
+pub(crate) fn parse_spacing(e: &BytesStart<'_>) -> Result<Spacing, ParseError> {
+    let signed = |v: Option<String>| -> Result<Option<i32>, ParseError> {
+        v.map(|s| {
+            s.parse::<i32>()
+                .map_err(|_| ParseError(format!("w:spacing value {s:?} is not an integer")))
+        })
+        .transpose()
+    };
+    Ok(Spacing {
+        before: signed(attr(e, b"w:before")?)?,
+        after: signed(attr(e, b"w:after")?)?,
     })
 }
 

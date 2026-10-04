@@ -38,6 +38,10 @@ export interface Ind {
 export interface Paragraph {
   align: string | null;
   ind: Ind | null;
+  /** T-V6 §5.8: `w:spacing` (§17.3.1.33) direct pPr, twips. */
+  spacing: { before: number | null; after: number | null } | null;
+  /** T-V6 §5.8: rendered list mark ("1. " / "• ") — not model text. */
+  mark: string | null;
   runs: Run[];
 }
 
@@ -74,6 +78,8 @@ export const DEFAULT_SIZE = 22; // half-points = 11pt — terminal fallback of t
 export const EMU_PX = 9525;
 
 export const twip = (t: number): number => (t / 20) * PT_PX;
+/** Paragraph `w:spacing` attr → px (T-V6); absent = 0. */
+const spPx = (v: number | null | undefined): number => (v ? twip(v) : 0);
 const imgPx = (emu: number): number => emu / EMU_PX;
 
 export function runFont(r: Run): string {
@@ -171,9 +177,9 @@ type Tok =
  * The parser flattens intra-run child order, so a run's images render after
  * its text — recorded as a V3 ceiling (ponytail) in DD V01. T-V7: each token
  * also carries its offset inside the run text (hit-test inverse mapping). */
-function tokenize(runs: Run[]): Tok[] {
+function tokenize(runs: Array<{ r: Run; ri: number }>): Tok[] {
   const toks: Tok[] = [];
-  runs.forEach((r, ri) => {
+  runs.forEach(({ r, ri }) => {
     let pos = 0;
     r.text.split(/[\n\f\v]/).forEach((seg, i) => {
       if (i > 0) {
@@ -204,7 +210,8 @@ function tokenize(runs: Run[]): Tok[] {
  * x assigned by the caller after alignment). Line items may carry an image:
  * `w`/`h` are the wp:extent size in px. */
 function wrapParagraph(
-  p: Paragraph,
+  _p: Paragraph,
+  runs: Array<{ r: Run; ri: number }>,
   xLeft: number,
   xRight: number,
   measure: Measurer,
@@ -215,7 +222,7 @@ function wrapParagraph(
     lines.push([]);
     x = xLeft;
   };
-  const toks = tokenize(p.runs);
+  const toks = tokenize(runs);
   for (let i = 0; i < toks.length; i++) {
     const tok = toks[i];
     if (tok.kind === 'break') {
@@ -300,7 +307,15 @@ export function layoutBlocks(input: LayoutInput): LineModel {
     cellPara: number | null,
   ): number => {
     const xLeft = x0 + ((p.ind?.left ?? 0) / 20) * PT_PX;
-    const wrapped = wrapParagraph(p, xLeft, x0 + w, measure);
+    // T-V6 §5.8: the list mark rides as the FIRST token — a clone of the
+    // first run carrying the mark text, mapped back to MODEL run 0/offset 0
+    // (a hit inside the mark region resolves to offset 0; the mark is not
+    // model text and is not editable). `ri` keeps the MODEL run index — the
+    // editor's carets never see the synthetic mark run.
+    const effRuns: Array<{ r: Run; ri: number }> = p.mark && p.runs.length
+      ? [{ r: { ...p.runs[0], text: p.mark }, ri: 0 }, ...p.runs.map((r, ri) => ({ r, ri }))]
+      : p.runs.map((r, ri) => ({ r, ri }));
+    const wrapped = wrapParagraph(p, effRuns, xLeft, x0 + w, measure);
     let yCur = y;
     for (const line of wrapped) {
       const imgItem = line.find((it) => it.img);
@@ -361,10 +376,16 @@ export function layoutBlocks(input: LayoutInput): LineModel {
   ): number => {
     let pi = piBase;
     let yCur = y;
+    // T-V6 §5.8: vertical spacing (§17.3.1.33) — the previous paragraph's
+    // after + the current one's before, px; applied at the top of the
+    // document/cell too (Word parity), RESET across a table boundary.
+    let prevAfterPx = 0;
     for (let i = 0; i < bs.length; i++) {
       const block = bs[i];
       if ('Paragraph' in block) {
+        yCur += prevAfterPx + spPx(block.Paragraph.spacing?.before);
         yCur += layoutParagraph(block.Paragraph, x0, w, yCur, pi, inCell, tableBlock ?? i, cell, cellBlocks ? i : null);
+        prevAfterPx = spPx(block.Paragraph.spacing?.after);
         pi += 1;
       } else {
         // table: each cell's blocks at its column offset; the row advances by
@@ -381,6 +402,7 @@ export function layoutBlocks(input: LayoutInput): LineModel {
           rowBottom = Math.max(rowBottom, walk(tc.blocks, x0 + col * colW, colW, yCur, pi, true, tbl, [0, col], !inCell));
         });
         yCur = rowBottom + 4;
+        prevAfterPx = 0;
       }
     }
     return yCur;
