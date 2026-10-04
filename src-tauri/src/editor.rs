@@ -26,9 +26,8 @@ use crate::viewer::render_payload;
 /// `offset` = utf-16 code units into the run's text (mirrors JS string
 /// indexing; the caret sits BEFORE char `offset`). T-060 C3: `cell` carries
 /// the hit's `[row, col]` table identity (null at top level). T-A30 §5.5a:
-/// `cell_para` is the paragraph's index inside that cell's blocks (null at
-/// top level AND for nested-table content — unaddressable, refused);
-/// `#[serde(default)]` keeps payloads from before each field additive-parseable.
+/// `cell_para` = the paragraph's index inside that cell's blocks (null at top
+/// level / nested — refused); `#[serde(default)]` keeps old payloads parseable.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Caret {
@@ -96,12 +95,10 @@ impl EditorSession {
     /// pollute the stack); undo/redo manage their own stacks. Range-aware
     /// verbs (DD L01 §5.3c) delete the selection FIRST, then mutate at the
     /// range start; the selection collapses on any model change. T-A30
-    /// (§5.5b): the verb runs on the blocks the caret addresses — the body,
-    /// or one cell's blocks via cell identity (same-cell selections only).
+    /// (§5.5b): the verb runs on the blocks the caret addresses — body or cell.
     fn apply(&mut self, cmd: EditCmd) -> Result<Caret, String> {
-        // Identity rules (DD L01 §5.5): a cell caret needs cellPara (null =
-        // nested-table content, unaddressable); a selection must stay inside
-        // ONE cell or entirely top level — any mix refuses loudly.
+        // Identity rules (§5.5): a cell caret needs cellPara (null = nested,
+        // unaddressable); a selection stays in ONE cell or entirely top level.
         let check = |c: Caret| -> Result<(), String> {
             if c.cell.is_some() && c.cell_para.is_none() {
                 return Err(
@@ -562,9 +559,7 @@ fn same_cell(a: Option<[usize; 2]>, b: Option<[usize; 2]>) -> bool {
 }
 
 /// Resolve the block list a CELL caret edits (§17.4.38 → §17.4.79 → §17.4.66
-/// through the caret's identity): `body[para]` must be a table and
-/// `[row, col]` must exist. This is the resolution path the round-1 refuse
-/// used to refuse outright.
+/// through the caret's identity): `body[para]` must be a table, `[row, col]` exist.
 fn cell_blocks_mut(doc: &mut Document, c: Caret) -> Result<&mut Vec<Block>, String> {
     let [row_idx, col_idx] = c.cell.ok_or_else(|| {
         format!(
@@ -595,10 +590,8 @@ fn cell_blocks_mut(doc: &mut Document, c: Caret) -> Result<&mut Vec<Block>, Stri
     Ok(&mut tc.blocks)
 }
 
-/// Run a verb on the right block list (DD L01 §5.5b): top-level carets edit
-/// the body; cell carets edit their cell's blocks with `para` rebased to
-/// `cellPara`, the full identity restored on the returned caret. Selections
-/// arrive pre-checked same-cell (apply refuses mixes) and rebase alongside.
+/// Run a verb on the blocks the caret addresses (§5.5b): cell carets rebase
+/// `para` → cellPara; the full identity (fresh cellPara) rides the returned caret.
 fn dispatch(
     doc: &mut Document,
     caret: Caret,
@@ -620,16 +613,14 @@ fn dispatch(
     let out = verb(blocks, rebase(caret), local_sel)?;
     Ok(Caret {
         para: caret.para,
-        // inside the cell `out.para` IS the paragraph index — verbs may move
-        // it (enter / merge) and the caret must carry the fresh cellPara
+        // inside the cell `out.para` IS the paragraph index (verbs may move it)
         cell_para: Some(out.para),
         ..out
     })
 }
 
-/// Resolve `idx` to a paragraph within `blocks` (the body, or a cell's).
-/// A table block here means a stale top-level caret or NESTED table content —
-/// both refuse loudly (DD L01 §5.5).
+/// Resolve `idx` to a paragraph within `blocks` — a table block here means a
+/// stale top-level caret or nested content; both refuse loudly (§5.5).
 fn paragraph_at(blocks: &mut [Block], idx: usize) -> Result<&mut Paragraph, String> {
     match blocks.get_mut(idx) {
         Some(Block::Paragraph(p)) => Ok(p),

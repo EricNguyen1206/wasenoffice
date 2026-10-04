@@ -122,9 +122,8 @@ export interface TextLine {
    * (only `rows[0]` is laid out — V3 ceiling), else null. The edit layer
    * refuses in-cell carets on this identity, not on heuristics. */
   cell: [number, number] | null;
-  /** T-A30 §5.5a (additive): index of the paragraph inside the cell's blocks
-   * — the third coordinate an in-cell caret needs. Null at top level AND for
-   * nested-table content (unaddressable — the edit layer refuses). */
+  /** T-A30 §5.5a (additive): index of the paragraph inside the cell's blocks;
+   * null at top level AND for nested-table content (unaddressable, refused). */
   cellPara: number | null;
   x: number; // aligned line start
   baseline: number;
@@ -347,9 +346,8 @@ export function layoutBlocks(input: LayoutInput): LineModel {
   // T-060 C3: `tableBlock`/`cell` carry the top-level block identity down the
   // recursion — a top-level paragraph owns its own index; everything inside a
   // table (nested tables included) belongs to that table's block + cell.
-  // T-A30 §5.5a: `cellBlocks` marks the blocks of a FIRST-LEVEL cell — its
-  // paragraphs get cellPara = their block index; a nested table's content is
-  // walked with false (cellPara stays null → unaddressable, edit-refused).
+  // T-A30 §5.5a: `cellBlocks` = a first-level cell's blocks (cellPara = block index);
+  // nested-table content walks with false → cellPara null → edit-refused.
   const walk = (
     bs: Block[],
     x0: number,
@@ -423,9 +421,8 @@ const itemCharLen = (it: LayoutItem): number => (it.tab ? 1 : it.text.length);
 
 /** Inverse mapping (x, y) → caret. y resolves to the line with the NEAREST
  * baseline (boundaries at midpoints; above the first / below the last line
- * clamps); T-A30 §5.5d: baselines can COLLIDE exactly (cells of one row sit
- * side by side), so exact ties break by x-span — the line whose span holds
- * x wins (table-free layout never collides: behavior unchanged there). x
+ * clamps); T-A30 §5.5d: exact baseline ties (cells of one row) break by x-span —
+ * the line whose span holds x wins (table-free layout never collides). x
  * clamps to the line's first/last caret position; inside the line it walks
  * the item whose span contains x and binary-searches the char boundaries
  * with the same measurer the forward layout used: x within char i's advance
@@ -480,10 +477,8 @@ export function hitTest(model: LineModel, measure: Measurer, x: number, y: numbe
  * `Caret.para` coordinate — equal to `Hit.block`; `Hit.para`'s `pi` shares
  * values with table-cell content and cannot address the body). `line` rides
  * along (additive) for the editor's Up/Down/Home/End line moves.
- * T-A30 §5.5a (additive): a caret carrying cell identity (`cell`/`cellPara`)
- * also requires the line to carry the SAME identity — one table block holds
- * many cell paragraphs; carets without those fields keep the block-only
- * matching (pre-T-A30 callers, byte-identical).
+ * T-A30 §5.5a (additive): carets carrying cell identity also require the line to
+ * carry it; carets without those fields stay block-only (byte-identical).
  */
 export function caretXY(
   model: LineModel,
