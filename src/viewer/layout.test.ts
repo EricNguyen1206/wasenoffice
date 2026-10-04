@@ -52,7 +52,7 @@ const mk = (text: string, extra: Partial<Run> = {}): Run => ({
 });
 
 const para = (...runs: Run[]): Block[] => [
-  { Paragraph: { align: null, ind: null, runs } },
+  { Paragraph: { align: null, ind: null, spacing: null, mark: null, runs } },
 ];
 // one column wide enough for the unwrapped tests
 const WIDE = { x0: 0, w: 1000, y: 0, fonts: {}, measure };
@@ -143,7 +143,7 @@ const hit = (m: LineModel, x: number, y: number): Hit =>
 
 // ── T-060 C3: table cell identity — `para` collides, `block`+`cell` do not ─
 {
-  const cellP = (t: string): Block => ({ Paragraph: { align: null, ind: null, runs: [mk(t)] } });
+  const cellP = (t: string): Block => ({ Paragraph: { align: null, ind: null, spacing: null, mark: null, runs: [mk(t)] } });
   const blocks: Block[] = [
     cellP('ab'),
     { Table: { rows: [[{ blocks: [cellP('cde'), cellP('f')] }]] } },
@@ -175,7 +175,7 @@ const hit = (m: LineModel, x: number, y: number): Hit =>
 
 // ── T-A30 §5.5: cellPara identity + caretXY full-identity + tie-break ─────
 {
-  const cellP = (t: string): Block => ({ Paragraph: { align: null, ind: null, runs: [mk(t)] } });
+  const cellP = (t: string): Block => ({ Paragraph: { align: null, ind: null, spacing: null, mark: null, runs: [mk(t)] } });
   const blocks: Block[] = [
     { Table: { rows: [[{ blocks: [cellP('cde'), cellP('f')] }, { blocks: [cellP('gh')] }]] } },
   ];
@@ -217,6 +217,50 @@ const hit = (m: LineModel, x: number, y: number): Hit =>
     const c = caretXY(w, measure, hit(w, x, y1).caret);
     ok(!!c && Math.abs(c.x - x) < 1e-9 && c.y === y1, `round-trip wrapped line x=${x} → (${c?.x}, ${c?.y}), want (${x}, ${y1})`);
   }
+}
+
+// ── T-V6 §5.8: paragraph spacing (§17.3.1.33) — gap = prev.after + cur.before ─
+{
+  const P = (before: number | null, after: number | null): Block => ({
+    Paragraph: { align: null, ind: null, spacing: { before, after }, mark: null, runs: [mk('word')] },
+  });
+  const m = layoutBlocks({ ...WIDE, blocks: [P(null, 200), P(100, null)] });
+  const lh = lineHeight(mk(''), {});
+  ok(
+    Math.abs(m.lines[1].baseline - m.lines[0].baseline - lh - twip(300)) < 1e-9,
+    'gap = prev.after + cur.before (twip 300 → exactly 20px)',
+  );
+  const m2 = layoutBlocks({ ...WIDE, y: 0, blocks: [P(150, null)] });
+  ok(Math.abs(m2.lines[0].baseline - twip(150)) < 1e-9, 'before applies at the TOP of the document (Word parity)');
+  // reset across a table boundary: the after before a table is dropped, the
+  // paragraph after the table keeps its own before (DD V01 §5.8 ceiling)
+  const cp: Block = { Paragraph: { align: null, ind: null, spacing: null, mark: null, runs: [mk('cell')] } };
+  const m3 = layoutBlocks({
+    ...WIDE,
+    y: 0,
+    blocks: [P(null, 500), { Table: { rows: [[{ blocks: [cp] }]] } }, P(150, null)],
+  });
+  ok(
+    Math.abs(m3.lines[2].baseline - (2 * lh + 4 + twip(150))) < 1e-9,
+    'after before a TABLE is dropped; the para after the table gets only its own before (+4 row gap)',
+  );
+}
+
+// ── T-V6 §5.8: numbering mark rides as the FIRST item (not model text) ─────
+{
+  const m = layoutBlocks({
+    ...WIDE,
+    blocks: [{ Paragraph: { align: null, ind: null, spacing: null, mark: '1. ', runs: [mk('item')] } }],
+  });
+  const items = m.lines[0].items;
+  eq(items.length, 3, 'mark splits into word+space tokens + the real word');
+  eq([items[0].text, items[0].ri, items[0].charStart], ['1.', 0, 0], 'mark token maps to run 0 offset 0 — not editable');
+  eq([items[1].text, items[1].charStart], [' ', 2], 'the mark trailing space keeps its charStart inside the mark');
+  eq([items[2].text, items[2].ri, items[2].charStart], ['item', 0, 0], 'the real word keeps the MODEL run index 0 (mark does not shift ri)');
+  eq(m.lines[0].total, 70, 'line width includes the mark (2+1+4 chars × 10px)');
+  eq(hit(m, 5, 0).caret.offset, 0, 'hit inside the mark → offset 0');
+  eq(hit(m, 25, 0).caret.offset, 2, 'hit inside the mark trailing space → offset 2 (still the mark)');
+  eq(hit(m, 45, 0).caret.offset, 1, 'hit in the word → offset 1');
 }
 
 console.log(`layout.test: ${checked} checks passed${failed ? `, ${failed} FAILED` : ''}`);

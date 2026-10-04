@@ -455,6 +455,7 @@ pub(super) fn apply_enter(blocks: &mut Vec<Block>, caret: Caret) -> Result<Caret
         align: p.align.clone(),
         numbering: p.numbering.clone(),
         ind: p.ind.clone(),
+        spacing: p.spacing.clone(),
         // the section mark stays with the HEAD paragraph — a split must not
         // duplicate the section break (DD L01 §5.6b)
         sect: None,

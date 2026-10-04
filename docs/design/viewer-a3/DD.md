@@ -400,6 +400,36 @@ chạy full chuỗi, không assert toạ độ mới).
 `w:start`/multi-level restart · spacing trước/sau table · mark không edit được ·
 `beforeAuto/afterAuto`.
 
+**Kết quả slice V6 (04.10.2026 — commit df56f88 design → 6d9768e impl):**
+- **Gate 12 PASSED với số MỚI (assert FORMULA giữ nguyên — không re-pin constants):**
+  colw **642.5** = pgSz 793.7 − 2×twip(1134)=75.6 (tính tay) · baselines[0] **91.6**
+  (75.6+16) · **lines 15** (trước 16 — cột rộng hơn, FILLER wrap gộp 1 dòng; assert
+  `lines >= 12` wrap-engage vẫn cắn) · maxw 640.5 ≤ colw · delta == lhs 17.9 (OS/2
+  formula) · ảnh flow đúng.
+- **Gate 14: 103 → 114 checks** — +spacing (gap = prev.after+cur.before, twip 300 = 20px
+  exact; before áp đầu tài liệu; **after trước table bị DROP + para sau table giữ
+  before** — ceiling có test) + mark (item đầu ri=MODEL index — caret không lệch —
+  hit vùng mark → offset 0, not editable).
+- **parity-a2:** corpus +`edge-spacing.docx` (3 hình dạng before/after/signed-âm) —
+  12 file, INVARIANT 12/12, hard-fails 0.
+- **parity-view: 6/6 PASS ×2 deterministic (maxdy ≤ 0.32px) + negative proven exit 1.**
+  Run đầu FAIL 3 hard — 2 nguyên nhân thật, cả 2 fix đúng hướng oracle:
+  (1) **mark format**: engine GetText '1. ' (decimal) · 'a)' (lowerLetter) · 'i.'
+  (lowerRoman) — viewer ban đầu '1.'/'1)'/'1.' → mở ST_NumberFormat §17.18.59
+  (decimal/lowerLetter/upperLetter/lowerRoman/upperRoman; unknown → decimal fallback)
+  + **1 SPACE sau mark** (oracle-obs, separator không thuộc lvlText);
+  (2) **protocol harness hóa Thời đại pre-mark**: M0 hard trên wrap-split join (11 vs
+  10 dòng — count branch đã classify) + numbered detect chỉ chạy khi ov≠vv + global
+  anchor khiến drift +1 dòng upstream rơi vào "within paragraph" (false hard) →
+  protocol T-V6: M0 chịu wrap-split (count branch lo), numbered detect 2 phía
+  (viewer render mark rồi — texts khớp exact), **per-paragraph anchor** (claim load-bearing
+  là WITHIN-para line-height; flow gap tại biên para = classified ceiling, report 1
+  lần/para). Message stale "w:spacing not in model" xoá (đã in model từ slice này).
+- **Gate 13/15 exit 0** (Nano Light cùng layoutBlocks — chain IME/clipboard/bảng/
+  save nguyên vẹn; first-draw 93 ms).
+- **Cargo:** 41 shell + 17 crate (+1 test mark formats: decimal/roman counters +
+  separator + spacing passthrough).
+
 ## 6. Rủi ro + mitigations
 
 | Rủi ro | Mitigation |
