@@ -84,6 +84,12 @@
 #       warn assert requires warnings naming 'hyperlinks' — contradicts the
 #       real 'tracked changes' warning → exit 1 (proves the gate READS the
 #       warn content AND detect fired on the real open path — T-A31).
+#   NANO_LIGHT_NEGATIVE=tbldoctor harness/scripts/smoke-nano-light.sh
+#     → fixture whose table carries tblPr/tcPr styling; the run completes,
+#       but the warn assert requires warnings naming 'hyperlinks' —
+#       contradicts the real 'table styling' warning → exit 1 (proves the
+#       gate READS the warn content AND the tblPr/tcPr detect fired on the
+#       real open path — T-A32).
 set -u
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -106,6 +112,10 @@ if [ "$NEGATIVE" = "garbage" ]; then
   echo "smoke: NEGATIVE proof (garbage) — expecting 'nano light failed:' to bite"
 elif [ "$NEGATIVE" = "warndoor" ]; then
   python3 "$ROOT/harness/fixtures/make_docx_layout.py" "$FIXTURE" table fidelity tracked >/dev/null || {
+    echo "smoke: cannot generate fixture"; exit 1;
+  }
+elif [ "$NEGATIVE" = "tbldoctor" ]; then
+  python3 "$ROOT/harness/fixtures/make_docx_layout.py" "$FIXTURE" table fidelity tblstyle >/dev/null || {
     echo "smoke: cannot generate fixture"; exit 1;
   }
 else
@@ -265,6 +275,9 @@ warns = re.findall(r"nano light warn: (.*)", "\n".join(lines))
 if negative == "warndoor":
     need(warns and any("hyperlinks" in w for w in warns),
          f"warndoor: warnings {warns} must name 'hyperlinks' — the assert must bite here (real: tracked changes)")
+elif negative == "tbldoctor":
+    need(warns and any("hyperlinks" in w for w in warns),
+         f"tbldoctor: warnings {warns} must name 'hyperlinks' — the assert must bite here (real: table styling)")
 else:
     need(not warns, f"clean fidelity fixture must not warn, got {warns}")
 

@@ -462,6 +462,13 @@ pub fn detect_save_losses(zip_bytes: &[u8]) -> Vec<String> {
         ("<w:instrText", "fields"),
         ("<w:footnoteReference", "footnotes"),
         ("<w:endnoteReference", "endnotes"),
+        // exact tag boundary — <w:tblPrChange>/<w:tblPrEx> must NOT trip
+        // (T-A32, DD L01 §5.7: the model keeps table structure, drops
+        // tblPr/tcPr, so EVERY styled table warns regardless of edits)
+        ("<w:tblPr>", "table styling"),
+        ("<w:tblPr ", "table styling"),
+        ("<w:tcPr>", "table styling"),
+        ("<w:tcPr ", "table styling"),
     ] {
         if xml.contains(pat) && !out.iter().any(|w| w == what) {
             out.push(what.to_string());

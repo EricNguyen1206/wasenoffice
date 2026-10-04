@@ -740,9 +740,10 @@ fn fidelity_corpus_parses_hyperlinks_and_sections() {
     );
 }
 
-/// Detect (refuse-warn, DD §5.6d): tracked changes / fields / footnotes /
-/// sectPr children beyond pgSz+pgMar are flagged; a pgSz/pgMar-only sectPr —
-/// mid-document or final — stays silent.
+/// Detect (refuse-warn, DD §5.6d + §5.7): tracked changes / fields / footnotes /
+/// tblPr/tcPr table styling / sectPr children beyond pgSz+pgMar are flagged; a
+/// pgSz/pgMar-only sectPr — mid-document or final — and `<w:tblPrChange>`/
+/// `<w:tblPrEx>` lookalikes stay silent.
 #[test]
 fn detect_save_losses_flags_and_spares() {
     let clean = minimal_package(&empty_document());
@@ -753,6 +754,7 @@ fn detect_save_losses_flags_and_spares() {
         r#"<w:p><w:ins w:id="1" w:author="A"><w:r><w:t>tracked</w:t></w:r></w:ins></w:p>"#,
         r#"<w:p><w:fldChar w:fldCharType="begin"/></w:p>"#,
         r#"<w:p><w:footnoteReference w:id="2"/></w:p>"#,
+        r#"<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tr><w:tc><w:tcPr><w:tcW w:w="4780" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl>"#,
         r#"<w:p><w:pPr><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:cols w:num="2"/></w:sectPr></w:pPr></w:p>"#,
         r#"</w:body></w:document>"#,
     );
@@ -763,6 +765,7 @@ fn detect_save_losses_flags_and_spares() {
     );
     assert!(losses.contains(&"fields".to_string()), "{losses:?}");
     assert!(losses.contains(&"footnotes".to_string()), "{losses:?}");
+    assert!(losses.contains(&"table styling".to_string()), "{losses:?}");
     assert!(
         losses.contains(&"section properties beyond page size/margins".to_string()),
         "{losses:?}"
@@ -783,6 +786,14 @@ fn detect_save_losses_flags_and_spares() {
         r#"</w:body></w:document>"#,
     );
     assert!(nanooffice_ooxml::detect_save_losses(&minimal_package(lookalikes)).is_empty());
+    // <w:tblPrChange>/<w:tblPrEx> must NOT trip the table-styling scan
+    // (exact tag boundary — T-A32, DD L01 §5.7)
+    let tblprop_lookalikes = concat!(
+        r#"<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>"#,
+        r#"<w:tbl><w:tr><w:tc><w:tcPrChange><w:tcPr/></w:tcPrChange><w:p><w:r><w:t>x</w:t></w:r></w:p></w:tc></w:tr></w:tbl>"#,
+        r#"</w:body></w:document>"#,
+    );
+    assert!(nanooffice_ooxml::detect_save_losses(&minimal_package(tblprop_lookalikes)).is_empty());
 }
 
 /// Fuzz (mutation, seed cố định, không dep): XML mutations + zip mutations —

@@ -110,8 +110,21 @@ TABLE = (
     '</w:tr></w:tbl>'
 )
 
+# T-A32 gate-15 flag (`tblstyle` argv): same table WITH tblPr/tcPr styling —
+# fires the `table styling` warn (`detect_save_losses`, DD L01 §5.7). Default
+# output stays byte-identical.
+TABLE_STYLED = (
+    '<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tr>'
+    '<w:tc><w:tcPr><w:tcW w:w="4780" w:type="dxa"/></w:tcPr>'
+    '<w:p><w:r><w:t xml:space="preserve">Alpha cell</w:t></w:r></w:p></w:tc>'
+    '<w:tc><w:tcPr><w:tcW w:w="4780" w:type="dxa"/></w:tcPr>'
+    '<w:p><w:r><w:t xml:space="preserve">Beta cell</w:t></w:r></w:p></w:tc>'
+    '</w:tr></w:tbl>'
+)
 
-def document_xml(with_table: bool = False, with_fidelity: bool = False, with_tracked: bool = False):
+
+def document_xml(with_table: bool = False, with_fidelity: bool = False,
+                 with_tracked: bool = False, with_tblstyle: bool = False):
     title = '<w:r><w:t xml:space="preserve">Quick view layout fixture</w:t></w:r>'
     if with_tracked:
         title = f'<w:ins w:id="1" w:date="2026-10-04T00:00:00Z" w:author="NanoOffice">{title}</w:ins>'
@@ -126,7 +139,9 @@ def document_xml(with_table: bool = False, with_fidelity: bool = False, with_tra
         f'<w:p>{drawing("rIdImg1", *IMG1_EMU, 1)}</w:p>',
         f'<w:p>{drawing("rIdImg2", *IMG2_EMU, 2)}</w:p>',
     ]
-    if with_table:
+    if with_tblstyle:
+        body.append(TABLE_STYLED)
+    elif with_table:
         body.append(TABLE)
     body += [
         '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/>'
@@ -156,7 +171,7 @@ def main():
         if "fidelity" in flags:
             for name, xml in FIDELITY_PARTS.items():
                 z.writestr(name, xml)
-        z.writestr("word/document.xml", document_xml("table" in flags, "fidelity" in flags, "tracked" in flags))
+        z.writestr("word/document.xml", document_xml("table" in flags, "fidelity" in flags, "tracked" in flags, "tblstyle" in flags))
     print(out)
 
 
