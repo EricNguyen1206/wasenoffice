@@ -42,19 +42,6 @@ import {
   type Run,
 } from './viewer/layout';
 
-/** Preedit measurer fallback when the caret paragraph has no run. */
-const PLAIN_RUN: Run = {
-  text: '',
-  font: null,
-  size: null,
-  bold: false,
-  italic: false,
-  underline: null,
-  color: null,
-  spacing: null,
-  images: [],
-};
-
 interface Caret {
   /** The BODY BLOCK index (DD L01 §5.3a — `Hit.block`; `Hit.para`'s `pi`
    * shares values with table-cell content and cannot address the body). */
@@ -160,7 +147,11 @@ async function main(): Promise<void> {
           c.fillStyle = '#000';
           c.fillRect(at.x - 0.75, at.y - at.lh + 2, 1.5, at.lh - 1);
           if (preedit) {
-            const w = measure(runsOf(caret.para)?.[caret.run] ?? PLAIN_RUN, preedit);
+            // measurer-only fallback run (layout.ts lineHeight precedent)
+            const w = measure(
+              runsOf(caret.para)?.[caret.run] ?? ({ text: '', font: null, size: null } as Run),
+              preedit,
+            );
             c.fillText(preedit, at.x, at.y);
             c.fillRect(at.x, at.y + 2, w, 1); // inline displacement is a ceiling (DD §5.4a)
           }
