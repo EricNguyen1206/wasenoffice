@@ -347,6 +347,59 @@ Tokenize mang thêm `ri` + `charStart` — thứ tự token KHÔNG đổi.
   WIRING E2E. **Resize re-layout**: window resize → rAF coalesce → render() lại (layout
   thuần rẻ; canvas hết stale — không gate riêng, cùng đường code first-draw).
 
+### 5.8 Slice V6 (04.10.2026 — T-V6, design-first): model mở cho parity — spacing · pgMar · numbering mark
+
+Trigger: user ra lệnh 04.10 (A4 editor đã dựng TRÊN layout này — mọi thay đổi toạ độ
+ảnh hưởng CẢ viewer lẫn Nano Light, nên mở sớm trước A5). Ba khoảng parity còn hở từ
+T-V4: (a) `w:spacing` before/after — lệch 2.7–6.5px tại ranh giới paragraph; (b) `pgMar`
+— viewer fix 1in (MARGIN=96px) trong khi engine đặt text theo pgMar; (c) numbering mark
+— engine GetText mang "1. "/"•" + indent, viewer chưa vẽ.
+
+**Quyết định chốt:**
+
+1. **`w:spacing` before/after (§17.3.1.33, pPr-level):** `Paragraph` +`spacing:
+   Option<Spacing>`, `Spacing { before: Option<i32>, after: Option<i32> }` twips (signed
+   theo ST_TwipsMeasure; `@w:beforeAuto/afterAuto` không model — ceiling). PHÂN BIỆT
+   rPr-level `w:spacing` §17.3.2.33 (char spacing, `@w:val`) đã có từ V1 — nhánh pPr
+   riêng, không đụng. Writer đối xứng (emit chỉ attr Some; cả hai None → không emit).
+   Resolve: **direct pPr only** — `StyleDef` không mang spacing (style-level = ceiling,
+   thêm khi corpus parity đòi; corpus hiện tại = direct formatting). Layout consume ở
+   `walk`: giữa 2 paragraph liên tiếp `yCur += after(prev) + before(cur)` (px qua
+   `twip()`); paragraph ĐẦU tài liệu/cell vẫn nhận before (Word áp space-before ở đầu
+   trang — parity engine); **reset prevAfter qua biên table** (gap +4 giữ nguyên —
+   spacing trước/sau table là ceiling). Cả 2 mức ảnh hưởng CẢ Nano Light (cùng
+   layoutBlocks) — hitTest/caretXY theo baseline mới tự đúng, 0 dòng mutation đổi.
+2. **`pgMar` consume:** `Document.page_mar` đã ở model từ T-A31 — lần này vào payload
+   (`QuickView`/`NanoLightDoc` +`mar`, serde camelCase) → `render.ts::columnWidth`
+   nhận `mar` (px = `twip()`), `x0 = left.px`, cột = page − left − right, y đầu =
+   top.px + 16 (công thức cũ giữ, chỉ thay nguồn); thiếu attr → fallback MARGIN=96
+   (byte-identical hành vi cũ cho file không pgMar). Comment "pgMar is not in the
+   model" sửa. **Gate 12 re-pin**: fixture pgMar 1134 → colw = 793.7 − 2×75.6 = **642.5**
+   (trước 601.7), baseline[0] = 91.6 (trước 112.0) — cột WIDE hơn có thể đổi line
+   count/maxw → pin lại sau 1 lần chạy observation, giữ nguyên CÔNG THỨC assert
+   (delta == lhs từ log; colw tính tay từ pgSz − 2×pgMar).
+3. **Numbering mark (render-only, KHÔNG vào model):** `resolve()` sinh `RParagraph
+   .mark: Option<String>` — đếm per `numId` (BTreeMap per-document, sequential), 
+   `numFmt` decimal → format `lvlText` (`%N` ← counter mức N−1, `w:start` chưa model —
+   mặc định 1, ceiling), bullet/symbol khác → `lvlText` nguyên văn. Indent: dùng
+   `Paragraph.ind` hiện có (merge `lvl.ind` = ceiling — corpus list mang ind trực tiếp).
+   Layout: prepend 1 item mark (clone run ĐẦU, `text = mark`, `ri = 0`,
+   `charStart = 0`) trước token đầu → TextLine text gồm mark → **M0 text-sequence
+   khớp engine GetText**; hitTest vùng mark → (run 0, offset 0) — mark KHÔNG edit
+   được (không phải model text — ceiling; caret sems đặt trước ký tự thật đầu tiên).
+   Copy/selectionText: mark đi vào text dòng (khớp engine — ceiling ghi nhận).
+
+**Kiểm chứng:** gate 12 re-pin (trên) + gate 14 +checks (spacing gap công thức twip +
+mark item shape/offset, hand-computed) + parity-a2 corpus +file spacing (INVARIANT
+round-trip phủ tự động; PARITY construct list +1 dòng) + **parity-view rerun ×2**
+(oracle CDP phán: spacing/pgMar phải GIẢM maxdy 2.73/6.47; mark phải khớp text dòng
+list — corpus list file có trong 6? NOTES ghi) + gate 15 (Nano Light cùng layout —
+chạy full chuỗi, không assert toạ độ mới).
+
+**Ceilings mới (ghi thẳng):** style-level `w:spacing` (StyleDef) · `lvl.ind` merge ·
+`w:start`/multi-level restart · spacing trước/sau table · mark không edit được ·
+`beforeAuto/afterAuto`.
+
 ## 6. Rủi ro + mitigations
 
 | Rủi ro | Mitigation |
