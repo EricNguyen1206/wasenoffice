@@ -165,12 +165,33 @@ vào backlog phase kế + sinh handoff phase kế.
 
 ## Kiểm chứng mỗi vòng
 
+- Chạy `./harness/scripts/dev-check.sh` TRƯỚC khi tuyên bố xong một slice — các check
+  nhanh (~15 s, KHÔNG boot app): lệnh source từ `harness/scripts/gate-cmds.sh` — HẰNG SỐ
+  1 nhà mà `verify.sh` cũng dùng; **không tự ghép lệnh check riêng** (04.10: fmt thiếu
+  `--all` pass ảo ×2, `cargo check -p` một package sót initializer shell crate).
 - Chạy `./harness/scripts/verify.sh` — gồm: cargo check · cargo fmt --check · cargo clippy
   (-D warnings) · pnpm build · license gate (`check-licenses.mjs`, allowlist trong script) ·
   doc gate OKF-thin (`check-docs.mjs` — QĐ8) · submodules clean · không file `upstream/`/`engines/`
-  nào staged.
+  nào staged. Phán quan cuối — dev-check chỉ là pré-flight.
 - Có thay đổi bridge/protocol → chạy smoke: mở app, load editor, log các method UNIMPL bị gọi
   (thủ tục chuẩn hóa: `docs/design/D01-editor/TEST.md`).
+
+## Vận hành agent — kỷ luật từ tự-review 04.10 (T-055 #6 + T-V6)
+
+- **Edit: `old_string` copy từ file thật** — tuyệt đối không gõ lại từ trí nhớ hay từ
+  output đọc bị elide (04.10: 2 lần edit làm hỏng body hàm — `render.ts`,
+  `opc.rs` — cùng một root cause).
+- **Đổi model Rust → `cargo check` TOÀN workspace** (hoặc `dev-check.sh`) trước gate
+  nào khác — initializer thiếu nằm ở crate KHÁC nơi đổi (04.10: `Paragraph.spacing`
+  lộ E0063 ở `editor/mutations.rs` tại gate 15, không phải crate).
+- **Commit sau `git add` danh sách tay → `git status --short` soi file lạ** — tree dùng
+  chung giữa các phiên; chỉ stage hunks của mình (04.10: session song song để
+  work-in-progress trong cùng tree).
+- **`harness/fixtures/corpus-a2/NOTES.md` là spec đầu vào của implement** — đọc trước
+  khi viết code, không chỉ sau khi parity fail (04.10: lowerLetter/lowerRoman ghi sẵn
+  trong NOTES nhưng mark implement chỉ decimal → parity FAIL ×3 hard).
+- **parity-view chạy không deadline** (đo 97 s → 2506 s tùy tranh chấp máy; mỗi corpus
+  boot app riêng).
 
 ## Định nghĩa các phase (ngắn gọn)
 

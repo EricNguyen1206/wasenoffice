@@ -8,6 +8,31 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-05 · Setup: gate-cmds 1 nhà + dev-check + pin 5 format mark + conventions vận hành (từ tự-review 04.10)
+
+- **Nguồn:** tự-review phiên T-055 #6 + T-V6 — 4 verify lãng phí, ~1 giờ parity chạy lại,
+  2 edit hỏng file; báo cáo HTML `$TMPDIR/architecture-review-20261004-setup.html`;
+  user chọn cả 3 candidate.
+- **C1 — `harness/scripts/gate-cmds.sh` + `dev-check.sh`:** lệnh gate (cargo
+  check/fmt/clippy/build/gate-14) là HẰNG SỐ 1 nhà, `verify.sh` source + `eval` (log
+  label nguyên văn); `dev-check.sh` chạy cùng lệnh KHÔNG boot app (~4 s đo thật) —
+  "local check" không thể trôi khỏi gate (sự cố fmt `--all` pass ảo ×2 + E0063 sót
+  workspace chỉ lộ ở gate 15). verify.sh FULL vẫn phán quan cuối.
+- **C2 — pin đủ 5 ST_NumberFormat §17.18.59** trong
+  `resolve_numbering_marks_formats_counters_and_separator`: decimal/lowerRoman/bullet
+  (cũ) + lowerLetter "a)" / upperLetter "A." / upperRoman "I." (mới) — blind-spot
+  trước đây chỉ parity (5–40 phút) phủ, giờ unit 4 s.
+- **C3 — `conventions.md`:** mục "Kiểm chứng mỗi vòng" thêm dev-check (1 nhà, không tự
+  ghép lệnh); mục mới "Vận hành agent" 4 bullet: old_string copy từ file thật · đổi
+  model Rust → check toàn workspace · `git status` trước commit add-tay (tree đa-
+  phiên) · corpus NOTES.md = spec đầu vào + parity không deadline.
+- **Loại có lý do:** parallel hóa parity (contention tạm — YAGNI) · pre-commit hook
+  (local-only) · tạo CONTEXT.md (phân tán nhà ngôn ngữ — vision/conventions đã là nhà).
+- **Bằng chứng:** dev-check exit 0 (4 s) · crate 11+6 rc=0 (5 format + separator) ·
+  verify FULL exit 0 (chính verify.sh đã source gate-cmds — test sống của C1).
+- **Gotcha:** diagnostics.md dùng chung với session song song (entry Rule 6b của họ
+  chưa commit) — stage hunk của mình bằng strip-script, giữ nguyên working copy của họ.
+
 ## 2026-10-04 · T-055 #6: review kiến trúc post-rung A4 (3 reviewer song song — 7 LAND / 4 DEFER / 7 REJECT)
 
 - **Bằng chứng (3 commit, mỗi cụm 1 lần verify FULL exit 0):** `712bee4` TS C1+C2+C3
