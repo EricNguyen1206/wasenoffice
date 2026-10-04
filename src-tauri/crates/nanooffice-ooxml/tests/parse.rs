@@ -1030,28 +1030,22 @@ fn zip_bytes(parts: &[(String, Vec<u8>)]) -> Vec<u8> {
 #[test]
 fn resolve_numbering_marks_formats_counters_and_separator() {
     use nanooffice_ooxml::{NumLvl, NumRef, Paragraph, Run, Spacing};
+    let numbered = |num_id: u32, ilvl: u32| {
+        Block::Paragraph(Paragraph {
+            numbering: Some(NumRef { num_id, ilvl }),
+            runs: vec![Run::default()],
+            ..Default::default()
+        })
+    };
     let doc = Document {
         body: vec![
-            Block::Paragraph(Paragraph {
-                numbering: Some(NumRef { num_id: 1, ilvl: 0 }),
-                runs: vec![Run::default()],
-                ..Default::default()
-            }),
-            Block::Paragraph(Paragraph {
-                numbering: Some(NumRef { num_id: 1, ilvl: 0 }),
-                runs: vec![Run::default()],
-                ..Default::default()
-            }),
-            Block::Paragraph(Paragraph {
-                numbering: Some(NumRef { num_id: 1, ilvl: 1 }),
-                runs: vec![Run::default()],
-                ..Default::default()
-            }),
-            Block::Paragraph(Paragraph {
-                numbering: Some(NumRef { num_id: 2, ilvl: 0 }),
-                runs: vec![Run::default()],
-                ..Default::default()
-            }),
+            numbered(1, 0),
+            numbered(1, 0), // sequential counter
+            numbered(1, 1),
+            numbered(1, 2),
+            numbered(3, 0),
+            numbered(4, 0),
+            numbered(2, 0),
             Block::Paragraph(Paragraph {
                 spacing: Some(Spacing {
                     before: Some(120),
@@ -1077,6 +1071,13 @@ fn resolve_numbering_marks_formats_counters_and_separator() {
                     lvl_text: "(%2)".into(),
                 },
             );
+            levels1.insert(
+                2,
+                NumLvl {
+                    num_fmt: "lowerLetter".into(),
+                    lvl_text: "%3)".into(),
+                },
+            );
             let mut levels2 = std::collections::BTreeMap::new();
             levels2.insert(
                 0,
@@ -1085,9 +1086,27 @@ fn resolve_numbering_marks_formats_counters_and_separator() {
                     lvl_text: "\u{2022}".into(),
                 },
             );
+            let mut levels3 = std::collections::BTreeMap::new();
+            levels3.insert(
+                0,
+                NumLvl {
+                    num_fmt: "upperLetter".into(),
+                    lvl_text: "%1.".into(),
+                },
+            );
+            let mut levels4 = std::collections::BTreeMap::new();
+            levels4.insert(
+                0,
+                NumLvl {
+                    num_fmt: "upperRoman".into(),
+                    lvl_text: "%1.".into(),
+                },
+            );
             let mut numbering = std::collections::BTreeMap::new();
             numbering.insert(1, levels1);
             numbering.insert(2, levels2);
+            numbering.insert(3, levels3);
+            numbering.insert(4, levels4);
             numbering
         },
         headers: vec![],
@@ -1105,12 +1124,15 @@ fn resolve_numbering_marks_formats_counters_and_separator() {
     assert_eq!(mark(0).as_str(), "1. ", "decimal %1. + separator");
     assert_eq!(mark(1).as_str(), "2. ", "sequential counter");
     assert_eq!(mark(2).as_str(), "(i) ", "lowerRoman token + separator");
+    assert_eq!(mark(3).as_str(), "a) ", "lowerLetter token + separator");
+    assert_eq!(mark(4).as_str(), "A. ", "upperLetter token + separator");
+    assert_eq!(mark(5).as_str(), "I. ", "upperRoman token + separator");
     assert_eq!(
-        mark(3).as_str(),
+        mark(6).as_str(),
         "\u{2022} ",
         "bullet lvlText raw + separator"
     );
-    let sp = match &r.body[4] {
+    let sp = match &r.body[7] {
         nanooffice_ooxml::RBlock::Paragraph(p) => p.spacing.as_ref().map(|s| (s.before, s.after)),
         _ => panic!("expected paragraph"),
     };

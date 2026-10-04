@@ -4,19 +4,24 @@ set -u
 cd "$(dirname "$0")/../.."
 fail=0
 
+# Lệnh gate = HẰNG SỐ 1 nhà (gate-cmds.sh) — verify.sh và dev-check.sh cùng
+# source; "local check" không thể trôi khỏi gate (sự cố 04.10: fmt thiếu
+# --all pass ảo ×2).
+. harness/scripts/gate-cmds.sh
+
 # --workspace: manifest src-tauri là package + workspace root — không có flag này
 # cargo mặc định chỉ chạy package gốc, crate A2 (crates/nanooffice-ooxml, T-A20) không được phủ.
 echo "▸ cargo check (src-tauri workspace)"
-(cd src-tauri && cargo check --workspace --quiet) || fail=1
+eval "$GATE_CARGO_CHECK" || fail=1
 
 echo "▸ cargo fmt --check (src-tauri workspace)"
-(cd src-tauri && cargo fmt --check --all) || fail=1
+eval "$GATE_FMT" || fail=1
 
 echo "▸ cargo clippy -D warnings (src-tauri workspace)"
-(cd src-tauri && cargo clippy --workspace --quiet -- -D warnings) || fail=1
+eval "$GATE_CLIPPY" || fail=1
 
 echo "▸ pnpm build (src)"
-pnpm build --logLevel error || fail=1
+eval "$GATE_BUILD" || fail=1
 
 echo "▸ license allowlist (cargo graph + node_modules)"
 node harness/scripts/check-licenses.mjs || fail=1
@@ -28,7 +33,7 @@ echo "▸ bridge surface 3 chiều (shim KNOWN/LOCAL_TRUTHS ↔ rust dispatch �
 node harness/scripts/check-bridge-surface.mjs || fail=1
 
 echo "▸ layout core unit tests (gate 14: tsc-compile + node — T-V7)"
-harness/scripts/test-layout.sh || fail=1
+eval "$GATE_LAYOUT" || fail=1
 
 echo "▸ smoke render behavioral (TC-D01-06: boot app, render fixture DOCX)"
 harness/scripts/smoke-render.sh || fail=1
