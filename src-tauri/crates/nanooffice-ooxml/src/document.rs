@@ -14,8 +14,8 @@ use quick_xml::events::{BytesStart, Event};
 
 use crate::opc::{self, attr, Rel};
 use crate::{
-    xml_err, Block, ImageRef, Ind, NumRef, Page, Paragraph, ParseError, RFonts, Run, Table,
-    TableCell,
+    xml_err, Block, Hyperlink, ImageRef, Ind, NumRef, Page, PageMar, Paragraph, ParseError, RFonts,
+    Run, Section, Table, TableCell,
 };
 
 const W_NS: &str = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
@@ -30,21 +30,28 @@ struct Parser<'a> {
     /// Page size of the body-level `w:sectPr` (§17.6.17) — set while parsing
     /// the main body stream, left alone for headers/footers.
     page: Option<Page>,
+    /// Same rule for the final section's `w:pgMar` (§17.6.11, T-A31).
+    page_mar: Option<PageMar>,
+}
+
+/// The main-part parse result: body blocks + the FINAL section's typed
+/// minimal (§17.6.17 — pgSz + pgMar).
+pub(crate) struct BodyParse {
+    pub blocks: Vec<Block>,
+    pub page: Option<Page>,
+    pub page_mar: Option<PageMar>,
 }
 
 /// Parse the main document part: check the `w:document` root (§17.2.3) and
 /// return the `w:body` (§17.2.2) block stream plus the final section's page
 /// size, if declared.
-pub fn parse_body(
-    xml: &str,
-    rels: &RelsList,
-    base_dir: &str,
-) -> Result<(Vec<Block>, Option<Page>), ParseError> {
+pub fn parse_body(xml: &str, rels: &RelsList, base_dir: &str) -> Result<BodyParse, ParseError> {
     let mut parser = Parser {
         reader: quick_xml::Reader::from_str(xml),
         rels,
         base_dir,
         page: None,
+        page_mar: None,
     };
     let mut buf = Vec::new();
     let mut saw_document = false;
@@ -61,8 +68,11 @@ pub fn parse_body(
                     }
                 }
                 b"w:body" if saw_document => {
-                    let blocks = parser.parse_blocks(None)?;
-                    return Ok((blocks, parser.page));
+                    return Ok(BodyParse {
+                        blocks: parser.parse_blocks(None)?,
+                        page: parser.page,
+                        page_mar: parser.page_mar,
+                    });
                 }
                 _ => {}
             },
@@ -100,6 +110,7 @@ pub fn parse_container(
         rels,
         base_dir,
         page: None,
+        page_mar: None,
     };
     let mut buf = Vec::new();
     loop {
@@ -139,10 +150,13 @@ impl Parser<'_> {
                 Event::Start(e) => match e.name().as_ref() {
                     b"w:p" => blocks.push(Block::Paragraph(self.parse_paragraph()?)),
                     b"w:tbl" => blocks.push(Block::Table(self.parse_table()?)),
-                    // the body-level final section (§17.6.17) — only pgSz is
-                    // modelled; mid-document sections live inside w:pPr and
-                    // are skipped there
-                    b"w:sectPr" => self.parse_sectpr()?,
+                    // the body-level final section (§17.6.17) — only pgSz/pgMar
+                    // are modelled; mid-document sections live inside w:pPr
+                    b"w:sectPr" => {
+                        let (page, mar) = self.parse_sectpr()?;
+                        self.page = page;
+                        self.page_mar = mar;
+                    }
                     _ => self.skip_element()?,
                 },
                 Event::Empty(e) => match e.name().as_ref() {
@@ -169,7 +183,8 @@ impl Parser<'_> {
         }
     }
 
-    /// `w:p` (§17.3.1.22): direct `w:pPr` (§17.3.1.25) then run content.
+    /// `w:p` (§17.3.1.22): direct `w:pPr` (§17.3.1.25) then run content —
+    /// including `w:hyperlink` groups (§17.16.22, T-A31).
     fn parse_paragraph(&mut self) -> Result<Paragraph, ParseError> {
         let mut buf = Vec::new();
         let mut para = Paragraph::default();
@@ -179,6 +194,11 @@ impl Parser<'_> {
                 Event::Start(e) => match e.name().as_ref() {
                     b"w:pPr" => self.parse_ppr(&mut para)?,
                     b"w:r" => para.runs.push(self.parse_run()?),
+                    b"w:hyperlink" => {
+                        let rel_id = attr(&e, b"r:id")?;
+                        let anchor = attr(&e, b"w:anchor")?;
+                        self.parse_hyperlink(&mut para, rel_id, anchor)?;
+                    }
                     _ => self.skip_element()?,
                 },
                 // leaf children of w:p other than pPr/r carry no run text
@@ -187,6 +207,89 @@ impl Parser<'_> {
                 Event::Eof => return Err(ParseError("unexpected end of XML inside w:p".into())),
                 _ => {}
             }
+        }
+    }
+
+    /// `w:hyperlink` (§17.16.22) content: every run gets the group's link
+    /// (§17.16.22 may nest hyperlinks — the innermost group wins). A group
+    /// with NEITHER `r:id` NOR `w:anchor` is refused, not guessed.
+    fn parse_hyperlink(
+        &mut self,
+        para: &mut Paragraph,
+        rel_id: Option<String>,
+        anchor: Option<String>,
+    ) -> Result<(), ParseError> {
+        let link = self.resolve_link(rel_id, anchor)?;
+        let mut buf = Vec::new();
+        loop {
+            buf.clear();
+            match self.reader.read_event_into(&mut buf).map_err(xml_err)? {
+                Event::Start(e) => match e.name().as_ref() {
+                    b"w:r" => {
+                        let mut run = self.parse_run()?;
+                        run.link = Some(link.clone());
+                        para.runs.push(run);
+                    }
+                    b"w:hyperlink" => {
+                        let rel = attr(&e, b"r:id")?;
+                        let anc = attr(&e, b"w:anchor")?;
+                        self.parse_hyperlink(para, rel, anc)?;
+                    }
+                    _ => self.skip_element()?,
+                },
+                Event::End(e) if e.name().as_ref() == b"w:hyperlink" => return Ok(()),
+                Event::Eof => {
+                    return Err(ParseError(
+                        "unexpected end of XML inside w:hyperlink".into(),
+                    ))
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Build the model link from a group's `r:id`/`w:anchor`: the relationship
+    /// must exist and be a hyperlink rel; external targets stay verbatim URIs,
+    /// internal ones resolve against the part's directory.
+    fn resolve_link(
+        &self,
+        rel_id: Option<String>,
+        anchor: Option<String>,
+    ) -> Result<Hyperlink, ParseError> {
+        if let Some(rel_id) = rel_id {
+            let rel = self
+                .rels
+                .iter()
+                .find(|(id, _)| *id == rel_id)
+                .map(|(_, r)| r)
+                .ok_or_else(|| ParseError(format!("hyperlink relationship {rel_id} not found")))?;
+            if rel.rel_type != opc::RT_HYPERLINK {
+                return Err(ParseError(format!(
+                    "relationship {rel_id} is not a hyperlink relationship — refusing"
+                )));
+            }
+            let target = if rel.external {
+                rel.target.clone()
+            } else {
+                opc::resolve_target(self.base_dir, &rel.target)?
+            };
+            Ok(Hyperlink {
+                rel_id: Some(rel_id),
+                anchor,
+                target: Some(target),
+                external: rel.external,
+            })
+        } else if let Some(anchor) = anchor {
+            Ok(Hyperlink {
+                rel_id: None,
+                anchor: Some(anchor),
+                target: None,
+                external: false,
+            })
+        } else {
+            Err(ParseError(
+                "w:hyperlink without r:id or w:anchor — refusing".into(),
+            ))
         }
     }
 
@@ -203,6 +306,12 @@ impl Parser<'_> {
                     b"w:jc" => para.align = attr(&e, b"w:val")?,
                     b"w:numPr" => para.numbering = Some(self.parse_numpr()?),
                     b"w:ind" => para.ind = Some(parse_ind(&e)?),
+                    // mid-document section mark (§17.6.18 inside w:pPr) —
+                    // typed-minimal (pgSz + pgMar, T-A31)
+                    b"w:sectPr" => {
+                        let (page, mar) = self.parse_sectpr()?;
+                        para.sect = Some(Box::new(Section { page, mar }));
+                    }
                     _ => self.skip_element()?,
                 },
                 Event::Empty(e) => match e.name().as_ref() {
@@ -537,36 +646,35 @@ impl Parser<'_> {
         })
     }
 
-    /// `w:sectPr` (§17.6.17): only `w:pgSz` (§17.6.11) is modelled. Everything
-    /// else (headers references, columns, margins) stays out of the model.
-    fn parse_sectpr(&mut self) -> Result<(), ParseError> {
+    /// `w:sectPr` (§17.6.17/§17.6.18): only `w:pgSz` (§17.6.13) + `w:pgMar`
+    /// (§17.6.11) are modelled; everything else is skipped (and warned by
+    /// `detect_save_losses`).
+    fn parse_sectpr(&mut self) -> Result<(Option<Page>, Option<PageMar>), ParseError> {
         let mut buf = Vec::new();
         let mut page = Page::default();
+        let mut mar = PageMar::default();
         loop {
             buf.clear();
             match self.reader.read_event_into(&mut buf).map_err(xml_err)? {
-                Event::Start(e) | Event::Empty(e) => {
-                    if e.name().as_ref() == b"w:pgSz" {
-                        page.w = match attr(&e, b"w:w")? {
-                            Some(v) => Some(
-                                v.parse()
-                                    .map_err(|_| ParseError(format!("w:w={v:?} is not a u32")))?,
-                            ),
-                            None => None,
-                        };
-                        page.h = match attr(&e, b"w:h")? {
-                            Some(v) => Some(
-                                v.parse()
-                                    .map_err(|_| ParseError(format!("w:h={v:?} is not a u32")))?,
-                            ),
-                            None => None,
-                        };
+                Event::Start(e) | Event::Empty(e) => match e.name().as_ref() {
+                    b"w:pgSz" => {
+                        page.w = attr_u32_opt(&e, b"w:w")?;
+                        page.h = attr_u32_opt(&e, b"w:h")?;
                         page.orient = attr(&e, b"w:orient")?;
                     }
-                }
+                    b"w:pgMar" => {
+                        mar.top = attr_i64_opt(&e, b"w:top")?;
+                        mar.right = attr_i64_opt(&e, b"w:right")?;
+                        mar.bottom = attr_i64_opt(&e, b"w:bottom")?;
+                        mar.left = attr_i64_opt(&e, b"w:left")?;
+                        mar.header = attr_i64_opt(&e, b"w:header")?;
+                        mar.footer = attr_i64_opt(&e, b"w:footer")?;
+                        mar.gutter = attr_i64_opt(&e, b"w:gutter")?;
+                    }
+                    _ => {}
+                },
                 Event::End(e) if e.name().as_ref() == b"w:sectPr" => {
-                    self.page = Some(page);
-                    return Ok(());
+                    return Ok((Some(page), Some(mar)));
                 }
                 Event::Eof => {
                     return Err(ParseError("unexpected end of XML inside w:sectPr".into()))
@@ -665,6 +773,30 @@ fn attr_u32(e: &BytesStart<'_>, key: &[u8]) -> Result<u32, ParseError> {
     })?;
     v.parse()
         .map_err(|_| ParseError(format!("w:val={v:?} is not a u32")))
+}
+
+fn attr_u32_opt(e: &BytesStart<'_>, key: &[u8]) -> Result<Option<u32>, ParseError> {
+    match attr(e, key)? {
+        Some(v) => v.parse().map(Some).map_err(|_| {
+            ParseError(format!(
+                "{0}={v:?} is not a u32",
+                String::from_utf8_lossy(key)
+            ))
+        }),
+        None => Ok(None),
+    }
+}
+
+fn attr_i64_opt(e: &BytesStart<'_>, key: &[u8]) -> Result<Option<i64>, ParseError> {
+    match attr(e, key)? {
+        Some(v) => v.parse().map(Some).map_err(|_| {
+            ParseError(format!(
+                "{0}={v:?} is not an integer",
+                String::from_utf8_lossy(key)
+            ))
+        }),
+        None => Ok(None),
+    }
 }
 
 /// Signed twips (`w:spacing` §17.3.2.33).

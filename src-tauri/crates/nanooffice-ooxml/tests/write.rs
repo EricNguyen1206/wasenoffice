@@ -20,6 +20,11 @@ const MEDIA_FIXTURE: &str = concat!(
     "/tests/fixtures/nanooffice-media-fixture.docx"
 );
 
+const FIDELITY_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/tests/fixtures/nanooffice-fidelity-fixture.docx"
+);
+
 /// Điều kiện XONG (1) của DD §4: `parse → write → parse` trên corpus 10
 /// parts — model bất biến 100% (table/list/image/hdr-ftr refs + tiếng Việt).
 /// Package shape cũng được kiểm: đúng phần OPC chuẩn, media part là PNG.
@@ -50,6 +55,61 @@ fn round_trip_full_corpus_model_invariant() {
         "placeholder png size {}",
         png.size()
     );
+}
+
+/// T-A31 (DD L01 §5.6): fidelity corpus round-trip giữ model + hyperlink
+/// element + TargetMode External, và settings/theme/docProps đi qua
+/// BYTE-EXACT từ package nguồn.
+#[test]
+fn fidelity_roundtrip_keeps_links_sections_and_passthrough() {
+    let src = std::fs::read(FIDELITY_FIXTURE).unwrap();
+    let doc1 = nanooffice_ooxml::parse_docx(&src).unwrap();
+    let out = write_docx(&doc1, Some(&src)).unwrap();
+    assert_eq!(doc1, nanooffice_ooxml::parse_docx(&out).unwrap());
+
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&out[..])).unwrap();
+    let mut rels = String::new();
+    zip.by_name("word/_rels/document.xml.rels")
+        .unwrap()
+        .read_to_string(&mut rels)
+        .unwrap();
+    assert!(
+        rels.contains("TargetMode=\"External\"") && rels.contains("nanooffice-fidelity"),
+        "hyperlink rel must keep its external target: {rels}"
+    );
+    assert!(rels.contains("relationships/settings") && rels.contains("relationships/theme"));
+    let mut pkg = String::new();
+    zip.by_name("_rels/.rels")
+        .unwrap()
+        .read_to_string(&mut pkg)
+        .unwrap();
+    assert!(pkg.contains("metadata/core-properties") && pkg.contains("extended-properties"));
+    for part in [
+        "word/settings.xml",
+        "word/theme/theme1.xml",
+        "docProps/core.xml",
+        "docProps/app.xml",
+    ] {
+        let mut got = Vec::new();
+        zip.by_name(part).unwrap().read_to_end(&mut got).unwrap();
+        assert_eq!(
+            got,
+            nanooffice_ooxml::try_part_bytes(&src, part).unwrap(),
+            "{part} must survive byte-exact"
+        );
+    }
+}
+
+/// T-A31: một package NGUỒN không mang settings/theme/docProps → writer
+/// không bịa part nào (passthrough là copy-when-present).
+#[test]
+fn passthrough_is_silent_when_the_source_lacks_the_parts() {
+    let doc = nanooffice_ooxml::parse_docx_file(FULL_FIXTURE).unwrap();
+    let src = std::fs::read(FULL_FIXTURE).unwrap();
+    let out = write_docx(&doc, Some(&src)).unwrap();
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&out[..])).unwrap();
+    assert!(zip.by_name("word/settings.xml").is_err());
+    assert!(zip.by_name("docProps/core.xml").is_err());
 }
 
 /// T-A26: media part bytes của package nguồn phải sang qua canonical NGUYÊN
@@ -131,6 +191,7 @@ fn write_edge_xml_special_and_vietnamese() {
                 align: Some("both".to_string()),
                 numbering: Some(NumRef { num_id: 7, ilvl: 3 }),
                 ind: None,
+                sect: None,
                 runs: vec![
                     Run {
                         text: "a & b <c> \"d\" 'e' — Tiếng Việt có dấu: ẽnghệ ộ lại là là"
@@ -176,6 +237,7 @@ fn write_edge_xml_special_and_vietnamese() {
         footers: vec![],
         doc_defaults: None,
         page: None,
+        page_mar: None,
         styles,
         numbering,
     };
@@ -229,6 +291,7 @@ fn fuzz_write_reparse_never_panics_and_preserves_model() {
                 align: Some("center".to_string()),
                 numbering: Some(NumRef { num_id: 1, ilvl: 0 }),
                 ind: None,
+                sect: None,
                 runs: vec![Run {
                     text: "Tiếng Việt & <junk> “smart” — base".to_string(),
                     bold: Some(true),
@@ -273,6 +336,7 @@ fn fuzz_write_reparse_never_panics_and_preserves_model() {
         footers: vec![],
         doc_defaults: None,
         page: None,
+        page_mar: None,
         styles: BTreeMap::from([(
             "Normal".to_string(),
             StyleDef {
@@ -393,6 +457,7 @@ fn empty_model() -> Document {
         numbering: BTreeMap::new(),
         doc_defaults: None,
         page: None,
+        page_mar: None,
     }
 }
 

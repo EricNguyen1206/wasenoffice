@@ -684,6 +684,107 @@ fn v1_fixture_parses_resolved_values() {
     assert_eq!(doc, nanooffice_ooxml::parse_docx(&out).unwrap());
 }
 
+// ── T-A31 (DD L01 §5.6): hyperlink + sectPr + passthrough + detect ────────
+
+const FIDELITY_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/tests/fixtures/nanooffice-fidelity-fixture.docx"
+);
+
+/// Fidelity corpus: hyperlink groups (external `r:id` + internal `w:anchor`)
+/// flatten onto their runs with the relationship resolved; the mid-document
+/// `w:pPr/w:sectPr` and the final one keep pgSz+pgMar; the file carries
+/// nothing `detect_save_losses` would warn about.
+#[test]
+fn fidelity_corpus_parses_hyperlinks_and_sections() {
+    let doc = nanooffice_ooxml::parse_docx_file(FIDELITY_FIXTURE).unwrap();
+    let link_para = para(&doc, 1);
+    assert_eq!(
+        link_para.runs.len(),
+        4,
+        "outside + link + middle + anchor runs"
+    );
+    let link = link_para.runs[1].link.as_ref().unwrap();
+    assert_eq!(link.rel_id.as_deref(), Some("rIdLink"));
+    assert_eq!(
+        link.target.as_deref(),
+        Some("https://example.com/nanooffice-fidelity")
+    );
+    assert!(link.external);
+    assert_eq!(link_para.runs[1].text, "NanoOffice fidelity link");
+    let anchor = link_para.runs[3].link.as_ref().unwrap();
+    assert_eq!(anchor.anchor.as_deref(), Some("sect-anchor"));
+    assert!(anchor.rel_id.is_none() && anchor.target.is_none());
+    assert!(
+        link_para.runs[0].link.is_none(),
+        "runs outside the group stay link-free"
+    );
+
+    let sect = para(&doc, 2).sect.as_ref().unwrap();
+    assert_eq!(sect.page.as_ref().unwrap().w, Some(11906));
+    let mar = sect.mar.as_ref().unwrap();
+    assert_eq!(mar.top, Some(1134));
+    assert_eq!(mar.header, Some(720));
+    assert_eq!(mar.gutter, Some(0));
+    assert!(
+        para(&doc, 3).sect.is_none(),
+        "sections only end AT their paragraph"
+    );
+    let fin = doc.page_mar.as_ref().unwrap();
+    assert_eq!(fin.top, Some(1134));
+    assert_eq!(doc.page.as_ref().unwrap().w, Some(11906));
+
+    assert!(
+        nanooffice_ooxml::detect_save_losses(&std::fs::read(FIDELITY_FIXTURE).unwrap()).is_empty(),
+        "the fidelity fixture must not trigger false warnings"
+    );
+}
+
+/// Detect (refuse-warn, DD §5.6d): tracked changes / fields / footnotes /
+/// sectPr children beyond pgSz+pgMar are flagged; a pgSz/pgMar-only sectPr —
+/// mid-document or final — stays silent.
+#[test]
+fn detect_save_losses_flags_and_spares() {
+    let clean = minimal_package(&empty_document());
+    assert!(nanooffice_ooxml::detect_save_losses(&clean).is_empty());
+
+    let dirty = concat!(
+        r#"<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>"#,
+        r#"<w:p><w:ins w:id="1" w:author="A"><w:r><w:t>tracked</w:t></w:r></w:ins></w:p>"#,
+        r#"<w:p><w:fldChar w:fldCharType="begin"/></w:p>"#,
+        r#"<w:p><w:footnoteReference w:id="2"/></w:p>"#,
+        r#"<w:p><w:pPr><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:cols w:num="2"/></w:sectPr></w:pPr></w:p>"#,
+        r#"</w:body></w:document>"#,
+    );
+    let losses = nanooffice_ooxml::detect_save_losses(&minimal_package(dirty));
+    assert!(
+        losses.contains(&"tracked changes".to_string()),
+        "{losses:?}"
+    );
+    assert!(losses.contains(&"fields".to_string()), "{losses:?}");
+    assert!(losses.contains(&"footnotes".to_string()), "{losses:?}");
+    assert!(
+        losses.contains(&"section properties beyond page size/margins".to_string()),
+        "{losses:?}"
+    );
+
+    let plain_sect = concat!(
+        r#"<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>"#,
+        r#"<w:p><w:r><w:t>a</w:t></w:r></w:p>"#,
+        r#"<w:p><w:pPr><w:sectPr><w:pgSz w:w="11906" w:h="16838"/>"#,
+        r#"<w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134"/></w:sectPr></w:pPr></w:p>"#,
+        r#"</w:body></w:document>"#,
+    );
+    assert!(nanooffice_ooxml::detect_save_losses(&minimal_package(plain_sect)).is_empty());
+    // <w:insideH>/<w:delText> must NOT trip the tracked-change scan
+    let lookalikes = concat!(
+        r#"<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>"#,
+        r#"<w:tbl><w:tr><w:tc><w:p><w:r><w:delText>x</w:t></w:r></w:p></w:tc></w:tr></w:tbl>"#,
+        r#"</w:body></w:document>"#,
+    );
+    assert!(nanooffice_ooxml::detect_save_losses(&minimal_package(lookalikes)).is_empty());
+}
+
 /// Fuzz (mutation, seed cố định, không dep): XML mutations + zip mutations —
 /// mọi trường hợp phải là `Ok` hoặc `Err`, KHÔNG panic.
 #[test]

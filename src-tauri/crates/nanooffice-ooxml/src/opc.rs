@@ -42,6 +42,17 @@ pub const RT_HEADER: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/header";
 pub const RT_FOOTER: &str =
     "http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer";
+pub const RT_HYPERLINK: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink";
+pub const RT_SETTINGS: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings";
+pub const RT_THEME: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme";
+/// Package-level metadata relationships (`_rels/.rels`).
+pub const RT_CORE_PROPERTIES: &str =
+    "http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties";
+pub const RT_EXTENDED_PROPERTIES: &str =
+    "http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties";
 
 /// One `Relationship` element of a relationships part.
 #[derive(Debug, Clone)]

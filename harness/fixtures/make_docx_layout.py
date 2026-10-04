@@ -20,6 +20,14 @@ pass on a swapped/constant size; text layout data stays image-free.
 import sys
 import zipfile
 
+from docxgen_common import (
+    FIDELITY_CT_OVERRIDES,
+    FIDELITY_DOC_RELS_EXTRA,
+    FIDELITY_LINK_PARA,
+    FIDELITY_PARTS,
+    FIDELITY_ROOT_RELS_EXTRA,
+    FIDELITY_SECT_PARA,
+)
 from docxgen_common import png
 from make_docx_media import drawing
 
@@ -103,11 +111,14 @@ TABLE = (
 )
 
 
-def document_xml(with_table: bool = False) -> str:
-    body = [
-        p("Quick view layout fixture"),
-        p(FILLER),
-        TAB_PARA,
+def document_xml(with_table: bool = False, with_fidelity: bool = False, with_tracked: bool = False):
+    title = '<w:r><w:t xml:space="preserve">Quick view layout fixture</w:t></w:r>'
+    if with_tracked:
+        title = f'<w:ins w:id="1" w:date="2026-10-04T00:00:00Z" w:author="NanoOffice">{title}</w:ins>'
+    body = [f"<w:p>{title}</w:p>", p(FILLER), TAB_PARA]
+    if with_fidelity:
+        body += [FIDELITY_LINK_PARA, FIDELITY_SECT_PARA]
+    body += [
         p(MEDIUM),
         # images AFTER all text: the text-line baselines stay contiguous, so
         # the gate's per-delta assert keeps holding and the first image's top
@@ -129,15 +140,23 @@ def document_xml(with_table: bool = False) -> str:
 
 def main():
     out = sys.argv[1] if len(sys.argv) > 1 else "/tmp/nanooffice-quickview-layout.docx"
-    with_table = len(sys.argv) > 2 and sys.argv[2] == "table"
+    flags = set(sys.argv[2:])
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
-        z.writestr("[Content_Types].xml", CONTENT_TYPES)
-        z.writestr("_rels/.rels", ROOT_RELS)
-        z.writestr("word/_rels/document.xml.rels", DOC_RELS)
+        content_types, root_rels, doc_rels = CONTENT_TYPES, ROOT_RELS, DOC_RELS
+        if "fidelity" in flags:
+            content_types = content_types.replace("</Types>", f"  {FIDELITY_CT_OVERRIDES}\n</Types>")
+            root_rels = root_rels.replace("</Relationships>", f"  {FIDELITY_ROOT_RELS_EXTRA}\n</Relationships>")
+            doc_rels = doc_rels.replace("</Relationships>", f"  {FIDELITY_DOC_RELS_EXTRA}\n</Relationships>")
+        z.writestr("[Content_Types].xml", content_types)
+        z.writestr("_rels/.rels", root_rels)
+        z.writestr("word/_rels/document.xml.rels", doc_rels)
         z.writestr("word/styles.xml", STYLES)
         z.writestr("word/media/image1.png", IMG1)
         z.writestr("word/media/image2.png", IMG2)
-        z.writestr("word/document.xml", document_xml(with_table))
+        if "fidelity" in flags:
+            for name, xml in FIDELITY_PARTS.items():
+                z.writestr(name, xml)
+        z.writestr("word/document.xml", document_xml("table" in flags, "fidelity" in flags, "tracked" in flags))
     print(out)
 
 

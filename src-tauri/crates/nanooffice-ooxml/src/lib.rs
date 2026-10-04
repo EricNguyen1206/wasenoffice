@@ -51,6 +51,9 @@ pub struct Document {
     /// level); `None` = not declared. Mid-document sections (inside `w:pPr`)
     /// are out of the model.
     pub page: Option<Page>,
+    /// `w:pgMar` (§17.6.11) of the final section — preserved as written
+    /// (T-A31); the viewer layout still uses its fixed margin (T-V6).
+    pub page_mar: Option<PageMar>,
 }
 
 /// `w:pgSz` (§17.6.11) — page size in twips plus the orientation as written.
@@ -62,6 +65,43 @@ pub struct Page {
     pub h: Option<u32>,
     /// `w:orient` ("landscape"/"portrait").
     pub orient: Option<String>,
+}
+
+/// `w:pgMar` (§17.6.11) attributes, twips as written (§17.6 margins are
+/// ST_SignedTwipsMeasure; kept i64 so the round-trip stays lossless).
+#[derive(Debug, Default, PartialEq, Serialize, Clone)]
+pub struct PageMar {
+    pub top: Option<i64>,
+    pub right: Option<i64>,
+    pub bottom: Option<i64>,
+    pub left: Option<i64>,
+    pub header: Option<i64>,
+    pub footer: Option<i64>,
+    pub gutter: Option<i64>,
+}
+
+/// `w:sectPr` (§17.6.17/§17.6.18) — the typed-minimal T-A31 slice: page size
+/// + margins; every other child stays out (warned by `detect_save_losses`).
+#[derive(Debug, Default, PartialEq, Serialize, Clone)]
+pub struct Section {
+    pub page: Option<Page>,
+    pub mar: Option<PageMar>,
+}
+
+/// `w:hyperlink` (§17.16.22) link reference carried by EVERY run inside the
+/// element (parser flattens the group, T-A31; the writer re-groups runs with
+/// equal links).
+#[derive(Debug, Default, PartialEq, Serialize, Clone)]
+pub struct Hyperlink {
+    /// `r:id` — the target relationship (resolved into `target`).
+    pub rel_id: Option<String>,
+    /// `w:anchor` — internal bookmark target (no relationship).
+    pub anchor: Option<String>,
+    /// Resolved target: the URI for external links, the package part
+    /// otherwise; the writer re-emits the relationship from this.
+    pub target: Option<String>,
+    /// Source relationship had `TargetMode="External"`.
+    pub external: bool,
 }
 
 /// `w:docDefaults` (§17.7.5.1): `w:rPrDefault` (§17.7.5.3) run defaults plus
@@ -103,6 +143,10 @@ pub struct Paragraph {
     /// `w:ind` (§17.3.1.12) — direct paragraph indentation; style-chain
     /// resolution happens in [`crate::resolve`].
     pub ind: Option<Ind>,
+    /// `w:sectPr` (§17.6.18, inside `w:pPr` §17.3.1.26) — the section ENDING
+    /// at this paragraph's mark (T-A31, typed-minimal — see [`Section`]);
+    /// boxed: sections are rare, `None` must stay free.
+    pub sect: Option<Box<Section>>,
     pub runs: Vec<Run>,
 }
 
@@ -147,6 +191,9 @@ pub struct Run {
     pub spacing: Option<i32>,
     /// `w:drawing` (§17.3.3.9) images, resolved to relationship targets.
     pub images: Vec<ImageRef>,
+    /// `w:hyperlink` (§17.16.22) group membership — `Some` when this run was
+    /// parsed inside a hyperlink (T-A31; edits ride the run, link included).
+    pub link: Option<Hyperlink>,
 }
 
 /// `w:rFonts` (§17.3.2.26) family attributes. Theme references (`asciiTheme`…)
@@ -369,19 +416,20 @@ pub fn parse_docx(zip_bytes: &[u8]) -> Result<Document, ParseError> {
         let _ = id; // relationship id kept out of the model; order is the contract
     }
 
-    let (body, page) = document::parse_body(
+    let parsed = document::parse_body(
         &utf8(opc::part_bytes(zip_bytes, &doc_part)?, &doc_part)?,
         &rels,
         &dir,
     )?;
     Ok(Document {
-        body,
+        body: parsed.blocks,
         headers,
         footers,
         styles,
         numbering,
         doc_defaults,
-        page,
+        page: parsed.page,
+        page_mar: parsed.page_mar,
     })
 }
 
@@ -389,6 +437,75 @@ pub fn parse_docx(zip_bytes: &[u8]) -> Result<Document, ParseError> {
 pub fn parse_docx_file(path: impl AsRef<std::path::Path>) -> Result<Document, ParseError> {
     let bytes = std::fs::read(path).map_err(|e| ParseError(format!("read file: {e}")))?;
     parse_docx(&bytes)
+}
+
+/// Constructs the model does NOT carry — the open surface warns instead of
+/// refusing (T-A31, DD L01 §5.6d): tracked changes, fields, footnotes/
+/// endnotes, and section properties beyond pgSz/pgMar are lost on a
+/// Nano Light save. Byte scan of the main part; an unreadable package (the
+/// parse would refuse it anyway) warns nothing.
+pub fn detect_save_losses(zip_bytes: &[u8]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let doc_part = match main_part(zip_bytes) {
+        Some(p) => p,
+        None => return out,
+    };
+    let xml = match opc::try_part_bytes(zip_bytes, &doc_part) {
+        Some(b) => String::from_utf8_lossy(&b).into_owned(),
+        None => return out,
+    };
+    for (pat, what) in [
+        ("<w:ins ", "tracked changes"),
+        ("<w:ins>", "tracked changes"),
+        ("<w:del ", "tracked changes"),
+        ("<w:del>", "tracked changes"),
+        ("<w:fldChar", "fields"),
+        ("<w:instrText", "fields"),
+        ("<w:footnoteReference", "footnotes"),
+        ("<w:endnoteReference", "endnotes"),
+    ] {
+        if xml.contains(pat) && !out.iter().any(|w| w == what) {
+            out.push(what.to_string());
+        }
+    }
+    if sect_beyond_page(&xml) {
+        out.push("section properties beyond page size/margins".to_string());
+    }
+    out
+}
+
+/// Main document part name of a package (the same lookup `parse_docx` does;
+/// `_rels/.rels` is read directly — `load_rels` is for a PART's rels).
+fn main_part(zip_bytes: &[u8]) -> Option<String> {
+    let bytes = opc::try_part_bytes(zip_bytes, "_rels/.rels")?;
+    let rels = opc::parse_rels(&String::from_utf8(bytes).ok()?).ok()?;
+    find_target(&rels, opc::RT_OFFICE_DOCUMENT, "")
+        .ok()
+        .flatten()
+}
+
+/// True when any `w:sectPr` block carries a child element other than
+/// `w:pgSz`/`w:pgMar` (those two are modelled since T-A31).
+fn sect_beyond_page(xml: &str) -> bool {
+    let mut rest = xml;
+    while let Some(start) = rest.find("<w:sectPr") {
+        let after = &rest[start..];
+        let Some(end) = after.find("</w:sectPr>") else {
+            return false;
+        };
+        let block = &after[..end];
+        for (i, _) in block.match_indices("<w:") {
+            let name: String = block[i + 3..]
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric())
+                .collect();
+            if !name.is_empty() && name != "sectPr" && name != "pgSz" && name != "pgMar" {
+                return true;
+            }
+        }
+        rest = &after[end..];
+    }
+    false
 }
 
 /// All relationships of one part, in relationship-file order.

@@ -981,6 +981,9 @@ fn apply_enter(blocks: &mut Vec<Block>, caret: Caret) -> Result<Caret, String> {
         align: p.align.clone(),
         numbering: p.numbering.clone(),
         ind: p.ind.clone(),
+        // the section mark stays with the HEAD paragraph — a split must not
+        // duplicate the section break (DD L01 §5.6b)
+        sect: None,
         runs: tail,
     };
     blocks.insert(caret.para + 1, Block::Paragraph(new_para));
@@ -1006,6 +1009,7 @@ mod tests {
             numbering: Default::default(),
             doc_defaults: None,
             page: None,
+            page_mar: None,
         }
     }
 

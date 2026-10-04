@@ -22,6 +22,9 @@
 #       face passes the source package back in, so a placeholder swap or any
 #       re-encode is a regression. The x2t side is the oracle's own
 #       serialization and is not gated here.
+#   (e) passthrough byte-exactness (T-A31): word/settings.xml, word/theme/*,
+#       docProps/core.xml + app.xml — present in the source → byte-identical
+#       through the crate round-trip (model-free parts, copied at write time).
 #
 # Corpus: crate fixtures (tests/fixtures/*.docx) + harness/fixtures/corpus-a2
 # (NOTES.md carries the per-file expected-model notes). Fuzz stays in the crate
@@ -128,6 +131,29 @@ for f in "${CORPUS[@]}"; do
     row "$name" "media FAIL" "$INV" "bytes changed:$changed"
     FAILS=$((FAILS + 1))
   fi
+
+  # (e) passthrough byte-exactness (T-A31): settings/theme/docProps survive
+  # the crate round-trip byte-identical whenever the source carries them.
+  pt=$(python3 - "$f" "$dir/crate-rt.docx" <<'EOF'
+import hashlib, sys, zipfile
+def shas(p):
+    with zipfile.ZipFile(p) as z:
+        return {n: hashlib.sha256(z.read(n)).hexdigest()
+                for n in z.namelist()
+                if n == "word/settings.xml"
+                or n.startswith("word/theme/")
+                or n in ("docProps/core.xml", "docProps/app.xml")}
+src, out = shas(sys.argv[1]), shas(sys.argv[2])
+missing = sorted(set(src) - set(out))
+changed = sorted(n for n in set(src) & set(out) if src[n] != out[n])
+print("FAIL missing=%s changed=%s" % (",".join(missing), ",".join(changed))
+      if missing or changed else "OK %d part(s)" % len(src))
+EOF
+)
+  case "$pt" in
+    OK*) ;;
+    *) row "$name" "passthrough FAIL" "$INV" "$pt"; FAILS=$((FAILS + 1)) ;;
+  esac
 
   # PARITY: crate round-trip model vs x2t round-trip model
   if diff -q "$dir/m-crate.json" "$dir/m-x2t.json" >/dev/null; then
