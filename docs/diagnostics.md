@@ -8,6 +8,33 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-04 · T-A32: A4 closure slice — tblPr/tcPr detect+warn (đóng dòng mất-im-lặng cuối matrix §5.1) + ĐÓNG RUNG A4
+
+- **Bằng chứng (2 commit: 321c68f design → a2381b5 crate+gate15):** gate 15 standalone ×3 —
+  positive `table fidelity` **exit 0 KHÔNG warn** (bảng fixture không tblPr → exact-boundary
+  pattern đúng) · **tbldoctor exit 1** với warn thật hiện nguyên trong failure message
+  (`warnings ['save will drop: table styling']`) — chứng minh detect fired trên đường open
+  thật + gate ĐỌC nội dung warn · **warndoor regression exit 1** (real 'tracked changes'
+  không thoái hóa). verify FULL exit 0 **ALL CHECKS PASSED** (9 smoke + gate 14, 101 s);
+  cargo test crate 6/6 (detect test +styled-table +tcPrChange lookalike).
+- **Thiết kế chốt (DD L01 §5.7):** detect KHÔNG phải model — tblPr/tcPr vẫn skip trong
+  parser/writer (`document.rs`: w:tbl §17.4.38 "tblPr skipped" / w:tc §17.4.66 "tcPr
+  skipped"); criterion nâng của dòng tblPr/tcPr ("khi edit bảng thật đòi, cùng lúc bỏ
+  refuse §2") đã CHÁY từ T-A30 → fix = `detect_save_losses` +pattern `<w:tblPr>`/`<w:tblPr `
+  + `<w:tcPr>`/`<w:tcPr ` (khớp đúng biên tag). **Warn BẮT CẢ file không bị sửa**: save
+  Nano Light drop tblPr/tcPr của MỌI bảng bất kể user đụng đâu — đúng semantic OQ-L01-2
+  (cảnh báo mất-khi-save, không phải những gì user vừa làm).
+- **Gotchas:** (1) `<w:tblPrChange>`/`<w:tblPrEx>` (revision machinery) bắt đầu bằng
+  `<w:tblPr` nhưng KHÔNG khớp pattern đúng biên (ký tự kế là `>`/space) — test lookalike
+  chốt; self-closing `<w:tcPr/>` cũng không dính (tcPr rỗng = không gì để mất — đúng).
+  (2) fixture gate T-A30 `TABLE` cố tình KHÔNG có tblPr → positive gate 15 không bị warn
+  mới cắn — kiểm tra fixture TRƯỚC khi đụng detect (grep generator trước code). (3) warn
+  taxonomy dedupe theo label nên 2 pattern cùng label gộp 1 dòng warn.
+- **ĐÓNG RUNG A4 04.10 (user chốt):** criterion parity matrix §5.1 = 9 lớp GIỮ + dòng mất
+  còn lại toàn bộ detect+warn; OQ-L01-2/3 ĐÓNG; **OQ-L01-1 default-switch DỜI A5** —
+  vision.md row A4 sửa bỏ chữ "mặc định". Kế tiếp: T-055 #6 review kiến trúc post-rung;
+  T-V6 khi parity đòi.
+
 ## 2026-10-04 · T-A31: A4 slice #4 — save-fidelity: hyperlink/sectPr vào model + settings/theme/docProps passthrough + refuse-warn (ĐÓNG OQ-L01-2)
 
 - **Bằng chứng (4 commit: 9823571 design → 24158d6 crate → 61c617f editor+gate15 →
