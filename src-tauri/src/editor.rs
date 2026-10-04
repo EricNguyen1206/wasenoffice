@@ -25,9 +25,10 @@ use crate::viewer::render_payload;
 /// §5.7): `para` = body block index, `run` = index in the paragraph's runs,
 /// `offset` = utf-16 code units into the run's text (mirrors JS string
 /// indexing; the caret sits BEFORE char `offset`). T-060 C3: `cell` carries
-/// the hit's `[row, col]` table identity (null at top level) — in-cell carets
-/// are refused on it, not on heuristics; `#[serde(default)]` keeps payloads
-/// from before the field additive-parseable.
+/// the hit's `[row, col]` table identity (null at top level). T-A30 §5.5a:
+/// `cell_para` is the paragraph's index inside that cell's blocks (null at
+/// top level AND for nested-table content — unaddressable, refused);
+/// `#[serde(default)]` keeps payloads from before each field additive-parseable.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Caret {
@@ -36,6 +37,8 @@ pub struct Caret {
     pub offset: usize,
     #[serde(default)]
     pub cell: Option<[usize; 2]>,
+    #[serde(default)]
+    pub cell_para: Option<usize>,
 }
 
 /// A text selection: `anchor` (where the gesture started) + `focus` (the
@@ -92,22 +95,34 @@ impl EditorSession {
     /// changed the model (a no-op backspace at the document start must not
     /// pollute the stack); undo/redo manage their own stacks. Range-aware
     /// verbs (DD L01 §5.3c) delete the selection FIRST, then mutate at the
-    /// range start; the selection collapses on any model change.
+    /// range start; the selection collapses on any model change. T-A30
+    /// (§5.5b): the verb runs on the blocks the caret addresses — the body,
+    /// or one cell's blocks via cell identity (same-cell selections only).
     fn apply(&mut self, cmd: EditCmd) -> Result<Caret, String> {
-        // Round-1 scope (DD L01 §2/§5.3a): in-cell carets are refused on the
-        // hit's `cell` identity (T-060 C3) — the `para` index alone is
-        // ambiguous inside tables (cell content shares `pi` with the block
-        // after the table). A selection's endpoints ride the same identity.
-        let in_cell = |c: Caret| c.cell.is_some();
-        if cmd.caret().is_some_and(in_cell)
-            || cmd
-                .sel()
-                .is_some_and(|r| in_cell(r.anchor) || in_cell(r.focus))
-        {
-            return Err(
-                "nano light: editing inside a table cell is out of scope for round 1 (DD L01 §2)"
-                    .to_string(),
-            );
+        // Identity rules (DD L01 §5.5): a cell caret needs cellPara (null =
+        // nested-table content, unaddressable); a selection must stay inside
+        // ONE cell or entirely top level — any mix refuses loudly.
+        let check = |c: Caret| -> Result<(), String> {
+            if c.cell.is_some() && c.cell_para.is_none() {
+                return Err(
+                    "nano light: in-cell caret without cellPara — nested table content is not editable (DD L01 §5.5)"
+                        .to_string(),
+                );
+            }
+            Ok(())
+        };
+        if let Some(c) = cmd.caret() {
+            check(c)?;
+        }
+        if let Some(r) = cmd.sel() {
+            check(r.anchor)?;
+            check(r.focus)?;
+            if !same_cell(r.anchor.cell, r.focus.cell) {
+                return Err(
+                    "nano light: selection must stay inside one cell or entirely top level (DD L01 §5.5)"
+                        .to_string(),
+                );
+            }
         }
         let is_mutation = !matches!(cmd, EditCmd::Undo | EditCmd::Redo);
         // The snapshot carries the caret+selection the COMMAND acted at —
@@ -121,29 +136,31 @@ impl EditorSession {
         );
         let caret = match cmd {
             EditCmd::Insert { text, caret, sel } => {
-                let (caret, _) = collapse_range(&mut self.doc, caret, sel)?;
-                apply_insert(&mut self.doc, caret, &text)
+                dispatch(&mut self.doc, caret, sel, |bl, c, s| {
+                    let (c, _) = collapse_range(bl, c, s)?;
+                    apply_insert(bl, c, &text)
+                })
             }
-            EditCmd::Backspace { caret, sel } => {
-                let (caret, ranged) = collapse_range(&mut self.doc, caret, sel)?;
+            EditCmd::Backspace { caret, sel } => dispatch(&mut self.doc, caret, sel, |bl, c, s| {
+                let (c, ranged) = collapse_range(bl, c, s)?;
                 if ranged {
-                    Ok(caret) // the range delete WAS the deletion
+                    Ok(c) // the range delete WAS the deletion
                 } else {
-                    apply_backspace(&mut self.doc, caret)
+                    apply_backspace(bl, c)
                 }
-            }
-            EditCmd::Delete { caret, sel } => {
-                let (caret, ranged) = collapse_range(&mut self.doc, caret, sel)?;
+            }),
+            EditCmd::Delete { caret, sel } => dispatch(&mut self.doc, caret, sel, |bl, c, s| {
+                let (c, ranged) = collapse_range(bl, c, s)?;
                 if ranged {
-                    Ok(caret)
+                    Ok(c)
                 } else {
-                    apply_delete(&mut self.doc, caret)
+                    apply_delete(bl, c)
                 }
-            }
-            EditCmd::Enter { caret, sel } => {
-                let (caret, _) = collapse_range(&mut self.doc, caret, sel)?;
-                apply_enter(&mut self.doc, caret)
-            }
+            }),
+            EditCmd::Enter { caret, sel } => dispatch(&mut self.doc, caret, sel, |bl, c, s| {
+                let (c, _) = collapse_range(bl, c, s)?;
+                apply_enter(bl, c)
+            }),
             EditCmd::Undo => match self.undo.pop() {
                 Some((doc, caret, sel)) => {
                     self.redo
@@ -333,6 +350,7 @@ pub fn nano_light_open(
         run: 0,
         offset: 0,
         cell: None,
+        cell_para: None,
     };
     let session = EditorSession {
         saved: Some(p.doc.clone()),
@@ -529,20 +547,96 @@ fn atomic_replace(
 }
 
 // ---------------------------------------------------------------------------
-// mutations — free functions over `Document`, hit-test coordinates in/out
+// mutations — free functions over a block list (the body, or one cell's
+// blocks — T-A30 §5.5b), hit-test coordinates in/out
 // ---------------------------------------------------------------------------
 
-/// Resolve `para` to a top-level paragraph. Round-1 scope (DD L01 §2): only
-/// top-level paragraphs are editable — in-cell hits are refused upstream on
-/// the caret's `cell` identity (T-060 C3); this arm catches stale carets
-/// whose `para` points straight at a table block.
-fn paragraph_at(doc: &mut Document, para: usize) -> Result<&mut Paragraph, String> {
-    match doc.body.get_mut(para) {
+/// Both selection endpoints share one edit surface: both top level, or the
+/// SAME cell (cross-paragraph within a cell is fine — DD L01 §5.5c).
+fn same_cell(a: Option<[usize; 2]>, b: Option<[usize; 2]>) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(x), Some(y)) => x == y,
+        _ => false,
+    }
+}
+
+/// Resolve the block list a CELL caret edits (§17.4.38 → §17.4.79 → §17.4.66
+/// through the caret's identity): `body[para]` must be a table and
+/// `[row, col]` must exist. This is the resolution path the round-1 refuse
+/// used to refuse outright.
+fn cell_blocks_mut(doc: &mut Document, c: Caret) -> Result<&mut Vec<Block>, String> {
+    let [row_idx, col_idx] = c.cell.ok_or_else(|| {
+        format!(
+            "nano light: caret {}/{}/{} lost its cell identity",
+            c.para, c.run, c.offset
+        )
+    })?;
+    let table = match doc.body.get_mut(c.para) {
+        Some(Block::Table(t)) => t,
+        Some(Block::Paragraph(_)) => {
+            return Err(format!(
+                "nano light: block {} is a paragraph but the caret carries cell identity",
+                c.para
+            ));
+        }
+        None => return Err(format!("nano light: no block {}", c.para)),
+    };
+    let row = table
+        .rows
+        .get_mut(row_idx)
+        .ok_or_else(|| format!("nano light: no table row {row_idx}"))?;
+    let tc = row.get_mut(col_idx).ok_or_else(|| {
+        format!(
+            "nano light: no cell [{row_idx},{col_idx}] in table block {}",
+            c.para
+        )
+    })?;
+    Ok(&mut tc.blocks)
+}
+
+/// Run a verb on the right block list (DD L01 §5.5b): top-level carets edit
+/// the body; cell carets edit their cell's blocks with `para` rebased to
+/// `cellPara`, the full identity restored on the returned caret. Selections
+/// arrive pre-checked same-cell (apply refuses mixes) and rebase alongside.
+fn dispatch(
+    doc: &mut Document,
+    caret: Caret,
+    sel: Option<SelRange>,
+    verb: impl FnOnce(&mut Vec<Block>, Caret, Option<SelRange>) -> Result<Caret, String>,
+) -> Result<Caret, String> {
+    if caret.cell.is_none() {
+        return verb(&mut doc.body, caret, sel);
+    }
+    let blocks = cell_blocks_mut(doc, caret)?;
+    let rebase = |c: Caret| Caret {
+        para: c.cell_para.unwrap_or(c.para),
+        ..c
+    };
+    let local_sel = sel.map(|r| SelRange {
+        anchor: rebase(r.anchor),
+        focus: rebase(r.focus),
+    });
+    let out = verb(blocks, rebase(caret), local_sel)?;
+    Ok(Caret {
+        para: caret.para,
+        // inside the cell `out.para` IS the paragraph index — verbs may move
+        // it (enter / merge) and the caret must carry the fresh cellPara
+        cell_para: Some(out.para),
+        ..out
+    })
+}
+
+/// Resolve `idx` to a paragraph within `blocks` (the body, or a cell's).
+/// A table block here means a stale top-level caret or NESTED table content —
+/// both refuse loudly (DD L01 §5.5).
+fn paragraph_at(blocks: &mut [Block], idx: usize) -> Result<&mut Paragraph, String> {
+    match blocks.get_mut(idx) {
         Some(Block::Paragraph(p)) => Ok(p),
         Some(Block::Table(_)) => Err(format!(
-            "nano light: block {para} is a table — editing inside tables is out of scope for round 1 (DD L01 §2)"
+            "nano light: block {idx} is a table — nested tables are not editable (DD L01 §5.5)"
         )),
-        None => Err(format!("nano light: no block {para}")),
+        None => Err(format!("nano light: no block {idx}")),
     }
 }
 
@@ -576,12 +670,14 @@ fn byte_to_utf16(s: &str, byte: usize) -> usize {
 /// start. Returns `(caret, ranged)` — `ranged` tells the single-char verbs to
 /// skip their own step (the range delete WAS the deletion, DD L01 §5.3c).
 fn collapse_range(
-    doc: &mut Document,
+    blocks: &mut Vec<Block>,
     caret: Caret,
     sel: Option<SelRange>,
 ) -> Result<(Caret, bool), String> {
     match sel {
-        Some(r) if r.anchor != r.focus => Ok((apply_delete_range(doc, r.anchor, r.focus)?, true)),
+        Some(r) if r.anchor != r.focus => {
+            Ok((apply_delete_range(blocks, r.anchor, r.focus)?, true))
+        }
         _ => Ok((caret, false)),
     }
 }
@@ -594,7 +690,7 @@ fn collapse_range(
 /// span refuses the WHOLE command — a silent table drop would be data loss.
 /// Empty runs are kept (no splicing) so the returned caret
 /// `(start.para, start.run, start.offset)` always addresses a valid spot.
-fn apply_delete_range(doc: &mut Document, a: Caret, b: Caret) -> Result<Caret, String> {
+fn apply_delete_range(blocks: &mut Vec<Block>, a: Caret, b: Caret) -> Result<Caret, String> {
     // document-order key (para, run, offset) — a total order over top-level
     // carets (cell carets are refused upstream, DD L01 §5.3a)
     let (start, end) = if (a.para, a.run, a.offset) <= (b.para, b.run, b.offset) {
@@ -602,15 +698,15 @@ fn apply_delete_range(doc: &mut Document, a: Caret, b: Caret) -> Result<Caret, S
     } else {
         (b, a)
     };
-    if start.para >= doc.body.len() || end.para >= doc.body.len() {
+    if start.para >= blocks.len() || end.para >= blocks.len() {
         return Err(format!(
-            "nano light: range endpoints {}..{} outside the document ({} blocks)",
+            "nano light: range endpoints {}..{} outside the block list ({} blocks)",
             start.para,
             end.para,
-            doc.body.len()
+            blocks.len()
         ));
     }
-    if doc.body[start.para..=end.para]
+    if blocks[start.para..=end.para]
         .iter()
         .any(|blk| matches!(blk, Block::Table(_)))
     {
@@ -620,7 +716,7 @@ fn apply_delete_range(doc: &mut Document, a: Caret, b: Caret) -> Result<Caret, S
         ));
     }
     if start.para == end.para {
-        let p = paragraph_at(doc, start.para)?;
+        let p = paragraph_at(blocks, start.para)?;
         if end.run >= p.runs.len() {
             return Err(format!(
                 "nano light: no run {} in paragraph {}",
@@ -653,19 +749,14 @@ fn apply_delete_range(doc: &mut Document, a: Caret, b: Caret) -> Result<Caret, S
             }
             p.runs.drain(start.run + 1..end.run);
         }
-        return Ok(Caret {
-            para: start.para,
-            run: start.run,
-            offset: start.offset,
-            cell: None,
-        });
+        return Ok(start);
     }
     // head paragraph: keep its prefix (its pPr wins the merge), drop the runs
     // after the caret run — they are inside the range. An empty head
     // paragraph (selection starting at a `w:p` with no runs) has nothing to
     // truncate; it survives with its pPr and adopts the tail runs.
     {
-        let p = paragraph_at(doc, start.para)?;
+        let p = paragraph_at(blocks, start.para)?;
         if p.runs.is_empty() {
             // nothing to truncate — the paragraph mark merge only
         } else {
@@ -685,7 +776,7 @@ fn apply_delete_range(doc: &mut Document, a: Caret, b: Caret) -> Result<Caret, S
     // kept unless the cut reaches the text end); the runs before end.run die
     // with the paragraph's own pPr.
     let tail_runs: Vec<Run> = {
-        let p = paragraph_at(doc, end.para)?;
+        let p = paragraph_at(blocks, end.para)?;
         if p.runs.is_empty() {
             Vec::new() // empty tail paragraph: only its block mark is deleted
         } else {
@@ -703,19 +794,14 @@ fn apply_delete_range(doc: &mut Document, a: Caret, b: Caret) -> Result<Caret, S
     };
     // the blocks strictly between (head exclusive, tail inclusive) go away;
     // the tail's surviving runs join the head paragraph
-    doc.body.drain(start.para + 1..=end.para);
-    if let Some(Block::Paragraph(p)) = doc.body.get_mut(start.para) {
+    blocks.drain(start.para + 1..=end.para);
+    if let Some(Block::Paragraph(p)) = blocks.get_mut(start.para) {
         p.runs.extend(tail_runs);
     }
-    Ok(Caret {
-        para: start.para,
-        run: start.run,
-        offset: start.offset,
-        cell: None,
-    })
+    Ok(start)
 }
 
-fn apply_insert(doc: &mut Document, caret: Caret, text: &str) -> Result<Caret, String> {
+fn apply_insert(blocks: &mut [Block], caret: Caret, text: &str) -> Result<Caret, String> {
     // Break controls are round-tripped inside run text by the parser, but
     // typed input must not smuggle them in (they would desync the layout's
     // tokenize) — `enter` is the only sanctioned paragraph break.
@@ -725,7 +811,7 @@ fn apply_insert(doc: &mut Document, caret: Caret, text: &str) -> Result<Caret, S
     {
         return Err("nano light: insert rejects control characters (use enter for breaks)".into());
     }
-    let p = paragraph_at(doc, caret.para)?;
+    let p = paragraph_at(blocks, caret.para)?;
     if p.runs.is_empty() {
         if caret.run != 0 || caret.offset != 0 {
             return Err(format!(
@@ -757,9 +843,9 @@ fn apply_insert(doc: &mut Document, caret: Caret, text: &str) -> Result<Caret, S
     })
 }
 
-fn apply_backspace(doc: &mut Document, caret: Caret) -> Result<Caret, String> {
+fn apply_backspace(blocks: &mut Vec<Block>, caret: Caret) -> Result<Caret, String> {
     if caret.offset > 0 {
-        let p = paragraph_at(doc, caret.para)?;
+        let p = paragraph_at(blocks, caret.para)?;
         let run = p.runs.get_mut(caret.run).ok_or_else(|| {
             format!(
                 "nano light: no run {} in paragraph {}",
@@ -786,7 +872,7 @@ fn apply_backspace(doc: &mut Document, caret: Caret) -> Result<Caret, String> {
     }
     if caret.run > 0 {
         // join this run's text+images into the previous run, drop it
-        let p = paragraph_at(doc, caret.para)?;
+        let p = paragraph_at(blocks, caret.para)?;
         let cur = p.runs.remove(caret.run);
         let prev = &mut p.runs[caret.run - 1];
         let at = byte_to_utf16(&prev.text, prev.text.len());
@@ -799,23 +885,25 @@ fn apply_backspace(doc: &mut Document, caret: Caret) -> Result<Caret, String> {
         });
     }
     if caret.para == 0 {
-        return Ok(caret); // start of the document — no-op
+        return Ok(caret); // start of the block list (document/cell) — no-op
     }
-    if !matches!(doc.body.get(caret.para - 1), Some(Block::Paragraph(_)))
-        || !matches!(doc.body.get(caret.para), Some(Block::Paragraph(_)))
+    if !matches!(blocks.get(caret.para - 1), Some(Block::Paragraph(_)))
+        || !matches!(blocks.get(caret.para), Some(Block::Paragraph(_)))
     {
         return Ok(caret); // a table sits on the boundary — refuse, no-op
     }
     // Word semantics: deleting a paragraph mark adopts the FOLLOWING
     // paragraph's properties — the caret paragraph's pPr survives (DD §3.1).
-    let cur = doc.body.remove(caret.para);
-    let prev = doc.body.remove(caret.para - 1);
+    let cur = blocks.remove(caret.para);
+    let prev = blocks.remove(caret.para - 1);
     let (mut cur_p, prev_p) = match (cur, prev) {
         (Block::Paragraph(c), Block::Paragraph(p)) => (c, p),
         _ => return Ok(caret), // unreachable: both checked above
     };
-    let at_run = cur_p.runs.len().saturating_sub(1);
-    let at = cur_p
+    // the caret lands at the junction — the end of the PREVIOUS paragraph's
+    // content (runs stay separate; only the block marks merge)
+    let at_run = prev_p.runs.len().saturating_sub(1);
+    let at = prev_p
         .runs
         .last()
         .map(|r| byte_to_utf16(&r.text, r.text.len()))
@@ -823,18 +911,18 @@ fn apply_backspace(doc: &mut Document, caret: Caret) -> Result<Caret, String> {
     let mut runs = prev_p.runs;
     runs.extend(cur_p.runs);
     cur_p.runs = runs;
-    doc.body.insert(caret.para - 1, Block::Paragraph(cur_p));
+    blocks.insert(caret.para - 1, Block::Paragraph(cur_p));
     Ok(Caret {
         para: caret.para - 1,
         run: at_run,
         offset: at,
-        cell: None,
+        ..caret
     })
 }
 
-fn apply_delete(doc: &mut Document, caret: Caret) -> Result<Caret, String> {
+fn apply_delete(blocks: &mut Vec<Block>, caret: Caret) -> Result<Caret, String> {
     {
-        let p = paragraph_at(doc, caret.para)?;
+        let p = paragraph_at(blocks, caret.para)?;
         if let Some(run) = p.runs.get(caret.run) {
             let len = run.text.encode_utf16().count();
             if caret.offset < len {
@@ -853,7 +941,7 @@ fn apply_delete(doc: &mut Document, caret: Caret) -> Result<Caret, String> {
     }
     {
         // end of the run: join the NEXT run into this one
-        let p = paragraph_at(doc, caret.para)?;
+        let p = paragraph_at(blocks, caret.para)?;
         if caret.run + 1 < p.runs.len() {
             let next = p.runs.remove(caret.run + 1);
             let run = &mut p.runs[caret.run];
@@ -864,19 +952,19 @@ fn apply_delete(doc: &mut Document, caret: Caret) -> Result<Caret, String> {
     }
     // end of the paragraph: join the NEXT paragraph's runs in (this
     // paragraph's pPr survives — same mark-deletion semantics as backspace)
-    if matches!(doc.body.get(caret.para), Some(Block::Paragraph(_)))
-        && matches!(doc.body.get(caret.para + 1), Some(Block::Paragraph(_)))
+    if matches!(blocks.get(caret.para), Some(Block::Paragraph(_)))
+        && matches!(blocks.get(caret.para + 1), Some(Block::Paragraph(_)))
     {
-        let next = doc.body.remove(caret.para + 1);
-        if let (Block::Paragraph(p), Block::Paragraph(next_p)) = (&mut doc.body[caret.para], next) {
+        let next = blocks.remove(caret.para + 1);
+        if let (Block::Paragraph(p), Block::Paragraph(next_p)) = (&mut blocks[caret.para], next) {
             p.runs.extend(next_p.runs);
         }
     }
     Ok(caret) // end of the document — no-op
 }
 
-fn apply_enter(doc: &mut Document, caret: Caret) -> Result<Caret, String> {
-    let p = paragraph_at(doc, caret.para)?;
+fn apply_enter(blocks: &mut Vec<Block>, caret: Caret) -> Result<Caret, String> {
+    let p = paragraph_at(blocks, caret.para)?;
     let mut tail: Vec<Run> = Vec::new();
     if !p.runs.is_empty() {
         // split the caret's run; images follow the run's right half — the
@@ -904,19 +992,19 @@ fn apply_enter(doc: &mut Document, caret: Caret) -> Result<Caret, String> {
         ind: p.ind.clone(),
         runs: tail,
     };
-    doc.body.insert(caret.para + 1, Block::Paragraph(new_para));
+    blocks.insert(caret.para + 1, Block::Paragraph(new_para));
     Ok(Caret {
         para: caret.para + 1,
         run: 0,
         offset: 0,
-        cell: None,
+        ..caret
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nanooffice_ooxml::ImageRef;
+    use nanooffice_ooxml::{ImageRef, Table, TableCell};
 
     fn document(body: Vec<Block>) -> Document {
         Document {
@@ -959,6 +1047,7 @@ mod tests {
                 run: 0,
                 offset: 0,
                 cell: None,
+                cell_para: None,
             },
             sel: None,
             path: std::env::temp_dir().join("nanooffice-test-nl-unused.docx"),
@@ -976,8 +1065,9 @@ mod tests {
             run: 1,
             offset: 2,
             cell: None,
+            cell_para: None,
         }; // "wo|orld"
-        let c = apply_insert(&mut s.doc, c0, "XY").unwrap();
+        let c = apply_insert(&mut s.doc.body, c0, "XY").unwrap();
         assert_eq!(
             (c.para, c.run, c.offset),
             (0, 1, 4),
@@ -1001,19 +1091,20 @@ mod tests {
             })
         );
 
-        let c = apply_backspace(&mut s.doc, c).unwrap(); // drop "Y"
+        let c = apply_backspace(&mut s.doc.body, c).unwrap(); // drop "Y"
         assert_eq!((c.para, c.run, c.offset), (0, 1, 3));
-        let c = apply_backspace(&mut s.doc, c).unwrap(); // drop "X" → "world"
+        let c = apply_backspace(&mut s.doc.body, c).unwrap(); // drop "X" → "world"
         assert_eq!((c.para, c.run, c.offset), (0, 1, 2));
 
         // backspace at the run start joins into the previous run
         let c = apply_backspace(
-            &mut s.doc,
+            &mut s.doc.body,
             Caret {
                 para: 0,
                 run: 1,
                 offset: 0,
                 cell: None,
+                cell_para: None,
             },
         )
         .unwrap();
@@ -1021,7 +1112,7 @@ mod tests {
         assert_eq!(s.doc.body.len(), 1);
 
         // enter splits the paragraph at the caret
-        let c = apply_enter(&mut s.doc, c).unwrap();
+        let c = apply_enter(&mut s.doc.body, c).unwrap();
         assert_eq!((c.para, c.run, c.offset), (1, 0, 0));
         assert_eq!(s.doc.body.len(), 2);
 
@@ -1029,23 +1120,25 @@ mod tests {
         // nothing → no-op; then merge the two paragraphs back via delete
         let before = s.doc.clone();
         let c = apply_delete(
-            &mut s.doc,
+            &mut s.doc.body,
             Caret {
                 para: 1,
                 run: 0,
                 offset: 5,
                 cell: None,
+                cell_para: None,
             },
         )
         .unwrap();
         assert_eq!(s.doc, before, "delete at document end is a no-op");
         apply_delete(
-            &mut s.doc,
+            &mut s.doc.body,
             Caret {
                 para: 0,
                 run: 0,
                 offset: 6,
                 cell: None,
+                cell_para: None,
             },
         )
         .unwrap();
@@ -1065,12 +1158,13 @@ mod tests {
         })]));
         // insert between the emoji and 'b' (offset 3 = after the surrogate pair)
         let c = apply_insert(
-            &mut s.doc,
+            &mut s.doc.body,
             Caret {
                 para: 0,
                 run: 0,
                 offset: 3,
                 cell: None,
+                cell_para: None,
             },
             "Q",
         )
@@ -1085,12 +1179,13 @@ mod tests {
         );
         // backspace over the emoji removes BOTH units at once
         let c = apply_backspace(
-            &mut s.doc,
+            &mut s.doc.body,
             Caret {
                 para: 0,
                 run: 0,
                 offset: 3,
                 cell: None,
+                cell_para: None,
             },
         )
         .unwrap();
@@ -1109,12 +1204,13 @@ mod tests {
     fn table_and_control_chars_refused() {
         let mut s = session(document(vec![Block::Table(Default::default())]));
         let err = apply_insert(
-            &mut s.doc,
+            &mut s.doc.body,
             Caret {
                 para: 0,
                 run: 0,
                 offset: 0,
                 cell: None,
+                cell_para: None,
             },
             "x",
         )
@@ -1122,74 +1218,293 @@ mod tests {
         assert!(err.contains("table"), "refusal names the table: {err}");
         let mut s2 = session(doc_one_para());
         assert!(apply_insert(
-            &mut s2.doc,
+            &mut s2.doc.body,
             Caret {
                 para: 0,
                 run: 0,
                 offset: 0,
                 cell: None,
+                cell_para: None,
             },
             "a\tb"
         )
         .is_err());
     }
 
-    /// T-060 C3: a caret whose hit landed INSIDE a table cell (`cell`
-    /// identity from the layout's hitTest) is refused by every mutating verb
-    /// BEFORE `para` is resolved — `para` alone is ambiguous there (cell
-    /// content shares `pi` with the block after the table), which is exactly
-    /// why the identity rides on the caret.
+    // ── T-A30 §5.5: single-cell editing — identity, verbs, selection ──────
+
+    fn doc_with_table() -> Document {
+        let cell = |text: &str| {
+            Block::Paragraph(Paragraph {
+                runs: vec![Run {
+                    text: text.into(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            })
+        };
+        document(vec![
+            cell("before"),
+            Block::Table(Table {
+                rows: vec![vec![
+                    TableCell {
+                        blocks: vec![cell("Alpha cell")],
+                    },
+                    TableCell {
+                        blocks: vec![cell("Beta cell")],
+                    },
+                ]],
+                ..Default::default()
+            }),
+            cell("after"),
+        ])
+    }
+
+    /// A caret inside table cell [0, col] (the fixture's table is block 1).
+    fn cc(col: usize, cell_para: usize, run: usize, offset: usize) -> Caret {
+        Caret {
+            para: 1,
+            run,
+            offset,
+            cell: Some([0, col]),
+            cell_para: Some(cell_para),
+        }
+    }
+
+    fn cell_texts(doc: &Document, col: usize) -> Vec<String> {
+        match &doc.body[1] {
+            Block::Table(t) => t.rows[0][col]
+                .blocks
+                .iter()
+                .map(|b| match b {
+                    Block::Paragraph(p) => p.runs.iter().map(|r| r.text.clone()).collect(),
+                    _ => unreachable!("fixture cells hold paragraphs only"),
+                })
+                .collect(),
+            _ => unreachable!(),
+        }
+    }
+
+    /// Stale / unaddressable cell identities refuse LOUDLY before any model
+    /// change: cell without cellPara (nested-table content), row/col or
+    /// cellPara out of bounds, cell identity on a paragraph block, and a
+    /// selection mixing cells with top level or another cell.
     #[test]
-    fn in_cell_carets_refused() {
-        let mut s = session(doc_one_para());
-        let in_cell = Caret {
+    fn stale_and_mixed_cell_identities_refused() {
+        let mut s = session(doc_with_table());
+        let cases: Vec<(EditCmd, &str)> = vec![
+            (
+                EditCmd::Insert {
+                    text: "x".into(),
+                    caret: Caret {
+                        para: 1,
+                        run: 0,
+                        offset: 0,
+                        cell: Some([0, 0]),
+                        cell_para: None,
+                    },
+                    sel: None,
+                },
+                "cellPara",
+            ),
+            (
+                EditCmd::Insert {
+                    text: "x".into(),
+                    caret: cc(9, 0, 0, 0),
+                    sel: None,
+                },
+                "no cell [0,9]",
+            ),
+            (
+                EditCmd::Insert {
+                    text: "x".into(),
+                    caret: cc(0, 5, 0, 0),
+                    sel: None,
+                },
+                "no block 5",
+            ),
+            (
+                EditCmd::Insert {
+                    text: "x".into(),
+                    caret: Caret {
+                        para: 0,
+                        run: 0,
+                        offset: 0,
+                        cell: Some([0, 0]),
+                        cell_para: Some(0),
+                    },
+                    sel: None,
+                },
+                "carries cell identity",
+            ),
+        ];
+        for (cmd, what) in cases {
+            let err = s.apply(cmd).unwrap_err();
+            assert!(err.contains(what), "{what}: refusal must name it: {err:?}");
+        }
+        let top = Caret {
             para: 0,
             run: 0,
             offset: 1,
-            cell: Some([0, 1]),
-        };
-        let top_caret = Caret {
-            para: 0,
-            run: 0,
-            offset: 0,
             cell: None,
+            cell_para: None,
         };
-        for cmd in [
-            EditCmd::Insert {
-                text: "x".into(),
-                caret: in_cell,
-                sel: None,
-            },
-            EditCmd::Backspace {
-                caret: in_cell,
-                sel: None,
-            },
-            EditCmd::Delete {
-                caret: in_cell,
-                sel: None,
-            },
-            EditCmd::Enter {
-                caret: in_cell,
-                sel: None,
-            },
-            // a selection endpoint inside a cell refuses the same way
-            EditCmd::Insert {
-                text: "x".into(),
-                caret: top_caret,
-                sel: Some(SelRange {
-                    anchor: top_caret,
-                    focus: in_cell,
-                }),
-            },
-        ] {
-            let err = s.apply(cmd).unwrap_err();
+        let mixed = vec![
+            (top, cc(0, 0, 0, 1), "cell↔top"),
+            (cc(0, 0, 0, 1), cc(1, 0, 0, 1), "cell↔cell"),
+        ];
+        for (a, b, what) in mixed {
+            let err = s
+                .apply(EditCmd::Insert {
+                    text: "x".into(),
+                    caret: b,
+                    sel: Some(SelRange {
+                        anchor: a,
+                        focus: b,
+                    }),
+                })
+                .unwrap_err();
             assert!(
-                err.contains("table cell"),
-                "in-cell {err:?} must refuse on the cell identity"
+                err.contains("one cell or entirely top level"),
+                "{what}: {err:?}"
             );
         }
         assert!(!s.dirty(), "no refused command touched the model");
         assert!(s.undo.is_empty(), "no refused command pushed a snapshot");
+    }
+
+    /// The opened path: insert / enter (paragraph MỚI trong cell) / backspace
+    /// (merge về paragraph trước — caret tại điểm nối) all address THROUGH
+    /// the cell identity, keep the other cell intact, and round-trip the
+    /// whole document through the real crate on save.
+    #[test]
+    fn cell_verbs_edit_within_one_cell() {
+        let mut s = session(doc_with_table());
+        let c = s
+            .apply(EditCmd::Insert {
+                text: "T30".into(),
+                caret: cc(0, 0, 0, 10),
+                sel: None,
+            })
+            .unwrap();
+        assert_eq!(
+            (c.para, c.run, c.offset, c.cell, c.cell_para),
+            (1, 0, 13, Some([0, 0]), Some(0)),
+            "caret keeps the cell identity and rides past the insert"
+        );
+        assert_eq!(cell_texts(&s.doc, 0), vec!["Alpha cellT30".to_string()]);
+        assert_eq!(
+            cell_texts(&s.doc, 1),
+            vec!["Beta cell".to_string()],
+            "cell B untouched"
+        );
+
+        // enter inside the cell appends a paragraph WITHIN the cell
+        let c = s
+            .apply(EditCmd::Enter {
+                caret: c,
+                sel: None,
+            })
+            .unwrap();
+        assert_eq!(
+            (c.para, c.cell, c.cell_para),
+            (1, Some([0, 0]), Some(1)),
+            "enter moves to the second paragraph of the SAME cell"
+        );
+        assert_eq!(cell_texts(&s.doc, 0).len(), 2);
+        let c = s
+            .apply(EditCmd::Insert {
+                text: "T30-2".into(),
+                caret: c,
+                sel: None,
+            })
+            .unwrap();
+        assert_eq!(cell_texts(&s.doc, 0)[1], "T30-2");
+        assert_eq!(s.doc.body.len(), 3, "the table still holds one body block");
+
+        // backspace at the second paragraph's start merges WITHIN the cell —
+        // caret lands at the junction (end of the first paragraph's content)
+        let c = s
+            .apply(EditCmd::Backspace {
+                caret: cc(0, 1, 0, 0),
+                sel: None,
+            })
+            .unwrap();
+        assert_eq!(
+            (c.para, c.cell, c.cell_para, c.run, c.offset),
+            (1, Some([0, 0]), Some(0), 0, 13),
+            "junction caret = end of the first cell paragraph"
+        );
+        assert_eq!(
+            cell_texts(&s.doc, 0),
+            vec!["Alpha cellT30T30-2".to_string()]
+        );
+        assert_eq!(cell_texts(&s.doc, 0).len(), 1);
+
+        // undo twice walks back through the cell mutations (identity rides
+        // the snapshots)
+        let c = s.apply(EditCmd::Undo).unwrap();
+        assert_eq!(
+            (c.cell, c.cell_para),
+            (Some([0, 0]), Some(1)),
+            "undo restores the in-cell caret"
+        );
+        let c = s.apply(EditCmd::Undo).unwrap();
+        assert_eq!(
+            (c.cell, c.cell_para),
+            (Some([0, 0]), Some(1)),
+            "second undo = the insert T30-2 acted at the post-enter caret"
+        );
+
+        // save through the REAL crate and parse back: content + structure
+        let dir = std::env::temp_dir().join("nanooffice-test-nl-cell");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("cell.docx");
+        let bytes = nanooffice_ooxml::write_docx(&s.doc, None).unwrap();
+        std::fs::write(&path, &bytes).unwrap();
+        s.media_src = bytes;
+        s.path = path.clone();
+        save_session(&mut s).unwrap();
+        let back = nanooffice_ooxml::parse_docx_file(&path).unwrap();
+        // the undos left cell A at "after enter, before insert T30-2": the
+        // second (empty) paragraph survives the real round-trip
+        assert_eq!(
+            cell_texts(&back, 0),
+            vec!["Alpha cellT30".to_string(), String::new()]
+        );
+        assert_eq!(cell_texts(&back, 1), vec!["Beta cell".to_string()]);
+        assert!(
+            matches!(&back.body[2], Block::Paragraph(p) if p.runs[0].text == "after"),
+            "the block after the table survives the cell edits"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A selection whose endpoints share ONE cell (even cross-paragraph) is
+    /// deleted inside that cell by the ranged verbs; a same-cell word replace
+    /// keeps the surrounding text.
+    #[test]
+    fn cell_selection_same_cell_edits() {
+        let mut s = session(doc_with_table());
+        // replace "Beta" with "T30B" inside cell B: (0,0,0)..(0,0,4)
+        let c = s
+            .apply(EditCmd::Insert {
+                text: "T30B".into(),
+                caret: cc(1, 0, 0, 0),
+                sel: Some(SelRange {
+                    anchor: cc(1, 0, 0, 0),
+                    focus: cc(1, 0, 0, 4),
+                }),
+            })
+            .unwrap();
+        assert_eq!(
+            (c.cell, c.cell_para, c.offset),
+            (Some([0, 1]), Some(0), 4),
+            "caret = range start + len(text), identity kept"
+        );
+        assert_eq!(cell_texts(&s.doc, 1), vec!["T30B cell".to_string()]);
+        assert_eq!(cell_texts(&s.doc, 0), vec!["Alpha cell".to_string()]);
     }
 
     /// Session semantics through the REAL transition (`apply` — the command
@@ -1234,6 +1549,7 @@ mod tests {
                     run: 0,
                     offset: 0,
                     cell: None,
+                    cell_para: None,
                 },
                 sel: None,
             })
@@ -1246,6 +1562,7 @@ mod tests {
                 run: 0,
                 offset: 0,
                 cell: None,
+                cell_para: None,
             }
         );
     }
@@ -1275,11 +1592,12 @@ mod tests {
                 run: 0,
                 offset: 0,
                 cell: None,
+                cell_para: None,
             },
             sel: None,
             path: path.clone(),
         };
-        let c = apply_insert(&mut s.doc, s.caret, "MARKER-NL-01 ").unwrap();
+        let c = apply_insert(&mut s.doc.body, s.caret, "MARKER-NL-01 ").unwrap();
         s.caret = c;
         save_session(&mut s).unwrap();
         assert!(!s.dirty(), "save clears dirty");
@@ -1337,18 +1655,20 @@ mod tests {
         })]));
         // delete (0,0,2)..(0,1,3) = "llo wor" → "he" + "ld"
         let c = apply_delete_range(
-            &mut s.doc,
+            &mut s.doc.body,
             Caret {
                 para: 0,
                 run: 0,
                 offset: 2,
                 cell: None,
+                cell_para: None,
             },
             Caret {
                 para: 0,
                 run: 1,
                 offset: 3,
                 cell: None,
+                cell_para: None,
             },
         )
         .unwrap();
@@ -1378,18 +1698,20 @@ mod tests {
         // same-run cut [1..4) of "ld"... (fresh doc): "world" → "wd", images live
         let mut s2 = session(doc_one_para());
         let c = apply_delete_range(
-            &mut s2.doc,
+            &mut s2.doc.body,
             Caret {
                 para: 0,
                 run: 1,
                 offset: 1,
                 cell: None,
+                cell_para: None,
             },
             Caret {
                 para: 0,
                 run: 1,
                 offset: 4,
                 cell: None,
+                cell_para: None,
             },
         )
         .unwrap();
@@ -1421,18 +1743,20 @@ mod tests {
         ]));
         // delete (0,0,1)..(2,0,1) → "A" + "F" merged into para 0 (style P0)
         let c = apply_delete_range(
-            &mut s.doc,
+            &mut s.doc.body,
             Caret {
                 para: 0,
                 run: 0,
                 offset: 1,
                 cell: None,
+                cell_para: None,
             },
             Caret {
                 para: 2,
                 run: 0,
                 offset: 1,
                 cell: None,
+                cell_para: None,
             },
         )
         .unwrap();
@@ -1469,18 +1793,20 @@ mod tests {
         ]));
         let before = s2.doc.clone();
         let err = apply_delete_range(
-            &mut s2.doc,
+            &mut s2.doc.body,
             Caret {
                 para: 0,
                 run: 0,
                 offset: 1,
                 cell: None,
+                cell_para: None,
             },
             Caret {
                 para: 2,
                 run: 0,
                 offset: 1,
                 cell: None,
+                cell_para: None,
             },
         )
         .unwrap_err();
@@ -1502,12 +1828,14 @@ mod tests {
                     run: 1,
                     offset: so,
                     cell: None,
+                    cell_para: None,
                 },
                 focus: Caret {
                     para: 0,
                     run: 1,
                     offset: fo,
                     cell: None,
+                    cell_para: None,
                 },
             })
         };
@@ -1520,6 +1848,7 @@ mod tests {
                     run: 1,
                     offset: 1,
                     cell: None,
+                    cell_para: None,
                 },
                 sel: sel(4, 1), // covers "orl"
             })
@@ -1555,6 +1884,7 @@ mod tests {
                     run: 0,
                     offset: 3,
                     cell: None,
+                    cell_para: None,
                 },
                 sel: Some(SelRange {
                     anchor: Caret {
@@ -1562,12 +1892,14 @@ mod tests {
                         run: 0,
                         offset: 1,
                         cell: None,
+                        cell_para: None,
                     },
                     focus: Caret {
                         para: 0,
                         run: 1,
                         offset: 1,
                         cell: None,
+                        cell_para: None,
                     },
                 }), // "ello " + "d"
             })
@@ -1590,12 +1922,14 @@ mod tests {
             run: 1,
             offset: 4,
             cell: None,
+            cell_para: None,
         };
         let focus = Caret {
             para: 0,
             run: 1,
             offset: 1,
             cell: None,
+            cell_para: None,
         };
         let sel = Some(SelRange { anchor, focus });
         let c = s
@@ -1632,6 +1966,7 @@ mod tests {
                     run: 0,
                     offset: 0,
                     cell: None,
+                    cell_para: None,
                 },
                 sel: None,
             })
@@ -1646,6 +1981,7 @@ mod tests {
                 run: 0,
                 offset: 0,
                 cell: None,
+                cell_para: None,
             },
             "undo returns to the cmd's caret, not the stale session one"
         );

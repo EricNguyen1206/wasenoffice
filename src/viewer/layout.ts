@@ -122,6 +122,10 @@ export interface TextLine {
    * (only `rows[0]` is laid out — V3 ceiling), else null. The edit layer
    * refuses in-cell carets on this identity, not on heuristics. */
   cell: [number, number] | null;
+  /** T-A30 §5.5a (additive): index of the paragraph inside the cell's blocks
+   * — the third coordinate an in-cell caret needs. Null at top level AND for
+   * nested-table content (unaddressable — the edit layer refuses). */
+  cellPara: number | null;
   x: number; // aligned line start
   baseline: number;
   lh: number;
@@ -294,6 +298,7 @@ export function layoutBlocks(input: LayoutInput): LineModel {
     inCell: boolean,
     block: number,
     cell: [number, number] | null,
+    cellPara: number | null,
   ): number => {
     const xLeft = x0 + ((p.ind?.left ?? 0) / 20) * PT_PX;
     const wrapped = wrapParagraph(p, xLeft, x0 + w, measure);
@@ -332,7 +337,7 @@ export function layoutBlocks(input: LayoutInput): LineModel {
         it.x = ix;
         ix += it.w;
       }
-      lines.push({ items: line, para: pi, block, cell, x, baseline: yCur, lh, total, align: p.align, inCell });
+      lines.push({ items: line, para: pi, block, cell, cellPara, x, baseline: yCur, lh, total, align: p.align, inCell });
       yCur += lh;
     }
     return yCur - y;
@@ -342,6 +347,9 @@ export function layoutBlocks(input: LayoutInput): LineModel {
   // T-060 C3: `tableBlock`/`cell` carry the top-level block identity down the
   // recursion — a top-level paragraph owns its own index; everything inside a
   // table (nested tables included) belongs to that table's block + cell.
+  // T-A30 §5.5a: `cellBlocks` marks the blocks of a FIRST-LEVEL cell — its
+  // paragraphs get cellPara = their block index; a nested table's content is
+  // walked with false (cellPara stays null → unaddressable, edit-refused).
   const walk = (
     bs: Block[],
     x0: number,
@@ -351,13 +359,14 @@ export function layoutBlocks(input: LayoutInput): LineModel {
     inCell: boolean,
     tableBlock: number | null,
     cell: [number, number] | null,
+    cellBlocks: boolean,
   ): number => {
     let pi = piBase;
     let yCur = y;
     for (let i = 0; i < bs.length; i++) {
       const block = bs[i];
       if ('Paragraph' in block) {
-        yCur += layoutParagraph(block.Paragraph, x0, w, yCur, pi, inCell, tableBlock ?? i, cell);
+        yCur += layoutParagraph(block.Paragraph, x0, w, yCur, pi, inCell, tableBlock ?? i, cell, cellBlocks ? i : null);
         pi += 1;
       } else {
         // table: each cell's blocks at its column offset; the row advances by
@@ -371,7 +380,7 @@ export function layoutBlocks(input: LayoutInput): LineModel {
         let rowBottom = yCur;
         row.forEach((tc, col) => {
           // only rows[0] is walked (V3 ceiling) → row 0 in the cell identity
-          rowBottom = Math.max(rowBottom, walk(tc.blocks, x0 + col * colW, colW, yCur, pi, true, tbl, [0, col]));
+          rowBottom = Math.max(rowBottom, walk(tc.blocks, x0 + col * colW, colW, yCur, pi, true, tbl, [0, col], !inCell));
         });
         yCur = rowBottom + 4;
       }
@@ -379,7 +388,7 @@ export function layoutBlocks(input: LayoutInput): LineModel {
     return yCur;
   };
 
-  walk(blocks, input.x0, input.w, input.y, 0, false, null, null);
+  walk(blocks, input.x0, input.w, input.y, 0, false, null, null, false);
 
   let bottom = 0;
   lines.forEach((l) => {
@@ -397,11 +406,14 @@ export function layoutBlocks(input: LayoutInput): LineModel {
  * T-060 C3 (additive): `block` is the TOP-LEVEL body block (tables own their
  * cells' lines — `para` alone cannot tell a cell line from the block after
  * the table); `cell` is the `[row, col]` identity for in-cell lines, null
- * for top-level ones — the edit layer refuses on `cell !== null`. */
+ * for top-level ones — the edit layer refuses on `cell !== null`. T-A30
+ * §5.5a (additive): `cellPara` locates the paragraph inside the cell's
+ * blocks (null at top level / nested — refused). */
 export interface Hit {
   para: number;
   block: number;
   cell: [number, number] | null;
+  cellPara: number | null;
   line: number;
   run: number;
   offset: number;
@@ -411,21 +423,26 @@ const itemCharLen = (it: LayoutItem): number => (it.tab ? 1 : it.text.length);
 
 /** Inverse mapping (x, y) → caret. y resolves to the line with the NEAREST
  * baseline (boundaries at midpoints; above the first / below the last line
- * clamps) — clicking on a line's glyphs always lands on that line. x clamps
- * to the line's first/last caret position; inside the line it walks the item
- * whose span contains x and binary-searches the char boundaries with the
- * same measurer the forward layout used: x within char i's advance → the
- * caret sits BEFORE char i (no half-char centering — the measured advances
- * are the only truth; A4 can layer centering on this same model). */
+ * clamps); T-A30 §5.5d: baselines can COLLIDE exactly (cells of one row sit
+ * side by side), so exact ties break by x-span — the line whose span holds
+ * x wins (table-free layout never collides: behavior unchanged there). x
+ * clamps to the line's first/last caret position; inside the line it walks
+ * the item whose span contains x and binary-searches the char boundaries
+ * with the same measurer the forward layout used: x within char i's advance
+ * → the caret sits BEFORE char i (no half-char centering — the measured
+ * advances are the only truth; A4 can layer centering on this same model). */
 export function hitTest(model: LineModel, measure: Measurer, x: number, y: number): Hit | null {
   const ls = model.lines;
   if (ls.length === 0) return null;
+  const inSpan = (l: TextLine): boolean => x >= l.x && x <= l.x + l.total;
   let k = 0;
   for (let i = 1; i < ls.length; i++) {
-    if (Math.abs(y - ls[i].baseline) < Math.abs(y - ls[i - 1].baseline)) k = i;
+    const di = Math.abs(y - ls[i].baseline);
+    const dk = Math.abs(y - ls[k].baseline);
+    if (di < dk || (di === dk && inSpan(ls[i]) && !inSpan(ls[k]))) k = i;
   }
   const line = ls[k];
-  const hit = (run: number, offset: number): Hit => ({ para: line.para, block: line.block, cell: line.cell, line: k, run, offset });
+  const hit = (run: number, offset: number): Hit => ({ para: line.para, block: line.block, cell: line.cell, cellPara: line.cellPara, line: k, run, offset });
   if (line.items.length === 0) return hit(0, 0); // empty line (hard break): caret at paragraph start
   const first = line.items[0];
   const last = line.items[line.items.length - 1];
@@ -463,15 +480,32 @@ export function hitTest(model: LineModel, measure: Measurer, x: number, y: numbe
  * `Caret.para` coordinate — equal to `Hit.block`; `Hit.para`'s `pi` shares
  * values with table-cell content and cannot address the body). `line` rides
  * along (additive) for the editor's Up/Down/Home/End line moves.
+ * T-A30 §5.5a (additive): a caret carrying cell identity (`cell`/`cellPara`)
+ * also requires the line to carry the SAME identity — one table block holds
+ * many cell paragraphs; carets without those fields keep the block-only
+ * matching (pre-T-A30 callers, byte-identical).
  */
 export function caretXY(
   model: LineModel,
   measure: Measurer,
-  caret: { para: number; run: number; offset: number },
+  caret: {
+    para: number;
+    run: number;
+    offset: number;
+    cell?: [number, number] | null;
+    cellPara?: number | null;
+  },
 ): { x: number; y: number; lh: number; line: number } | null {
+  const cellEq = (
+    a: [number, number] | null | undefined,
+    b: [number, number] | null | undefined,
+  ): boolean => (a == null || b == null ? a == b : a[0] === b[0] && a[1] === b[1]);
   let fallback: { x: number; y: number; lh: number; line: number } | null = null;
   for (const [li, line] of model.lines.entries()) {
     if (line.block !== caret.para) continue;
+    if (caret.cell != null || caret.cellPara != null) {
+      if ((line.cellPara ?? null) !== (caret.cellPara ?? null) || !cellEq(line.cell, caret.cell)) continue;
+    }
     if (line.items.length === 0) {
       fallback ??= { x: line.x, y: line.baseline, lh: line.lh, line: li };
       continue;

@@ -21,6 +21,12 @@
  * loaded on this page. T-A29 (DD §5.4): IME composition (preedit overlay,
  * commit = 1 insert = 1 undo unit), plain-text clipboard (Cmd-C/X/V via
  * `navigator.clipboard` + a session stash fallback) and Cmd-A select-all.
+ * T-A30 (DD §5.5): SINGLE-CELL table editing — carets carry `cellPara`
+ * (paragraph index inside the cell), the same-cell selection rule, arrows
+ * that move within the cell's lines, double-click word / triple-click
+ * paragraph selection (manual click count — WebKit has no triple event),
+ * and the 500 ms caret blink (repaint from the cached model, solid while
+ * composing).
  */
 import {
   canvasMeasurer,
@@ -40,6 +46,7 @@ import {
   type FontMetrics,
   type LineModel,
   type Run,
+  type TextLine,
 } from './viewer/layout';
 
 interface Caret {
@@ -49,9 +56,11 @@ interface Caret {
   run: number;
   offset: number;
   /** T-060 C3: the hit's cell identity — `[row, col]` when the caret sits
-   * inside a table, null at top level. The command layer refuses edits on
-   * `cell !== null` (round-1 scope, DD L01 §2). */
+   * inside a table, null at top level. */
   cell: [number, number] | null;
+  /** T-A30 §5.5a: the paragraph's index inside the cell's blocks (null at
+   * top level; null with a cell = nested-table content, refused Rust-side). */
+  cellPara: number | null;
 }
 
 /** T-A28 §5.3a: a text selection — anchor (gesture start) + focus (the
@@ -128,6 +137,40 @@ async function main(): Promise<void> {
       dotEl.classList.toggle('hidden', !dirty);
     };
 
+    /** Caret blink (§5.5f): toggle every 500 ms and repaint from the CACHED
+     * model (no re-layout, no evidence); the caret stays solid while the
+     * IME owns the input. Every render() resets the phase. */
+    let caretOn = true;
+    let blinkTimer = 0;
+    const wakeCaret = (): void => {
+      caretOn = true;
+      window.clearInterval(blinkTimer);
+      blinkTimer = window.setInterval(() => {
+        caretOn = composing ? true : !caretOn;
+        repaint();
+      }, 500);
+    };
+    const drawOverlay = (c: CanvasRenderingContext2D, m: LineModel): void => {
+      drawSelection(c, m);
+      const at = caretXY(m, measure, caret);
+      if (at && caretOn) {
+        c.fillStyle = '#000';
+        c.fillRect(at.x - 0.75, at.y - at.lh + 2, 1.5, at.lh - 1);
+        if (preedit) {
+          // measurer-only fallback run (layout.ts lineHeight precedent)
+          const w = measure(
+            runsAt(caret)?.[caret.run] ?? ({ text: '', font: null, size: null } as Run),
+            preedit,
+          );
+          c.fillText(preedit, at.x, at.y);
+          c.fillRect(at.x, at.y + 2, w, 1); // inline displacement is a ceiling (DD §5.4a)
+        }
+      }
+    };
+    const repaint = (): void => {
+      if (model) drawModel(model, cv, ctx, dpr, box.clientWidth, box.clientHeight, bitmaps, (c) => drawOverlay(c, model!));
+    };
+
     const render = (): LineModel => {
       colW = columnWidth(nl.page, box.clientWidth);
       const m = layoutBlocks({
@@ -138,26 +181,9 @@ async function main(): Promise<void> {
         fonts: nl.fonts,
         measure,
       });
-      // the selection + caret overlay (static caret — blink is a later
-      // slice, DD L01 §2/§10)
-      drawModel(m, cv, ctx, dpr, box.clientWidth, box.clientHeight, bitmaps, (c) => {
-        drawSelection(c, m);
-        const at = caretXY(m, measure, caret);
-        if (at) {
-          c.fillStyle = '#000';
-          c.fillRect(at.x - 0.75, at.y - at.lh + 2, 1.5, at.lh - 1);
-          if (preedit) {
-            // measurer-only fallback run (layout.ts lineHeight precedent)
-            const w = measure(
-              runsOf(caret.para)?.[caret.run] ?? ({ text: '', font: null, size: null } as Run),
-              preedit,
-            );
-            c.fillText(preedit, at.x, at.y);
-            c.fillRect(at.x, at.y + 2, w, 1); // inline displacement is a ceiling (DD §5.4a)
-          }
-        }
-      });
       model = m;
+      repaint();
+      wakeCaret();
       return m;
     };
 
@@ -183,20 +209,41 @@ async function main(): Promise<void> {
     // mutates the model, so no command round-trip for pure caret moves. ──
 
     const cmpCaret = (a: Caret, b: Caret): number =>
-      a.para - b.para || a.run - b.run || a.offset - b.offset;
+      a.para - b.para || (a.cellPara ?? 0) - (b.cellPara ?? 0) || a.run - b.run || a.offset - b.offset;
     const sameCaret = (a: Caret, b: Caret): boolean => cmpCaret(a, b) === 0;
 
-    const runsOf = (para: number): Run[] | null => {
-      const b = body[para];
+    /** The Block[] holding the caret's paragraph + its index there (DD
+     * §5.5b): top level → body + `para`; in-cell → that cell's blocks +
+     * `cellPara`. Nested-table carets (cell without cellPara) resolve to
+     * null — unaddressable. */
+    const containerOf = (c: Caret): { blocks: Block[]; idx: number } | null => {
+      if (c.cell) {
+        if (c.cellPara == null) return null;
+        const t = body[c.para];
+        const row = t && 'Table' in t ? t.Table.rows[c.cell[0]] : undefined;
+        const tc = row?.[c.cell[1]];
+        return tc ? { blocks: tc.blocks, idx: c.cellPara } : null;
+      }
+      return { blocks: body, idx: c.para };
+    };
+    const runsAt = (c: Caret): Run[] | null => {
+      const k = containerOf(c);
+      const b = k?.blocks[k.idx];
       return b && 'Paragraph' in b ? b.Paragraph.runs : null;
     };
+    const caretIn = (idx: number, run: number, offset: number, from: Caret): Caret =>
+      from.cell
+        ? { ...from, cellPara: idx, run, offset }
+        : { para: idx, run, offset, cell: null, cellPara: null };
 
     /** One character step (a surrogate pair = one step — mirrors the Rust
-     * backspace), across run and paragraph boundaries; table boundaries and
-     * the document edges are no-ops (round-1 ceiling: arrows do not jump
-     * OVER a table). */
+     * backspace), across run and paragraph boundaries within the caret's
+     * OWN container (DD §5.5d): top-level arrows stop at tables / document
+     * edges; in-cell arrows never leave the cell (Tab nav between cells is
+     * a ceiling). */
     const stepH = (c: Caret, dir: 1 | -1): Caret => {
-      const runs = runsOf(c.para);
+      const k = containerOf(c);
+      const runs = runsAt(c);
       const run = runs?.[c.run];
       if (dir === -1) {
         if (run && c.offset > 0) {
@@ -214,31 +261,38 @@ async function main(): Promise<void> {
       } else if (runs && c.run + 1 < runs.length) {
         return { ...c, run: c.run + 1, offset: 0 };
       }
-      for (let p = c.para + dir; p >= 0 && p < body.length; p += dir) {
-        const rp = runsOf(p);
+      if (!k) return c;
+      for (let p = k.idx + dir; p >= 0 && p < k.blocks.length; p += dir) {
+        const b = k.blocks[p];
+        const rp = b && 'Paragraph' in b ? b.Paragraph.runs : null;
         if (!rp) return c; // table boundary — stop
-        if (rp.length === 0) return { para: p, run: 0, offset: 0, cell: null };
+        if (rp.length === 0) return caretIn(p, 0, 0, c);
         return dir === -1
-          ? { para: p, run: rp.length - 1, offset: rp[rp.length - 1].text.length, cell: null }
-          : { para: p, run: 0, offset: 0, cell: null };
+          ? caretIn(p, rp.length - 1, rp[rp.length - 1].text.length, c)
+          : caretIn(p, 0, 0, c);
       }
-      return c; // document edge
+      return c; // container edge (cell boundary stops here — DD §5.5d)
     };
 
     /** Line-to-line move (Up/Down) keeping goal-x — hitTest clamps the
-     * column into each line's own span. In-cell lines are SKIPPED
-     * (selection never enters tables, §5.3a); image rows live in `media`,
-     * not `lines`, and are stepped over (ceiling §5.3g). */
+     * column into each line's own span. Lines outside the caret's context
+     * are stepped over: top-level skips cell lines (selection never enters
+     * tables from outside), in-cell stays within the same cell; image rows
+     * live in `media`, not `lines`, and are stepped over (ceiling). */
     const moveV = (c: Caret, dir: 1 | -1): Caret => {
       if (!model) return c;
       const cur = caretXY(model, measure, c);
       if (!cur) return c;
       goalX ??= cur.x;
+      const lineOk = (l: TextLine): boolean =>
+        c.cell
+          ? l.cell != null && l.cellPara != null && l.cell[0] === c.cell[0] && l.cell[1] === c.cell[1]
+          : l.cell == null;
       let k = cur.line + dir;
-      while (k >= 0 && k < model.lines.length && model.lines[k].cell) k += dir;
+      while (k >= 0 && k < model.lines.length && !lineOk(model.lines[k])) k += dir;
       if (k < 0 || k >= model.lines.length) return c;
       const h = hitTest(model, measure, goalX, model.lines[k].baseline);
-      return h ? { para: h.block, run: h.run, offset: h.offset, cell: h.cell } : c;
+      return h ? { para: h.block, run: h.run, offset: h.offset, cell: h.cell, cellPara: h.cellPara } : c;
     };
 
     /** Home/End: start/end of the current LAYOUT line (not the paragraph). */
@@ -248,32 +302,36 @@ async function main(): Promise<void> {
       if (!cur) return c;
       const line = model.lines[cur.line];
       const h = hitTest(model, measure, end ? line.x + line.total : line.x, line.baseline);
-      return h ? { para: h.block, run: h.run, offset: h.offset, cell: h.cell } : c;
+      return h ? { para: h.block, run: h.run, offset: h.offset, cell: h.cell, cellPara: h.cellPara } : c;
     };
 
-    /** Cmd+Left/Right: paragraph start/end through the body runs. */
+    /** Cmd+Left/Right: paragraph start/end through the caret's own runs. */
     const paraHomeEnd = (c: Caret, end: boolean): Caret => {
-      const runs = end ? runsOf(c.para) : null;
-      if (!runs || runs.length === 0) return { para: c.para, run: 0, offset: 0, cell: null };
-      return {
-        para: c.para,
-        run: runs.length - 1,
-        offset: runs[runs.length - 1].text.length,
-        cell: null,
-      };
+      const runs = end ? runsAt(c) : null;
+      if (!runs || runs.length === 0) return { ...c, run: 0, offset: 0 };
+      return { ...c, run: runs.length - 1, offset: runs[runs.length - 1].text.length };
     };
+
+    /** Both endpoints share one edit surface (DD §5.5c): both top level, or
+     * the SAME cell with resolvable cellParas — anything else refuses to be
+     * a selection (collapse to a plain caret). */
+    const inSameCell = (a: Caret, b: Caret): boolean =>
+      a.cell == null && b.cell == null
+        ? true
+        : a.cell != null &&
+          b.cell != null &&
+          a.cellPara != null &&
+          b.cellPara != null &&
+          a.cell[0] === b.cell[0] &&
+          a.cell[1] === b.cell[1];
 
     /** Apply a caret move: plain = collapse the selection; shift = extend it
-     * (the anchor sticks). A selection endpoint inside a table refuses to be
-     * part of a selection (§5.3a) — the selection collapses to a plain
-     * caret at the moved-to position. `vertical` keeps goal-x alive. */
+     * (the anchor sticks). `vertical` keeps goal-x alive. */
     const moveTo = (next: Caret, extend: boolean, vertical = false): void => {
       if (extend) {
         const anchor = sel ? sel.anchor : caret;
         sel =
-          next.cell || anchor.cell || sameCaret(anchor, next)
-            ? null
-            : { anchor, focus: next };
+          !inSameCell(anchor, next) || sameCaret(anchor, next) ? null : { anchor, focus: next };
       } else {
         sel = null;
         if (!vertical) goalX = null;
@@ -285,14 +343,18 @@ async function main(): Promise<void> {
     /** `nano light selection:` — ADDITIVE gate-15 evidence (frozen constant
      * SMOKE_RE_NL_SEL in harness/scripts/smoke-lib.sh — change in the SAME
      * commit). span = char distance between the ORDERED endpoints (same
-     * paragraph; cross-para = -1). */
+     * paragraph — top level or one cell; cross-paragraph = -1). */
     const emitSel = (): void => {
       if (!sel) return;
       const [a, b] =
         cmpCaret(sel.anchor, sel.focus) <= 0 ? [sel.anchor, sel.focus] : [sel.focus, sel.anchor];
+      const samePara =
+        a.cell == null && b.cell == null && a.para === b.para
+          ? true
+          : a.cell != null && b.cell != null && a.cellPara != null && a.cellPara === b.cellPara;
       let span = -1;
-      if (a.para === b.para) {
-        const runs = runsOf(a.para);
+      if (samePara) {
+        const runs = runsAt(a);
         if (runs) {
           if (a.run === b.run) {
             span = b.offset - a.offset;
@@ -313,30 +375,39 @@ async function main(): Promise<void> {
 
     /** Per-line highlight rects for the ordered [start, end] range —
      * computed from the SAME LineModel the text is drawn from (the overlay
-     * of drawModel; layout.ts untouched, DD L01 §5.3d). A line is skipped
-     * when outside the range; partial lines take their x bounds from the
-     * endpoints' caretXY; a zero-width rect on a swept empty paragraph
-     * becomes a 2px sliver. */
+     * of drawModel; layout.ts untouched, DD L01 §5.3d). Lines outside the
+     * selection's CONTEXT (top level vs the selected cell, §5.5c) are
+     * skipped; partial lines take their x bounds from the endpoints'
+     * caretXY; a zero-width rect on a swept empty paragraph becomes a 2px
+     * sliver. */
     const drawSelection = (c: CanvasRenderingContext2D, m: LineModel): void => {
       if (!sel || sameCaret(sel.anchor, sel.focus)) return;
       const [s, e] =
         cmpCaret(sel.anchor, sel.focus) <= 0 ? [sel.anchor, sel.focus] : [sel.focus, sel.anchor];
       c.fillStyle = 'rgba(0, 120, 255, 0.28)';
       for (const line of m.lines) {
-        if (line.cell) continue; // selection never enters tables (§5.3a)
+        const lineOk = s.cell
+          ? line.cell != null &&
+            line.cellPara != null &&
+            line.cell[0] === s.cell[0] &&
+            line.cell[1] === s.cell[1]
+          : line.cell == null;
+        if (!lineOk) continue;
         const first = line.items[0];
         const last = line.items[line.items.length - 1];
         const lineStart: Caret = {
           para: line.block,
           run: first?.ri ?? 0,
           offset: first?.charStart ?? 0,
-          cell: null,
+          cell: line.cell,
+          cellPara: line.cellPara,
         };
         const lineEnd: Caret = {
           para: line.block,
           run: last?.ri ?? 0,
           offset: last ? last.charStart + (last.tab ? 1 : last.text.length) : 0,
-          cell: null,
+          cell: line.cell,
+          cellPara: line.cellPara,
         };
         if (cmpCaret(e, lineStart) < 0 || cmpCaret(lineEnd, s) < 0) continue; // outside
         const x1 = cmpCaret(s, lineStart) < 0 ? line.x : caretXY(m, measure, s)?.x ?? line.x;
@@ -358,6 +429,14 @@ async function main(): Promise<void> {
      * (collapsed, or restored by undo/redo) becomes the new state. */
     const edit = async (cmd: EditCmd): Promise<void> => {
       try {
+        if (cmd.kind !== 'undo' && cmd.kind !== 'redo' && cmd.caret.cell) {
+          // `nano light cell:` — ADDITIVE gate-15 evidence (frozen
+          // SMOKE_RE_NL_CELL, smoke-lib — same-commit rule)
+          void invoke('frontend_log', {
+            level: 'info',
+            message: `nano light cell: op=${cmd.kind} row=${cmd.caret.cell[0]} col=${cmd.caret.cell[1]} para=${cmd.caret.cellPara}`,
+          });
+        }
         const out = await invoke<EditOutcome>('nano_light_edit', { cmd });
         body = out.doc.body;
         caret = out.caret;
@@ -411,27 +490,35 @@ async function main(): Promise<void> {
     window.addEventListener('compositionupdate', (ev) => compositionUpdate(ev.data));
     window.addEventListener('compositionend', (ev) => void compositionEnd(ev.data));
 
-    /** Plain text of the ordered selection (walk the model; cross-para joins '\n', tables contribute nothing). */
+    /** Plain text of the ordered selection — walked over the selection's own
+     * container (top level or one cell, DD §5.5c); cross-para joins '\n'. */
     const selectionText = (): string | null => {
       if (!sel || sameCaret(sel.anchor, sel.focus)) return null;
       const [s, e] =
         cmpCaret(sel.anchor, sel.focus) <= 0 ? [sel.anchor, sel.focus] : [sel.focus, sel.anchor];
+      const k = containerOf(s);
+      if (!k) return null;
+      const eIdx = e.cell ? (e.cellPara ?? 0) : e.para;
+      const runsOfIdx = (i: number): Run[] | null => {
+        const b = k.blocks[i];
+        return b && 'Paragraph' in b ? b.Paragraph.runs : null;
+      };
       const parts: string[] = [];
-      for (let p = s.para; p <= e.para && p < body.length; p++) {
-        const runs = runsOf(p);
+      for (let p = k.idx; p <= eIdx && p < k.blocks.length; p++) {
+        const runs = runsOfIdx(p);
         if (!runs) continue;
         const t = (i: number): string => runs[i]?.text ?? '';
-        if (p === s.para && p === e.para && s.run === e.run) {
+        if (p === k.idx && p === eIdx && s.run === e.run) {
           parts.push(t(s.run).slice(s.offset, e.offset));
-        } else if (p === s.para && p === e.para) {
+        } else if (p === k.idx && p === eIdx) {
           parts.push(
             t(s.run).slice(s.offset) +
               runs.slice(s.run + 1, e.run).map((r) => r.text).join('') +
               t(e.run).slice(0, e.offset),
           );
-        } else if (p === s.para) {
+        } else if (p === k.idx) {
           parts.push(t(s.run).slice(s.offset) + runs.slice(s.run + 1).map((r) => r.text).join(''));
-        } else if (p === e.para) {
+        } else if (p === eIdx) {
           parts.push(runs.slice(0, e.run).map((r) => r.text).join('') + t(e.run).slice(0, e.offset));
         } else {
           parts.push(runs.map((r) => r.text).join(''));
@@ -488,19 +575,23 @@ async function main(): Promise<void> {
     const selectAll = (): void => {
       let last = -1;
       for (let p = body.length - 1; p >= 0; p--) {
-        if (runsOf(p)) {
+        const b = body[p];
+        if (b && 'Paragraph' in b) {
           last = p;
           break;
         }
       }
       if (last < 0) return;
-      const runs = runsOf(last)!;
-      const anchor: Caret = { para: 0, run: 0, offset: 0, cell: null };
+      const runs = (body[last] as { Paragraph: { runs: Run[] } }).Paragraph.runs;
+      // Cmd-A stays top-level only (DD §5.5g): cell content would create
+      // cross-cell spans the same-cell rule refuses anyway
+      const anchor: Caret = { para: 0, run: 0, offset: 0, cell: null, cellPara: null };
       const focus: Caret = {
         para: last,
         run: Math.max(runs.length - 1, 0),
         offset: runs.length ? runs[runs.length - 1].text.length : 0,
         cell: null,
+        cellPara: null,
       };
       sel = sameCaret(anchor, focus) ? null : { anchor, focus };
       caret = focus;
@@ -508,16 +599,53 @@ async function main(): Promise<void> {
       emitSel();
     };
 
-    // ── mouse selection (§5.3b): the gate probe calls these three directly
+    // ── mouse selection (§5.3b/§5.5e): the gate probe calls these directly
     // — synthetic MouseEvents cannot carry offsetX/Y in WebKit ──
     const hitAt = (x: number, y: number): Caret | null => {
       if (!model) return null;
       const h = hitTest(model, measure, x, y);
-      return h ? { para: h.block, run: h.run, offset: h.offset, cell: h.cell } : null;
+      return h ? { para: h.block, run: h.run, offset: h.offset, cell: h.cell, cellPara: h.cellPara } : null;
     };
-    const mouseDownAt = (x: number, y: number, extend: boolean): void => {
+    /** Double-click = the word at the caret (expand over non-space chars in
+     * the run text — the layout's word/space tokens, no new regex, DD
+     * §5.5e); triple-click = the whole paragraph. Both work top-level and
+     * inside one cell (the same-cell rule). */
+    const selectWordAt = (h: Caret): void => {
+      const run = runsAt(h)?.[h.run];
+      const text = run?.text ?? '';
+      let sIdx = h.offset;
+      let eIdx = h.offset;
+      while (sIdx > 0 && text[sIdx - 1] !== ' ') sIdx--;
+      while (eIdx < text.length && text[eIdx] !== ' ') eIdx++;
+      sel = sIdx === eIdx ? null : { anchor: { ...h, offset: sIdx }, focus: { ...h, offset: eIdx } };
+      caret = sel ? sel.focus : h;
+      render();
+      emitSel();
+    };
+    const selectParaAt = (h: Caret): void => {
+      const runs = runsAt(h);
+      const anchor: Caret = { ...h, run: 0, offset: 0 };
+      const focus: Caret = {
+        ...h,
+        run: Math.max((runs?.length ?? 1) - 1, 0),
+        offset: runs?.length ? runs[runs.length - 1].text.length : 0,
+      };
+      sel = sameCaret(anchor, focus) ? null : { anchor, focus };
+      caret = focus;
+      render();
+      emitSel();
+    };
+    const mouseDownAt = (x: number, y: number, extend: boolean, clicks = 1): void => {
       const next = hitAt(x, y);
       if (!next) return;
+      if (!extend && clicks >= 3) {
+        selectParaAt(next);
+        return;
+      }
+      if (!extend && clicks === 2) {
+        selectWordAt(next);
+        return;
+      }
       dragging = true;
       moveTo(next, extend);
     };
@@ -531,7 +659,19 @@ async function main(): Promise<void> {
       dragging = false;
       emitSel(); // once per gesture — mousemove would spam the log
     };
-    cv.addEventListener('mousedown', (ev) => mouseDownAt(ev.offsetX, ev.offsetY, ev.shiftKey));
+    /** Manual click count (DD §5.5e): WebKit has no triple-click event, so
+     * consecutive mousedowns under 500 ms and 4 px apart count up. */
+    let lastClick = { t: 0, x: 0, y: 0, n: 0 };
+    const clickCount = (x: number, y: number): number => {
+      const now = performance.now();
+      const n =
+        now - lastClick.t < 500 && Math.abs(x - lastClick.x) < 4 && Math.abs(y - lastClick.y) < 4
+          ? lastClick.n + 1
+          : 1;
+      lastClick = { t: now, x, y, n };
+      return n;
+    };
+    cv.addEventListener('mousedown', (ev) => mouseDownAt(ev.offsetX, ev.offsetY, ev.shiftKey, clickCount(ev.offsetX, ev.offsetY)));
     cv.addEventListener('mousemove', (ev) => mouseMoveAt(ev.offsetX, ev.offsetY));
     window.addEventListener('mouseup', () => mouseUp());
     saveBtn.addEventListener('click', () => void save());
@@ -679,6 +819,29 @@ async function main(): Promise<void> {
         window.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', metaKey: true }));
         await copySelection('copy-all');
         window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }));
+        // T-A30 (DD §5.5h): dblclick word replace INSIDE cell B, triple-click
+        // paragraph replace (top level), then type + enter within cell A —
+        // the SAME mouseDownAt/edit the handlers use; one save covers all
+        // parse-back asserts (cell text changed, other cell + structure kept)
+        const cellB = model.lines.find((l) => l.cell && l.cell[1] === 1 && l.cellPara === 0);
+        const betaWord = cellB?.items.find((it) => it.text && !it.text.includes(' '));
+        if (cellB && betaWord) {
+          mouseDownAt(betaWord.x + betaWord.w / 2, cellB.baseline, false, 2);
+          await edit({ kind: 'insert', text: 'T30B', caret, sel });
+        }
+        const topLines = model.lines.filter((l) => !l.cell);
+        const lastTop = topLines[topLines.length - 1];
+        if (lastTop) {
+          mouseDownAt(lastTop.x + lastTop.total / 2, lastTop.baseline, false, 3);
+          await edit({ kind: 'insert', text: 'T30P', caret, sel });
+        }
+        const cellA = model.lines.find((l) => l.cell && l.cell[1] === 0 && l.cellPara === 0);
+        if (cellA) {
+          mouseDownAt(cellA.x + cellA.total, cellA.baseline, false, 1);
+          await edit({ kind: 'insert', text: 'T30C', caret, sel: null });
+          await edit({ kind: 'enter', caret, sel: null });
+          await edit({ kind: 'insert', text: 'T30C2', caret, sel: null });
+        }
         await save();
         await invoke('nano_light_reopen');
         await invoke('frontend_log', { level: 'info', message: 'nano light probe: chain done (edit → save → reopen)' });

@@ -27,6 +27,11 @@
 #      string, op=paste re-inserts it mid-word ("Xin Xin chàochào"), op=copy-all
 #      after Cmd-A walks the WHOLE document (marker + T28-replace + paste
 #      result; chars == unescaped length)
+#  10. SINGLE-CELL round (T-A30, DD L01 §5.5): dblclick replaces the word
+#      "Beta" with T30B inside cell B, triple-click replaces the MEDIUM
+#      paragraph with T30P, typing+enter inside cell A yields 2 paragraphs —
+#      the crate parse-back proves cell text changed while the other cell and
+#      the table structure stay intact; `nano light cell:` evidence exists
 #   and no `nano light failed:` anywhere.
 # LOG CONTRACT: the `nano light` lines are frozen constants SMOKE_RE_NL_* in
 # harness/scripts/smoke-lib.sh — change in the SAME commit as the emitting
@@ -56,6 +61,11 @@
 #     → full positive run, but the clipboard assert requires text 'WRONG-CLIP'
 #       with chars 999999 — contradicts the real clipboard evidence → exit 1
 #       (proves the gate READS the clipboard numbers — T-A29).
+#   NANO_LIGHT_NEGATIVE=celldoctor harness/scripts/smoke-nano-light.sh
+#     → full positive run, but the cell-structure assert requires cell A to
+#       hold 1 paragraph — contradicts the real enter-in-cell result (2) →
+#       exit 1 (proves the gate READS the cell structure from the parse-back
+#       — T-A30).
 set -u
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -77,7 +87,7 @@ if [ "$NEGATIVE" = "garbage" ]; then
   printf 'not a docx package' > "$FIXTURE"
   echo "smoke: NEGATIVE proof (garbage) — expecting 'nano light failed:' to bite"
 else
-  python3 "$ROOT/harness/fixtures/make_docx_layout.py" "$FIXTURE" >/dev/null || {
+  python3 "$ROOT/harness/fixtures/make_docx_layout.py" "$FIXTURE" table >/dev/null || {
     echo "smoke: cannot generate fixture"; exit 1;
   }
 fi
@@ -148,6 +158,7 @@ if negative == "seldoctor":
 else:
     need(max(spans) >= min_span, f"selection span {max(spans)} < {min_span} ({sels[-1]})")
     need(min(spans) == -1, f"no cross-para selection (Cmd-A select-all) — spans {spans}")
+    need(4 in spans, f"no span-4 selection (the dblclicked word 'Beta') — spans {spans}")
 
 # (8) COMPOSITION (T-A29, DD L01 §5.4a): the telex-style preedit committed.
 compose_ends = re.findall(r"nano light composition: state=end data=(.*)", "\n".join(lines))
@@ -193,6 +204,34 @@ if negative != "doctor":
     need(f"paragraph{repl}" in model.stdout, f"selection replace not joined to 'paragraph' in the parse-back of {parse_target} — expected 'paragraph{repl}' (the probe replaces the selected ' two')")
     need(compose in model.stdout, f"composed string {compose!r} not in the parse-back of {parse_target}")
     need(f"Xin {compose}chào" in model.stdout, f"paste result 'Xin {compose}chào' not in the parse-back of {parse_target}")
+
+# (10) T-A30 single-cell round (DD L01 §5.5h): cell text changed, the other
+# cell + the table structure intact; the dblclicked word and the
+# triple-clicked paragraph are REALLY replaced.
+need("T30B" in model.stdout, f"dblclick word replace 'T30B' missing from the parse-back of {parse_target}")
+need("Beta" not in model.stdout, "the dblclicked word 'Beta' survived — word select did not replace")
+need("T30P" in model.stdout, f"triple-click paragraph replace 'T30P' missing from the parse-back of {parse_target}")
+need("bundled font metrics" not in model.stdout, "the triple-clicked paragraph survived — paragraph select did not replace")
+mj = json.loads(model.stdout)
+tables = [b["Table"] for b in mj["body"] if "Table" in b]
+need(len(tables) == 1, f"expected exactly one table in the parse-back, got {len(tables)}")
+row0 = tables[0]["rows"][0]
+need(len(row0) == 2, f"table row must keep 2 cells, got {len(row0)}")
+
+def cell_paras(cell):
+    return ["".join(r["text"] for r in b["Paragraph"]["runs"]) for b in cell["blocks"] if "Paragraph" in b]
+
+a_texts = cell_paras(row0[0])
+if negative == "celldoctor":
+    need(len(a_texts) == 1, f"celldoctor: cell A holds {len(a_texts)} paragraphs != 1 — the assert must bite here")
+else:
+    need(len(a_texts) == 2, f"enter-in-cell must leave 2 paragraphs in cell A, got {a_texts}")
+    need(any(t == "T30C2" for t in a_texts), f"cell A second paragraph must be 'T30C2': {a_texts}")
+    need(any("Alpha cell" in t and "T30C" in t for t in a_texts), f"cell A first paragraph must keep 'Alpha cell' + gain T30C: {a_texts}")
+    need(cell_paras(row0[1]) == ["T30B cell"], f"cell B must read 'T30B cell', got {cell_paras(row0[1])}")
+cell_evs = re.findall(r"nano light cell: op=(\S+) row=(\d+) col=(\d+) para=(\d+)", "\n".join(lines))
+need(len(cell_evs) >= 3, f"expected ≥3 `nano light cell:` evidence lines, got {cell_evs}")
+need(any(c[2] == "1" for c in cell_evs), f"no cell evidence for cell B (col=1) — {cell_evs}")
 
 # (5) media byte-exact vs the pre-save snapshot (per part sha256)
 def media_shas(path):
@@ -242,7 +281,7 @@ PY
 }
 
 if smoke_poll "$TIMEOUT" nano_light_signals "Nano Light edit round-trip evidence"; then
-  echo "smoke: ✓ first-draw < ${MAX_MS} ms · ✓ edit chain (insert/backspace/delete/enter/undo/redo) · ✓ selection span ≥ ${MIN_SPAN} + Cmd-A cross-para · ✓ composition commits '${COMPOSE}' (1 undo unit) · ✓ clipboard copy→paste→copy-all round · ✓ type-replace → save (write_docx + atomic replace) · ✓ parse-back contains marker + 'paragraph${REPL}' + '${COMPOSE}' + paste result · ✓ media byte-exact · ✓ reopen renders the edit"
+  echo "smoke: ✓ first-draw < ${MAX_MS} ms · ✓ edit chain (insert/backspace/delete/enter/undo/redo) · ✓ selection span ≥ ${MIN_SPAN} + Cmd-A cross-para · ✓ dblclick word span 4 + triple-click paragraph · ✓ composition commits '${COMPOSE}' (1 undo unit) · ✓ clipboard copy→paste→copy-all round · ✓ single-cell round (cell text changed, other cell + structure intact) · ✓ type-replace → save (write_docx + atomic replace) · ✓ parse-back contains marker + 'paragraph${REPL}' + '${COMPOSE}' + paste result + T30 cell round · ✓ media byte-exact · ✓ reopen renders the edit"
   grep -m1 "$SMOKE_RE_NL_FIRST_DRAW" "$LOG" | sed 's/^/smoke:   /' | cut -c1-160
   grep -m1 "$SMOKE_RE_NL_SEL" "$LOG" | sed 's/^/smoke:   /' | cut -c1-160
   grep -m1 "$SMOKE_RE_NL_COMPOSE" "$LOG" | sed 's/^/smoke:   /' | cut -c1-160

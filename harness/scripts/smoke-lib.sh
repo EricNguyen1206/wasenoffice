@@ -77,6 +77,7 @@ SMOKE_RE_NL_PROBE_DONE='nano light probe: chain done'
 SMOKE_RE_NL_SEL='nano light selection:'
 SMOKE_RE_NL_COMPOSE='nano light composition:'
 SMOKE_RE_NL_CLIP='nano light clipboard:'
+SMOKE_RE_NL_CELL='nano light cell:'
 SMOKE_RE_NL_FAILED='nano light failed:'
 
 # ── Trạng thái dùng chung (consumer đọc, không ghi trực tiếp khi không cần) ──

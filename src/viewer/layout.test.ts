@@ -65,24 +65,24 @@ const hit = (m: LineModel, x: number, y: number): Hit =>
   const m = layoutBlocks({ ...WIDE, blocks: para(mk('Hello world')) });
   eq(m.lines.length, 1, 'one line');
   eq(m.lines[0].total, 110, 'line width = 11 chars × 10px');
-  eq(hit(m, 45, 0), { para: 0, block: 0, cell: null, line: 0, run: 0, offset: 4 }, 'mid-line: caret before the 5th char');
-  eq(hit(m, 55, 0), { para: 0, block: 0, cell: null, line: 0, run: 0, offset: 5 }, 'on the space: caret before it');
-  eq(hit(m, 65, 0), { para: 0, block: 0, cell: null, line: 0, run: 0, offset: 6 }, 'into "world": caret before "w"');
-  eq(hit(m, 0, 0), { para: 0, block: 0, cell: null, line: 0, run: 0, offset: 0 }, 'left edge = start');
-  eq(hit(m, -5, 0), { para: 0, block: 0, cell: null, line: 0, run: 0, offset: 0 }, 'before the line clamps to start');
-  eq(hit(m, 110, 0), { para: 0, block: 0, cell: null, line: 0, run: 0, offset: 11 }, 'right edge = end');
-  eq(hit(m, 1000, 0), { para: 0, block: 0, cell: null, line: 0, run: 0, offset: 11 }, 'beyond the line clamps to end');
+  eq(hit(m, 45, 0), { para: 0, block: 0, cell: null, cellPara: null, line: 0, run: 0, offset: 4 }, 'mid-line: caret before the 5th char');
+  eq(hit(m, 55, 0), { para: 0, block: 0, cell: null, cellPara: null, line: 0, run: 0, offset: 5 }, 'on the space: caret before it');
+  eq(hit(m, 65, 0), { para: 0, block: 0, cell: null, cellPara: null, line: 0, run: 0, offset: 6 }, 'into "world": caret before "w"');
+  eq(hit(m, 0, 0), { para: 0, block: 0, cell: null, cellPara: null, line: 0, run: 0, offset: 0 }, 'left edge = start');
+  eq(hit(m, -5, 0), { para: 0, block: 0, cell: null, cellPara: null, line: 0, run: 0, offset: 0 }, 'before the line clamps to start');
+  eq(hit(m, 110, 0), { para: 0, block: 0, cell: null, cellPara: null, line: 0, run: 0, offset: 11 }, 'right edge = end');
+  eq(hit(m, 1000, 0), { para: 0, block: 0, cell: null, cellPara: null, line: 0, run: 0, offset: 11 }, 'beyond the line clamps to end');
 }
 
 // ── two runs on one line: run resolution ──────────────────────────────────
 {
   const m = layoutBlocks({ ...WIDE, blocks: para(mk('Hello '), mk('world')) });
   eq(m.lines.length, 1, 'still one line');
-  eq(hit(m, 70, 0), { para: 0, block: 0, cell: null, line: 0, run: 1, offset: 1 }, 'x at the w|o boundary = caret after "w"');
-  eq(hit(m, 75, 0), { para: 0, block: 0, cell: null, line: 0, run: 1, offset: 1 }, 'x inside "o" advance = caret BEFORE it (no half-char centering — documented rule)');
-  eq(hit(m, 80, 0), { para: 0, block: 0, cell: null, line: 0, run: 1, offset: 2 }, 'x at the o|r boundary = caret after "o"');
-  eq(hit(m, 30, 0), { para: 0, block: 0, cell: null, line: 0, run: 0, offset: 3 }, 'click in run 0');
-  eq(hit(m, 105, 0), { para: 0, block: 0, cell: null, line: 0, run: 1, offset: 4 }, 'between "worl" and "d" = offset 4 in run 1');
+  eq(hit(m, 70, 0), { para: 0, block: 0, cell: null, cellPara: null, line: 0, run: 1, offset: 1 }, 'x at the w|o boundary = caret after "w"');
+  eq(hit(m, 75, 0), { para: 0, block: 0, cell: null, cellPara: null, line: 0, run: 1, offset: 1 }, 'x inside "o" advance = caret BEFORE it (no half-char centering — documented rule)');
+  eq(hit(m, 80, 0), { para: 0, block: 0, cell: null, cellPara: null, line: 0, run: 1, offset: 2 }, 'x at the o|r boundary = caret after "o"');
+  eq(hit(m, 30, 0), { para: 0, block: 0, cell: null, cellPara: null, line: 0, run: 0, offset: 3 }, 'click in run 0');
+  eq(hit(m, 105, 0), { para: 0, block: 0, cell: null, cellPara: null, line: 0, run: 1, offset: 4 }, 'between "worl" and "d" = offset 4 in run 1');
 }
 
 // ── wrap + y bands (nearest baseline, midpoints) ──────────────────────────
@@ -93,12 +93,12 @@ const hit = (m: LineModel, x: number, y: number): Hit =>
   const lh = lineHeight(mk(''), {}); // fallback spacing constant
   eq(m.lines[0].baseline, 0, 'first baseline at y');
   ok(Math.abs(m.lines[1].baseline - lh) < 1e-9, 'second baseline one line-height down');
-  eq(hit(m, 20, lh * 0.4), { para: 0, block: 0, cell: null, line: 0, run: 0, offset: 2 }, 'y above the midpoint → line 0');
-  eq(hit(m, 20, lh * 0.6), { para: 0, block: 0, cell: null, line: 1, run: 0, offset: 12 }, 'y below the midpoint → line 1 (offset inside the RUN text: "aaaa bbbb " = 10 + 2)');
-  eq(hit(m, 20, lh / 2), { para: 0, block: 0, cell: null, line: 0, run: 0, offset: 2 }, 'exact midpoint ties to the EARLIER line');
-  eq(hit(m, -3, m.lines[1].baseline), { para: 0, block: 0, cell: null, line: 1, run: 0, offset: 10 }, 'mép trái dòng 2 = charStart của "cccc" trong run text');
-  eq(hit(m, 41, m.lines[1].baseline), { para: 0, block: 0, cell: null, line: 1, run: 0, offset: 14 }, 'mép phải dòng 2 = end (10 + 4)');
-  eq(hit(m, 15, m.lines[1].baseline), { para: 0, block: 0, cell: null, line: 1, run: 0, offset: 11 }, 'click giữa dòng 2 → đúng offset run');
+  eq(hit(m, 20, lh * 0.4), { para: 0, block: 0, cell: null, cellPara: null, line: 0, run: 0, offset: 2 }, 'y above the midpoint → line 0');
+  eq(hit(m, 20, lh * 0.6), { para: 0, block: 0, cell: null, cellPara: null, line: 1, run: 0, offset: 12 }, 'y below the midpoint → line 1 (offset inside the RUN text: "aaaa bbbb " = 10 + 2)');
+  eq(hit(m, 20, lh / 2), { para: 0, block: 0, cell: null, cellPara: null, line: 0, run: 0, offset: 2 }, 'exact midpoint ties to the EARLIER line');
+  eq(hit(m, -3, m.lines[1].baseline), { para: 0, block: 0, cell: null, cellPara: null, line: 1, run: 0, offset: 10 }, 'mép trái dòng 2 = charStart của "cccc" trong run text');
+  eq(hit(m, 41, m.lines[1].baseline), { para: 0, block: 0, cell: null, cellPara: null, line: 1, run: 0, offset: 14 }, 'mép phải dòng 2 = end (10 + 4)');
+  eq(hit(m, 15, m.lines[1].baseline), { para: 0, block: 0, cell: null, cellPara: null, line: 1, run: 0, offset: 11 }, 'click giữa dòng 2 → đúng offset run');
   eq(m.maxw, 100, 'maxw = widest text line');
 }
 
@@ -109,8 +109,8 @@ const hit = (m: LineModel, x: number, y: number): Hit =>
   const items = m.lines[0].items;
   eq(items.length, 3, 'word + tab + word');
   eq(items[1].w, twip(720) - 10, 'tab advances to the next 720-twip stop');
-  eq(hit(m, 20, 0), { para: 0, block: 0, cell: null, line: 0, run: 0, offset: 1 }, 'tab left half = caret before \t');
-  eq(hit(m, 40, 0), { para: 0, block: 0, cell: null, line: 0, run: 0, offset: 2 }, 'tab right half = caret after \t');
+  eq(hit(m, 20, 0), { para: 0, block: 0, cell: null, cellPara: null, line: 0, run: 0, offset: 1 }, 'tab left half = caret before \t');
+  eq(hit(m, 40, 0), { para: 0, block: 0, cell: null, cellPara: null, line: 0, run: 0, offset: 2 }, 'tab right half = caret after \t');
 }
 
 // ── paragraph index across blocks ─────────────────────────────────────────
@@ -118,7 +118,7 @@ const hit = (m: LineModel, x: number, y: number): Hit =>
   const m = layoutBlocks({ ...WIDE, blocks: [...para(mk('xy')), ...para(mk('zw'))] });
   eq(m.lines.length, 2, 'two paragraphs, two lines');
   eq(m.lines[1].para, 1, 'line 1 belongs to block 1');
-  eq(hit(m, 15, m.lines[1].baseline), { para: 1, block: 1, cell: null, line: 1, run: 0, offset: 1 }, 'hit resolves the paragraph');
+  eq(hit(m, 15, m.lines[1].baseline), { para: 1, block: 1, cell: null, cellPara: null, line: 1, run: 0, offset: 1 }, 'hit resolves the paragraph');
 }
 
 // ── image line: media surfaces outside `lines`, flow position kept ────────
@@ -128,7 +128,7 @@ const hit = (m: LineModel, x: number, y: number): Hit =>
   eq(m.lines.length, 1, 'image takes its OWN line — only the text line is in lines');
   eq(m.media.length, 1, 'media entry emitted');
   eq([m.media[0].w, m.media[0].h], [10, 5], 'wp:extent EMU → px');
-  eq(hit(m, 5, m.media[0].y + 1), { para: 0, block: 0, cell: null, line: 0, run: 0, offset: 0 }, 'hit in the image band resolves to the nearest text line (mid-char → before it)');
+  eq(hit(m, 5, m.media[0].y + 1), { para: 0, block: 0, cell: null, cellPara: null, line: 0, run: 0, offset: 0 }, 'hit in the image band resolves to the nearest text line (mid-char → before it)');
   ok(m.bottom >= m.media[0].y + m.media[0].h, 'bottom covers the media rect');
 }
 
@@ -138,7 +138,7 @@ const hit = (m: LineModel, x: number, y: number): Hit =>
   eq(m.lines.length, 3, 'two w:br → text, empty, text');
   const empty = m.lines[1];
   eq(empty.items.length, 0, 'middle line has no items');
-  eq(hit(m, 0, empty.baseline), { para: 0, block: 0, cell: null, line: 1, run: 0, offset: 0 }, 'empty line → caret placeholder at paragraph start (A4 refines)');
+  eq(hit(m, 0, empty.baseline), { para: 0, block: 0, cell: null, cellPara: null, line: 1, run: 0, offset: 0 }, 'empty line → caret placeholder at paragraph start (A4 refines)');
 }
 
 // ── T-060 C3: table cell identity — `para` collides, `block`+`cell` do not ─
@@ -168,6 +168,29 @@ const hit = (m: LineModel, x: number, y: number): Hit =>
   const cAfter = caretXY(m, measure, { para: 2, run: 0, offset: 2 });
   ok(!!cAfter && cAfter.y === m.lines[3].baseline, 'caretXY(block 2) = the after-table line, NOT the cell line sharing pi=2');
   ok(!!cAfter && cAfter.line === 3, 'caretXY returns the line index (additive, editor Up/Down uses it)');
+}
+
+// ── T-A30 §5.5: cellPara identity + caretXY full-identity + tie-break ─────
+{
+  const cellP = (t: string): Block => ({ Paragraph: { align: null, ind: null, runs: [mk(t)] } });
+  const blocks: Block[] = [
+    { Table: { rows: [[{ blocks: [cellP('cde'), cellP('f')] }, { blocks: [cellP('gh')] }]] } },
+  ];
+  const m = layoutBlocks({ ...WIDE, blocks });
+  eq([m.lines[0].block, m.lines[0].cell, m.lines[0].cellPara], [0, [0, 0], 0], 'cell A para 0: table block + cell + cellPara 0');
+  eq([m.lines[1].block, m.lines[1].cell, m.lines[1].cellPara], [0, [0, 0], 1], 'cell A para 1: same cell, next cellPara');
+  eq([m.lines[2].block, m.lines[2].cell, m.lines[2].cellPara], [0, [0, 1], 0], 'cell B para 0: own cell, cellPara 0');
+  ok(m.lines[0].baseline === m.lines[2].baseline, 'cells of one row share the exact baseline (the collision case)');
+  eq(hit(m, 15, m.lines[0].baseline), { para: 1, block: 0, cell: [0, 0], cellPara: 0, line: 0, run: 0, offset: 1 }, 'tie-break: x inside cell A span → cell A line');
+  eq(hit(m, 510, m.lines[2].baseline), { para: 1, block: 0, cell: [0, 1], cellPara: 0, line: 2, run: 0, offset: 1 }, 'tie-break: x inside cell B span → cell B line (NOT the earlier same-baseline cell A line)');
+  const cFull = caretXY(m, measure, { para: 0, run: 0, offset: 0, cell: [0, 0], cellPara: 1 });
+  ok(!!cFull && cFull.line === 1 && cFull.y === m.lines[1].baseline, 'caretXY with cell+cellPara resolves the SECOND cell paragraph');
+  const cLegacy = caretXY(m, measure, { para: 0, run: 0, offset: 0 });
+  ok(!!cLegacy && cLegacy.line === 0, 'legacy caret (no cell fields) keeps block-only matching — first line of the block');
+  const cNestedCell = caretXY(m, measure, { para: 0, run: 0, offset: 0, cell: [0, 1], cellPara: null });
+  ok(cNestedCell === null, 'nested-caret coordinates (cellPara null) match nothing here — only nested-table lines carry cellPara null');
+  const hCell = hit(m, 5, m.lines[1].baseline);
+  eq([hCell.cell, hCell.cellPara], [[0, 0], 1], 'hit in cell A para 2 carries the full identity');
 }
 
 // ── T-060 C3: hitTest ↔ caretXY round-trip (char boundaries are exact

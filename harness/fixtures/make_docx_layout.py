@@ -92,7 +92,18 @@ def p(text: str) -> str:
     return f'<w:p><w:r><w:t xml:space="preserve">{text}</w:t></w:r></w:p>'
 
 
-def document_xml() -> str:
+# T-A30 gate-15 flag (`table` argv): one 1×2 table appended before the
+# sectPr — the default output stays byte-identical (gate 12 + parity share
+# this generator without the flag).
+TABLE = (
+    '<w:tbl><w:tr>'
+    '<w:tc><w:p><w:r><w:t xml:space="preserve">Alpha cell</w:t></w:r></w:p></w:tc>'
+    '<w:tc><w:p><w:r><w:t xml:space="preserve">Beta cell</w:t></w:r></w:p></w:tc>'
+    '</w:tr></w:tbl>'
+)
+
+
+def document_xml(with_table: bool = False) -> str:
     body = [
         p("Quick view layout fixture"),
         p(FILLER),
@@ -103,6 +114,10 @@ def document_xml() -> str:
         # is exactly last-baseline + last-line-height
         f'<w:p>{drawing("rIdImg1", *IMG1_EMU, 1)}</w:p>',
         f'<w:p>{drawing("rIdImg2", *IMG2_EMU, 2)}</w:p>',
+    ]
+    if with_table:
+        body.append(TABLE)
+    body += [
         '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/>'
         '<w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134"/></w:sectPr>',
     ]
@@ -114,6 +129,7 @@ def document_xml() -> str:
 
 def main():
     out = sys.argv[1] if len(sys.argv) > 1 else "/tmp/nanooffice-quickview-layout.docx"
+    with_table = len(sys.argv) > 2 and sys.argv[2] == "table"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("[Content_Types].xml", CONTENT_TYPES)
         z.writestr("_rels/.rels", ROOT_RELS)
@@ -121,7 +137,7 @@ def main():
         z.writestr("word/styles.xml", STYLES)
         z.writestr("word/media/image1.png", IMG1)
         z.writestr("word/media/image2.png", IMG2)
-        z.writestr("word/document.xml", document_xml())
+        z.writestr("word/document.xml", document_xml(with_table))
     print(out)
 
 
