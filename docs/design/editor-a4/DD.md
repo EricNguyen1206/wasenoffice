@@ -533,7 +533,141 @@ merge/split cell · cross-cell selection · tblPr/tcPr styling · arrows nhảy 
 · word vắt run / kéo-theo-word sau dblclick · Cmd-A bao gồm cell content · blink
 visual gate.
 
+### 5.6 Slice A4 #4 — save-fidelity: hyperlink + sectPr vào model, settings/theme/docProps passthrough, refuse-warn (T-A31, 04.10 — design-first)
+
+> Phạm vi theo handoff: xóa lớp MẤT của matrix §5.1 + ĐÓNG OQ-L01-2 — slice tiềm năng
+> đóng rung A4. OUT (ceiling §5.6h/§10): UI tạo/sửa/xoá hyperlink · link styling render ·
+> Tab nav giữa cell · tạo/xoá bảng/hàng/cột · merge/split · cross-cell selection ·
+> nested-table editing · fields/footnotes/tracked-changes VÀO model (chỉ detect + warn) ·
+> preedit displacement · paste RTF/HTML · pgMar vào viewer layout (T-V6).
+
+**a) Hyperlink → model.** `w:hyperlink` (§17.16.22, child của `w:p` §17.3.1.22, chứa run
+content — `w:r` §17.3.2.25) là NHÓM runs mang một link property; parser FLATTEN nhóm (tiền
+lệ flatten ảnh/break trong run — DD §3.1), KHÔNG thêm node trung gian:
+
+| Tầng | Thay đổi |
+|---|---|
+| Model `Run` | +`link: Option<Hyperlink>` — `Hyperlink { rel_id: Option<String>, anchor: Option<String>, target: Option<String>, external: bool }` (`r:id` + target đã resolve qua part rels; `w:anchor` = link nội bộ, không relationship; `external` = TargetMode của rel nguồn) |
+| Parser | `parse_paragraph`: Start `w:hyperlink` → đọc attrs, parse runs CON stamp `link`; r:id phải resolve được qua part rels với rel-type hyperlink (external = URI giữ nguyên, internal = `resolve_target`); thiếu CẢ `r:id` lẫn `w:anchor` → ParseError (refuse, tiền lệ numPr); hyperlink LỒNG = recurse với link của cấp trong (link trong cùng thắng) |
+| Writer | `paragraph()` gộp CHẠY runs liền kề có `link` bằng nhau → 1 phần tử `<w:hyperlink r:id="…"( w:anchor="…")>`; rel re-emit với id CỦA MODEL (tiền lệ image — `r:id` phải re-resolve giống nhau); `TargetMode="External"` khi external (rels_xml +cờ external); root thêm `xmlns:r` khi có link (mở rộng `blocks_contain_image` → checks link cùng walk) |
+| Editor | **0 dòng mutation**: link rides run — insert extends run (giữ link), enter clone run (link đi cả 2 nửa), backspace/delete/range gộp run KÉO theo link của run ĐẦU (chữ của run sau nhập vào nhóm link trước — semantics subset, tách/gộp nhóm link theo đúng Word = ceiling); KHÔNG refuse hyperlink ở verb nào |
+| RenderDoc | **0 đổi** — runs trong link = runs thường (layout/draw không biết link; styling xanh/gạch = ceiling A5) |
+
+Round-trip invariant giữ: 2 hyperlink kề nhau CÙNG target gộp thành 1 element khi ghi —
+model GiỐNG NHAU (biên element không vào model). Adjacent khác link/không-link tách đúng.
+
+**b) sectPr vào model — GO (ước lượng ~nửa ngày < ngưỡng ~1 ngày).** Mid-doc section =
+`w:sectPr` trong `w:pPr` (parent pPr §17.3.1.26 — "mọi section trừ section CUỐI lưu sectPr
+làm con của paragraph CUỐI section" — spec-ref mirror ISO/IEC 29500-1 1st ed, trang
+SectionProperties). Typed-minimal, KHÔNG opaque-capture:
+
+- `PageMar { top, right, bottom, left, header, footer, gutter: Option<i64> }` (`w:pgMar`
+  §17.6.11, attrs verify qua trang PageMargin — twips, signed).
+- `Section { page: Option<Page>, mar: Option<PageMar> }`; `Paragraph.sect: Option<Section>`
+  (mid-doc); `Document.page_mar: Option<PageMar>` (CUỐI — giữ thêm pgMar cạnh pgSz có sẵn;
+  matrix dòng "sectPr CUỐI mất pgMar" thu hẹp — viewer layout KHÔNG đụng, T-V6 vẫn là nhà
+  render parity).
+- Parser: `parse_ppr` Start `w:sectPr` → parse pgSz+pgMar vào `para.sect`; body-level đang
+  có `parse_sectpr` mở rộng ăn thêm pgMar. Con khác của sectPr (cols/header-ref/docGrid…)
+  skip — detect-warn mục (d) surfacing.
+- Writer: pPr phát sectPr SAU jc (thứ tự CT_PPr: pStyle, numPr, ind, jc, sectPr); body-level
+  sectPr thêm pgMar sau pgSz.
+- **Mutation semantics:** `enter` tách paragraph — sect ở lại paragraph ĐẦU (head), paragraph
+  mới clone pPr KHÔNG sect (1 section break không được nhân bản); gộp paragraph (backspace/
+  delete/range) theo luật có sẵn "pPr ĐẦU thắng" → sect của head sống. Ghi vào comment + test.
+- Viewer/editor layout KHÔNG đổi (vẫn pgSz cuối + margin cố định 1in — pgMar chỉ preserve
+  trong model, không consume — OUT ceiling).
+
+**c) settings.xml + theme + docProps → part passthrough byte-exact.** Model + JSON CLI
+**bất biến** (passthrough KHÔNG vào `Document`): writer tự khám phá trong `media_src`
+(package nguồn) khi write — mở rộng pattern media_src T-A26:
+
+| Part | Khám phá | Rel trong output |
+|---|---|---|
+| `word/settings.xml` | doc-rels của main part nguồn, rel-type `…/relationships/settings` | doc-level, id fresh |
+| `word/theme/theme1.xml` (đường tùy nguồn) | doc-rels nguồn, rel-type `…/relationships/theme` | doc-level, id fresh, target = `rel_target("word", part)` |
+| `docProps/core.xml` | package-rels nguồn, rel-type `…/package/2006/relationships/metadata/core-properties` | package-level (`_rels/.rels`) |
+| `docProps/app.xml` | package-rels nguồn, rel-type `…/extended-properties` | package-level |
+
+Part thiếu/hỏng rel → skip im (thoái hóa về hành vi cũ); content-type copy VERBATIM từ
+`[Content_Types].xml` nguồn (Override với đúng type nguồn — không hardcode bảng type);
+part không được declare trong nguồn → skip (nguồn lỗi, không nhân bản lỗi). Đối xứng:
+parser 0 đổi → JSON CLI byte-identical với file không mang các part này; crate round-trip
+giữ chúng byte-exact; T-A24 canonical open-side hưởng theo (engine Editor.bin nhận đủ).
+
+**d) Refuse-warn khi mở (ĐÓNG OQ-L01-2 = mở + cảnh báo, KHÔNG refuse — D1 engine vẫn là
+chế độ nâng cao).** `detect_save_losses(pkg) -> Vec<String>` trong crate — scan thô phần
+document.xml của main part (byte pattern, không đụng model):
+
+| Construct | Pattern |
+|---|---|
+| tracked changes | `<w:ins `/`<w:ins>` · `<w:del `/`<w:del>` (biên từ chặn false-positive `<w:insideH`/`<w:delText` — sau "ins"/"del" phải là space hoặc `>`) |
+| fields | `<w:fldChar` · `<w:instrText` |
+| footnotes/endnotes | `<w:footnoteReference` · `<w:endnoteReference` |
+| sectPr lạ | block `<w:sectPr…</w:sectPr>` chứa con `<w:…>` khác pgSz/pgMar (pgMar mới vào model — còn lại = mất khi save) |
+
+UX shape: `nano_light_open` chạy detect trên bytes gốc → log ADDITIVE
+`nano light warn: save will drop: …` (hằng `SMOKE_RE_NL_WARN` vào khối đóng băng
+smoke-lib CÙNG commit emitting end) + payload `NanoLightDoc` +`warnings: string[]`
+(camelCase) → banner tạo động trong editor window (div gắn vào body — editor.html KHÔNG
+đụng, đang dirty rebrand của user) + không chặn open/save.
+
+**e) Matrix §5.1 — cập nhật từng dòng (kết quả ghi lại sau khi land, cùng criterion):**
+
+| Dòng §5.1 | Trước | Sau slice | Criterion kiểm chứng |
+|---|---|---|---|
+| hyperlink | ❌ MẤT CẢ TEXT | **GIỮ** — nhóm link {rel_id, anchor, target, external} + runs | gate 15 parse-back: rel + target + run text nguyên; parity-a2 invariant |
+| sectPr GIỮA | ❌ drop | **GIỮ** pgSz+pgMar typed; con khác = warn | gate 15 parse-back JSON `sect` khớp; parity-a2 invariant |
+| sectPr CUỐI | giữ pgSz, mất pgMar | giữ pgSz + **pgMar**; con khác = warn | parity-a2 invariant + fixture assert |
+| settings.xml | ❌ mất | **GIỮ byte-exact** (passthrough) | gate 15 sha256 settings.xml saved == snapshot |
+| theme fonts | ❌ mất | **GIỮ byte-exact** | gate 15 sha256 theme part |
+| docProps | ❌ mất | **GIỮ byte-exact** | gate 15 sha256 core/app |
+| tracked changes / footnotes / fields | ❌ mất im | vẫn mất (ngoài model) + **WARN khi mở** | detect unit tests + gate 15 `warndoor` |
+
+**f) Evidence + gate plan (ADDITIVE — log contract 9–15 đóng băng).**
+
+- Crate: fixture corpus mới `harness/fixtures/make_docx_fidelity.py` → `corpus-a2/fidelity-ta31.docx`
+  (hyperlink external + internal anchor, mid sectPr pgSz+pgMar, settings/theme/docProps)
+  — parity-a2 glob tự nhặt; **parity-a2.sh +check passthrough**: settings/core/app +
+  `word/theme/*` có trong input → sha256 input == crate-rt output (mở rộng check (d)
+  media); INVARIANT + constructs mới vào bảng DD K01 §5.1 khi land.
+- Gate 15: fixture `make_docx_layout.py` +flag `fidelity` (default byte-identical —
+  gate 12/parity dùng chung generator, proven diff như T-A30); gate chạy
+  `make_docx_layout.py $FIXTURE table fidelity`. Probe (CÙNG edit() của phím): sau chain
+  T-A30, hitTest vào dòng chứa link text → insert `T31LINK` XUYÊN qua link run → save 1
+  lần → parse-back asserts: (1) run mang `link.target == https://…` vẫn tồn tại và chứa
+  `T31LINK` (edit xuyên link, link sống), (2) internal anchor hyperlink còn, (3) paragraph
+  mang `sect` với pgSz+pgMar khớp fixture, (4) `word/settings.xml` + theme + docProps
+  sha256 == snapshot pre-save, (5) rels đã-save chứa hyperlink rel TargetMode External,
+  (6) positive KHÔNG có dòng `nano light warn:` (không false-positive trên fixture sạch).
+  Negative mới ×2: `NANO_LIGHT_NEGATIVE=linkdoctor` (assert target `WRONG-TARGET` → cắn
+  exit 1 — gate ĐỌC link từ parse-back, pattern doctor) + `NANO_LIGHT_NEGATIVE=warndoor`
+  (fixture tiêm `<w:ins>` quanh 1 run → positive chạy hết, assert đòi warnings chứa
+  "hyperlinks" (sai thật tế) → cắn — gate ĐỌC nội dung warn + detect bắn đúng tracked
+  changes qua đường open thật).
+- Bonus engine-oracle: `smoke-render.sh <file-đã-save-từ-NL>` exit 0 — file ghi bằng writer
+  mới mở render GREEN trong ENGINE (canonical open-side T-A24 hưởng writer mới — chứng
+  phụ).
+- Rust unit tests: hyperlink round-trip qua crate thật (external + anchor + rels emitted,
+  TargetMode), sectPr mid+final round-trip, passthrough byte-exact fixture, detect units
+  (ins/del/fldChar/footnote/sectPr-lạ + không false-positive trên fixture sạch), editor:
+  link rides enter/undo + sect ở lại head khi enter.
+- Số KHÔNG đổi: gate 12 (16 dòng · 601.7 · 600.5 · lhs 17.9); gate 14 chỉ được cộng
+  (hiện 103); parity-view chỉ bắt buộc nếu đụng layout.ts — **KHÔNG đụng** (resolve/layout
+  0 diff).
+
+**g) Kết quả slice — ghi khi land.**
+
+**h) Ceilings mở/đóng — ghi §10:** ĐÓNG "hyperlink/sectPr (OQ-L01-2 = slice #4)" của
+§5.5(i). MỚI: UI tạo/sửa/xoá link · link styling render · link semantics đầy đủ Word
+(tách/gộp nhóm link khi edit cắt qua biên — đang giữ link run đầu) · `w:history`/tooltip/
+tgtFrame attrs · sectPr con khác (cols/docGrid/header-ref trong sectPr — đang warn) ·
+fields/footnotes/tracked-changes vào model (đang detect+warn) · docGrid/lnNumType ·
+settings.xml VÀO model (defaultTabStop consume — đang passthrough byte) · pgMar consume
+vào viewer layout (T-V6).
+
 ## 6. Rủi ro + mitigations
+
 
 
 | Rủi ro | Mitigation |
