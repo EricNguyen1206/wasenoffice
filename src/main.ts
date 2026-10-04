@@ -164,7 +164,10 @@ const CONTROL_SKIN =
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <header class="flex items-center gap-3 px-4 py-2">
-    <h1 class="m-0 text-[1.1em]">NanoOffice <small class="font-normal opacity-60">PH-0 spike</small></h1>
+    <div class="flex items-center gap-2">
+      <img src="/src/assets/logo.png" alt="NanoOffice" class="h-6 w-6 rounded object-contain" />
+      <h1 class="m-0 text-[1.1em]">NanoOffice <small class="font-normal opacity-60">PH-0 spike</small></h1>
+    </div>
     <form id="open-form" class="flex flex-1 gap-2">
       <input
         id="doc-path"
