@@ -303,6 +303,93 @@ tại thời điểm mutate).
 | parity-view | **6/6 PASS exit 0** — maxdy 0.64/4.07/0.00/6.47/2.73/2.73, maxdx 47.00 đúng bảng §5.5 (layout.ts CÓ đụng — caretXY block-match + `line` index additive; draw path px-identical) | OQ-V01-1 |
 | cargo test | 38 shell (+4: range same-para/cross-para+refuse, verbs-replace, undo-restore-sel) + 12 crate, tuần tự rc=0 | verify FULL 19 ▸ steps exit 0 ×2 |
 
+### 5.4 Slice A4 #2 — IME composite tiếng Việt + clipboard plain-text + Cmd-A (T-A29, 03.10.2026 — design-first)
+
+> Phạm vi theo handoff: composition pipeline (đóng OQ-L01-3) · clipboard
+> plain-text Cmd-C/X/V · Cmd-A select-all · gate 15 mở rộng. Dựng trên seam
+> T-A28 (SelRange + ranged mutations). **Rust: 0 đổi dự kiến** — paste = chuỗi
+> `insert`/`enter` có sẵn, cut = ranged `backspace` (T-A28 §5.3c), copy =
+> walk model TS-side. OUT (ceiling — §10): double/triple-click · caret blink ·
+> selection/sửa trong bảng · arrows nhảy qua bảng · Up/Down bỏ qua dòng ảnh ·
+> paste format RTF/HTML · IME ngôn ngữ khác · undo gộp theo từ · C4/C5 còn lại.
+
+**a) Composition pipeline (đóng OQ-L01-3).** State TS-local trong `editor.ts`:
+`composing: boolean` + `preedit: string`. Listener `compositionstart` /
+`compositionupdate` / `compositionend` trên window (spec-ref: W3C UI Events —
+`CompositionEvent.data`, `KeyboardEvent.isComposing`):
+
+| Event | Hành vi |
+|---|---|
+| `compositionstart` | `composing = true`, `preedit = ''`, evidence, render |
+| `compositionupdate` | `preedit = ev.data`, evidence, render |
+| `compositionend` | `compositionEnd(ev.data)` — clear state, evidence, `data != '' → edit({kind:'insert', text: data, caret, sel})` |
+
+`compositionEnd` là hàm core MÀ listener end lẫn probe cùng gọi — commit =
+**1 command `insert` = 1 undo snapshot** (semantics `apply` Rust: 1 mutation
+1 snapshot, T-A28 giữ nguyên — **0 đổi Rust**); data rỗng (IME cancel) → không
+commit. **Keydown guard ĐẦU handler**: `composing || ev.isComposing` → return
+KHÔNG preventDefault (IME sở hữu phím trong lúc compose — keydown printable
+hiện hành chỉ chạy cho non-IME, đường cũ nguyên vẹn). Preedit vẽ tại caret
+trong **overlay callback của `editor.ts`** (overlay param `drawModel` —
+`render.ts` KHÔNG đụng): text tại `caretXY(caret)` + underline 1px tại
+`baseline+2` (mirror underline draw), font = run tại caret (`PLAIN_RUN` fallback
+para rỗng). **Không displacement inline** — glyph đứng dưới bị đè; ceiling
+preedit re-layout post-A4. **Product vs probe**: product = event thật từ
+webview IME (marked text cần editable sink — ceiling hidden-input §10, pipeline
+sẵn sàng nhận event theo spec); probe gate = dispatch **CompositionEvent thật**
+cho start/update (wiring E2E — precedent KeyboardEvent T-A28) + commit qua
+`await compositionEnd(...)` (async commit phải await deterministic — listener
+end wrap CÙNG fn; precedent offsetX: probe gọi handler trực tiếp khi synthetic
+không đủ). Nếu run gate đầu thấy WKWebView constructing rớt `data` (evidence
+cắn) → fallback probe gọi handler trực tiếp, cập nhật dòng này trong commit code.
+
+**b) Bảng clipboard + Cmd-A.** Nguồn clipboard chốt: **webview async Clipboard
+API (`navigator.clipboard`) + session stash fallback** — KHÔNG Tauri plugin
+(dep mới + license gate không mua gì: stash đảm bảo round trong page; ghi chú
+`main.ts` `frame.allow` chỉ áp iframe engine). Chỉ plain-text.
+
+| Phím | Hành vi | Biên |
+|---|---|---|
+| Cmd-C | `selectionText()` (walk model TS, dưới) → `writeText` + `clipStash` | không selection → no-op, không evidence |
+| Cmd-X | copy (op=`cut`) + `edit({kind:'backspace', caret, sel})` — ranged delete T-A28 | không selection → no-op |
+| Cmd-V | `readText()` → lỗi/bị chặn → `clipStash` (evidence `src=system\|stash`) → normalize `\r\n?`→`\n` → split: phần đầu `insert` (sel ride — thay selection), mỗi `\n` kế = `enter` cmd (semantics §3.1), phần rỗng = para rỗng | N dòng = N undo units (ceiling gộp 1 unit); `\t` → Rust refuse control chars (loud, ceiling) |
+| Cmd-A | anchor `(0,0,0)` + focus = cuối **paragraph block CUỐI** (walk ngược bỏ Table; runs rỗng → `(p,0,0)`); `caret = focus`, `render`, `emitSel` (span −1 cross-para) | không có paragraph nào → no-op; paste/delete sau Cmd-A span bảng → refuse TOÀN BỘ lệnh (T-A28, đúng ý) |
+
+`selectionText()` (walk model, ordered `[s,e]` theo key `(para,run,offset)`):
+same-para same-run = `slice(s.offset, e.offset)`; cross-run = head suffix +
+middle full + tail prefix; cross-para join `'\n'`; **block Table contribute
+rỗng** (plain-text). Paste-event listener KHÔNG làm — không editable sink để
+event thật bắn vào; ceiling đi cùng hidden-input. Gate không probe cut riêng:
+2 nửa (copy + ranged backspace) đã proven riêng.
+
+**c) Evidence + gate plan (ADDITIVE — log contract 9–15 đóng băng).** Log mới:
+
+- `nano light composition: state=<start|update|end> data=<text>`
+- `nano light clipboard: op=<copy|paste|copy-all|cut> chars=<n> sys=<ok|fail|system|stash> text=<escaped>`
+  — `text` escape `'\n'`→`'\\n'` (log 1 dòng); `chars` = độ dài TRƯỚC escape.
+
+Hằng `SMOKE_RE_NL_COMPOSE` + `SMOKE_RE_NL_CLIP` vào khối đóng băng smoke-lib
+CÙNG commit emitting end. Gate 15 mở rộng — chain ADDITIVE sau T28 redo,
+TRƯỚC save (1 save phủ mọi parse-back assert): compose telex-style
+`Xin chao` → `Xin chào` (2 bước preedit) → commit → `undo`/`redo` (1 unit
+proof) → shift+Left ×8 chọn `Xin chào` → copy → ArrowLeft ×4 (collapse, caret
+trước `chào`) → paste (chèn giữa → `Xin Xin chàochào`) → Cmd-A → copy-all
+(text chứa marker + `paragraphT28` + `Xin Xin chàochào`; `chars` == len của
+text unescaped — assert tự-consistent) → ArrowRight (collapse) → save →
+parse-back assert marker + `paragraphT28` + `Xin chào` + `Xin Xin chàochào`.
+Selection asserts: giữ `max(span) ≥ min_span` + MỚI `min(span) == −1` (Cmd-A
+cross-para evidence). Negative mới `NANO_LIGHT_NEGATIVE=clipdoctor`: clipboard
+assert đòi `text == 'WRONG-CLIP'` + `chars == 999999` → cắn exit 1 (gate ĐỌC
+số liệu clipboard, pattern seldoctor). Rust unit tests: 0 mới (không đổi
+Rust); TS: 0 harness mới — gate 15 là tầng E2E duy nhất của slice này.
+
+**d) Đóng OQ-L01-3** — pipeline composition per spec UI Events đã implement +
+probe E2E gate 15; real-IME engagement (hidden editable sink) là ceiling §10
+(phụ thuộc WebKit IME routing, không phải pipeline — thử khi user gõ thật,
+không chặn slice này).
+
+**e) Kết quả slice — điền khi land.**
+
 ## 6. Rủi ro + mitigations
 
 | Rủi ro | Mitigation |
@@ -340,14 +427,25 @@ tại thời điểm mutate).
 - [ ] **OQ-L01-2:** khi mở file chứa construct MẤT trong matrix §5.1 (hyperlink/
   sectPr giữa/ins-del): Nano Light nên refuse-mở (an toàn dữ liệu) hay mở + cảnh báo
   mất-khi-save? Vòng 1: mở im lặng (matrix công khai); chạm user thật thì quyết.
-- [ ] **OQ-L01-3:** IME composite (tiếng Việt telex kiểu marked-input qua bàn phím
-  ảo) — keydown có đủ không cần beforeinput? Thử khi user gõ thật.
+- [x] **OQ-L01-3: CHỐT ở §5.4 (T-A29, 03.10) —** composition pipeline per spec
+  UI Events (`compositionstart/update/end`, commit = 1 insert = 1 undo unit,
+  preedit overlay, keydown tắt khi composing) + probe E2E gate 15; real-IME
+  engagement (hidden editable sink) là ceiling §10 — pipeline không phụ thuộc nó.
 
 ## 10. Ceilings vòng 1 (ponytail — ghi thẳng, không giả vờ)
 
 - Selection kéo/mũi tên di chuyển caret: **ĐÓNG ở slice A4 #1 (T-A28, §5.3)** —
-  ceilings còn lại của selection ghi ở §5.3(g): IME/clipboard/double-click/
-  select-all/blink/sửa trong bảng/arrows không nhảy qua bảng.
+  ceilings còn lại của selection ghi ở §5.3(g): double-click/blink/sửa trong
+  bảng/arrows không nhảy qua bảng.
+- IME composite + clipboard + select-all: **ĐÓNG ở slice A4 #2 (T-A29, §5.4)** —
+  ceilings còn lại: **hidden editable sink** (real-IME engagement — WebKit cần
+  editable để giao marked text; pipeline §5.4a sẵn sàng nhận event) · menu/
+  context-menu paste event (cùng rợ hidden-input) · preedit displacement inline
+  (đang đè glyph, không re-layout) · paste multi-line gộp 1 undo unit (đang N
+  units cho N dòng) · paste `\t` refuse (Rust control chars) · paste format
+  RTF/HTML · IME ngôn ngữ khác tiếng Việt · undo gộp theo từ · double/triple-
+  click · caret blink · selection/sửa trong bảng · arrows nhảy qua bảng ·
+  Up/Down bỏ qua dòng ảnh.
 - Ảnh: vẫn own-line (ceiling V3 kế thừa); enter/backspace quanh run chứa ảnh giữ
   ảnh theo run (kèm rules §3.1).
 - Edit trong bảng: refuse (toạ độ `pi` cell mơ hồ — ceiling T-V7 walk).
