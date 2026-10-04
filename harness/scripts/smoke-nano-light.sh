@@ -260,10 +260,7 @@ cell_evs = re.findall(r"nano light cell: op=(\S+) row=(\d+) col=(\d+) para=(\d+)
 need(len(cell_evs) >= 3, f"expected ≥3 `nano light cell:` evidence lines, got {cell_evs}")
 need(any(c[2] == "1" for c in cell_evs), f"no cell evidence for cell B (col=1) — {cell_evs}")
 
-# (11) T-A31 save-fidelity (DD L01 §5.6): the probe typed INSIDE the link
-# text; the parse-back must carry the hyperlink group (target + anchor +
-# grown run), the mid-document sectPr (pgSz+pgMar), and NO warn on the
-# clean fixture (the lossy-construct warning path is the warndoor negative).
+# (11) T-A31 save-fidelity (DD L01 §5.6): warn + link + sect survives; the lossy-warning path is the warndoor negative.
 warns = re.findall(r"nano light warn: (.*)", "\n".join(lines))
 if negative == "warndoor":
     need(warns and any("hyperlinks" in w for w in warns),
@@ -313,9 +310,9 @@ def fidelity_shas(path):
     with zipfile.ZipFile(path) as z:
         return {n: hashlib.sha256(z.read(n)).hexdigest() for n in names}
 
-need(fidelity_shas(snapshot) == fidelity_shas(fixture),
-     f"settings/theme/docProps changed on save: "
-     f"{sorted(set(fidelity_shas(snapshot).items()) ^ set(fidelity_shas(fixture).items()))[:4]}")
+pt_before, pt_after = fidelity_shas(snapshot), fidelity_shas(fixture)
+need(pt_before == pt_after,
+     f"settings/theme/docProps changed on save: {sorted(set(pt_before.items()) ^ set(pt_after.items()))[:4]}")
 if negative != "doctor":
     saved_rels = zipfile.ZipFile(fixture).read("word/_rels/document.xml.rels").decode()
     need('TargetMode="External"' in saved_rels and "nanooffice-fidelity" in saved_rels,

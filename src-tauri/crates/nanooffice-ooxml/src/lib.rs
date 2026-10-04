@@ -441,9 +441,8 @@ pub fn parse_docx_file(path: impl AsRef<std::path::Path>) -> Result<Document, Pa
 
 /// Constructs the model does NOT carry — the open surface warns instead of
 /// refusing (T-A31, DD L01 §5.6d): tracked changes, fields, footnotes/
-/// endnotes, and section properties beyond pgSz/pgMar are lost on a
-/// Nano Light save. Byte scan of the main part; an unreadable package (the
-/// parse would refuse it anyway) warns nothing.
+/// endnotes, sectPr children beyond pgSz/pgMar. Byte scan of the main part;
+/// an unreadable package (parse would refuse it anyway) warns nothing.
 pub fn detect_save_losses(zip_bytes: &[u8]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let doc_part = match main_part(zip_bytes) {
@@ -474,8 +473,7 @@ pub fn detect_save_losses(zip_bytes: &[u8]) -> Vec<String> {
     out
 }
 
-/// Main document part name of a package (the same lookup `parse_docx` does;
-/// `_rels/.rels` is read directly — `load_rels` is for a PART's rels).
+/// Main document part name of a package (`_rels/.rels` read directly — `load_rels` is for a PART's rels).
 fn main_part(zip_bytes: &[u8]) -> Option<String> {
     let bytes = opc::try_part_bytes(zip_bytes, "_rels/.rels")?;
     let rels = opc::parse_rels(&String::from_utf8(bytes).ok()?).ok()?;

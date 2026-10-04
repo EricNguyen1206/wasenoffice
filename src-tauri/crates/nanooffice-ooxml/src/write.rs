@@ -708,9 +708,8 @@ fn blocks_need_rels(blocks: &[Block]) -> bool {
 }
 
 /// Discover the passthrough parts of the SOURCE package (settings/theme/
-/// docProps — T-A31): copy bytes + content type + rel (fresh ids) into the
-/// output. Missing/destructured pieces skip silently — the output degrades
-/// to the pre-T-A31 behavior, never fails the save.
+/// docProps — T-A31): copy bytes + content type + rel (fresh ids); broken
+/// pieces skip silently — the output degrades to the pre-T-A31 behavior.
 fn passthrough_parts(
     src: &[u8],
     used_doc_ids: &mut BTreeSet<String>,
@@ -728,8 +727,7 @@ fn passthrough_parts(
     let Ok(src_ct) = opc::ContentTypes::parse(&ct_str) else {
         return Ok(());
     };
-    // NB: `_rels/.rels` is read directly — `load_rels` appends `.rels` to a
-    // PART's file name, and the package root has none.
+    // NB: `_rels/.rels` read directly — `load_rels` appends `.rels` to a PART's file name, the package root has none.
     let root_rels = opc::try_part_bytes(src, "_rels/.rels")
         .and_then(|b| String::from_utf8(b).ok())
         .and_then(|s| opc::parse_rels(&s).ok())

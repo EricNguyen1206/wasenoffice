@@ -814,8 +814,7 @@ async function main(): Promise<void> {
           await edit({ kind: 'enter', caret, sel: null });
           await edit({ kind: 'insert', text: 'T30C2', caret, sel: null });
         }
-        // T-A31 (§5.6f): type INSIDE the hyperlink text — the link group must
-        // survive the save with its rel + target + (grown) run text
+        // T-A31: type INSIDE the link text — the group must survive save (rel + target + runs)
         const linkLine = model.lines.find((l) => l.items.some((it) => it.text.includes('fidelity')));
         const linkItem = linkLine?.items.find((it) => it.text.includes('fidelity'));
         if (linkLine && linkItem) {
