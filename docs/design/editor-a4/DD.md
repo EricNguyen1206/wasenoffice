@@ -45,7 +45,7 @@ window-scoped + undo + save-đường-crate; **C3** command layer song song deli
 | Redo | **Có** — stack redo (snapshot + caret), mutation mới clear redo (~4 dòng, dưới ngưỡng ~30 dòng của handoff) | Không redo: đã rẻ, cắt đi không tiết kiệm gì |
 | Dirty | **So bậc `Document != saved`** (`PartialEq` có sẵn; `saved` = clone lúc save) → undo về đúng điểm save tự về sạch | Cờ dirty đếm lệnh: undo về điểm save vẫn bẩn (sai ngữ nghĩa) |
 | Toạ độ mutation | **Đúng hệ `hitTest` T-V7**: `{para, run, offset}` (offset run-relative, caret TRƯỚC ký tự offset) | Hệ toạ độ mới (char index toàn tài liệu): phải map 2 chiều, duplicate hitTest |
-| Bảng (table cell) | **Refuse hẳn vòng 1**: `body[para]` là Table → lỗi rõ ràng; chỉ edit paragraph top-level. Layout `pi` của cell đụng độ pi block kế (ceiling T-V7 walk) → toạ độ mơ hồ | Edit trong cell: phải sửa cách đếm `pi` trong layout → đụng parity asset (cấm) |
+| Bảng (table cell) | **Refuse hẳn vòng 1** (số liệu pi mơ hồ) — **ĐÓNG ở slice A4 #3 (T-A30, §5.5)**: identity `block`+`cell`+`cellPara` giải tọa độ, single-cell edit mở; cross-cell/nested vẫn refuse | Edit trong cell mà không sửa cách đếm `pi` → trúng sai block (tái hiện bằng walk T-060) |
 | Caret vẽ | **Rect tĩnh (không blink) vòng 1**; forward-map `(para,run,offset) → (x, baseline)` = walk item của LineModel (`ri`/`charStart` công khai) + measurer — pure fn ở `editor.ts`, KHÔNG đụng layout.ts | Blink: nice-to-have, thêm timer + trạng thái — để slice sau nếu UX đòi; forward-map thêm vào layout.ts: module đang là asset đóng băng parity, thêm export vô ích rủi ro |
 | Selection kéo | **Ceiling slice sau** (shift+click/mũi tên) — ghi §8 | — |
 | Save | **`write_docx(&doc, Some(&media_src))` → tmp cạnh file gốc → rename** (pattern `save.rs`); đường save ENGINE giữ nguyên byte-identical | Qua Editor.bin/x2t: trái ý nghĩa rung (K01 §2: đường Nano Light là lúc thay) |
@@ -401,7 +401,140 @@ không chặn slice này).
 | parity-view | **KHÔNG chạy — `layout.ts` KHÔNG đụng** (0 diff; render.ts/viewer.ts cũng 0) | điều kiện parity chỉ khi đụng asset |
 | cargo test | 38 shell + 12 crate rc=0 tuần tự — KHÔNG đổi (Rust 0 đổi: paste = chuỗi insert/enter, cut = ranged backspace T-A28) | verify FULL exit 0 ×2, 19 ▸ steps |
 
+### 5.5 Slice A4 #3 — double/triple-click + caret blink + MỞ edit trong bảng single-cell (T-A30, 03.10.2026 — design-first)
+
+> Phạm vi theo handoff: địa chỉ caret trong cell (`cellPara` additive) · bỏ refuse
+> edit-trong-cell (địa chỉ pi-mơ-hồ đã giải bằng `block`+`cell` T-A28/T-060 — refuse gốc
+> §2 hết cơ sở) · selection same-cell · arrows trong cell · dblclick word + triple
+> paragraph · blink · Cmd-A quyết · gate 15 mở rộng. Lý do refuse §2 ("toạ độ pi cell
+> mơ hồ") không còn: `Caret.para` = body block index + `cell` identity (T-060 C3),
+> resolution đi block=Table → cell → cellPara. Round-trip bảng qua `write_docx` proven
+> T-A23 — slice chỉ đổi CONTENT trong cell, KHÔNG thêm tblPr/tcPr vào model.
+> OUT (ceiling §5.5i/§10): Tab/Shift-Tab nav giữa cell · tạo/xoá bảng/hàng/cột ·
+> merge/split cell · cross-cell selection · tblPr/tcPr styling · arrows nhảy qua bảng ·
+> Up/Down bỏ qua dòng ảnh · hyperlink/sectPr (OQ-L01-2 = slice #4) · RTF/HTML paste ·
+> preedit displacement · paste multi-line 1 undo · hidden editable sink.
+
+**a) Địa chỉ cell — `cellPara` (additive 3 tầng).** Cell chứa NHIỀU block (CT_Tc);
+`cell=[row,col]` chỉ định cell, thiếu trục paragraph-within-cell. Thêm
+`cellPara: number | null`:
+
+| Tầng | Thay đổi |
+|---|---|
+| `layout.ts` (parity asset — additive) | `TextLine` +`cellPara` (index block của paragraph trong cell.blocks; top-level + nested = null) · `Hit` +`cellPara` · `walk` +param `cellBlocks` (bs là blocks cell CẤP 1 → paragraph nhận index i; recurse vào cell bảng LỒNG truyền false → cellPara null) |
+| Rust `Caret` | +`cell_para: Option<usize>` `#[serde(default)]` (payload cũ parse được — rule additive) |
+| TS `Caret` | +`cellPara: number | null` |
+
+`caretXY` refinement (additive, backward-compatible): match `line.block === caret.para`
+như cũ; KHI caret mang `cellPara` (≠ null) THÊM điều kiện `line.cellPara === caret.cellPara`
++ `line.cell` deep-equal `caret.cell`; caretlegacy không mang field → hành vi block-only
+nguyên vẹn (gate 14 T-060 checks không đụng). Bảng LỒNG: cellPara null → mọi verb refuse
+loudly ("nested table content is not editable") — chặn cả nhánh silent-wrong-cell (cellPara
+của cell trong lồng resolve nhầm sang paragraph cell ngoài).
+
+**b) Resolution path Rust — verbs generic trên `Vec<Block>`.** Các free fn
+`apply_insert/backspace/delete/enter/delete_range` đổi param `&mut Document` →
+`&mut Vec<Block>` (thân không đổi — cùng ngữ nghĩa index, `paragraph_at(body, idx)`
+chỉ còn arm top-level + refuse Table-stale). `apply` dispatch:
+
+```
+caret.cell = None            → verb(&mut doc.body, caret, sel)          (đường cũ)
+caret.cell = Some([r,c])     → cell_blocks_mut(doc, caret)  // body[para]=Table → rows[r][c].blocks
+                               caret' = { para: cellPara, ..caret }   (rebase)
+                               sel endpoints rebase cùng cách (đã check same-cell)
+                               verb(blocks, caret', sel') → caret'' → { para: table_block, ..caret'' }
+```
+
+Refuse rules (thay refuse cell≠null cũ): caret cell≠null mà `cell_para` None → refuse;
+selection endpoint Cell↔top-level hoặc Cell↔Cell khác → refuse (message rõ); same-cell
+(kể cả cross-cellPara) OK. Backspace đầu cell / delete cuối cell = no-op (không thoát
+khỏi cell — cùng logic biên `para == 0` / block kế là Table vốn có của code generic);
+enter trong cell = paragraph MỚI trong cell.blocks. Snapshot undo giữ caret đầy đủ
+identity — undo/redo trả đúng chỗ trong cell.
+
+**c) Selection same-cell.** TS `moveTo`: điều kiện lập selection = cả 2 đầu cùng ngữ
+cảnh (`inSameCell`: cùng null, hoặc cùng `cell` deep-equal VÀ cả hai `cellPara ≠ null`);
+không thoả → collapse về plain caret (rule T-A28 giữ nguyên hình thức). `cmpCaret` thêm
+`cellPara ?? 0` vào key (trước `run`) — ordering cross-cellPara trong cell đúng; top-level
+không đổi. `drawSelection`: match dòng theo ngữ cảnh selection (in-cell → chỉ dòng cùng
+cell + cellPara ≠ null; top-level → chỉ dòng cell null); lineStart/lineEnd carets mang
+đủ identity để `caretXY` trúng đúng dòng. `selectionText` (copy) walk theo container
+(`containerOf`: cell → tc.blocks + cellPara, top-level → body + para) — copy/cut trong
+cell hoạt động. Rust tự kiểm tra lại cả 2 endpoint (defense in depth — rule T-A28).
+
+**d) Arrows trong cell + fix hitTest tie-break (bắt buộc cho feature).** `stepH`:
+chạy trên container của caret — biên run/paragraph giữ nguyên logic; hết container =
+dừng (top-level: chạm bảng/dưới doc; in-cell: KHÔNG thoát khỏi cell — Tab nav giữa cell
+là ceiling). `moveV`: dòng kế phải cùng ngữ cảnh (in-cell → cùng `cell`, top-level →
+`cell == null` — skip-cell-line cũ giữ nguyên); goal-x trong cell (hitTest tự clamp vào
+span dòng). Home/End/Cmd+←/→ giữ identity qua spread (không rớt cell như trước).
+
+**Fix hitTest (đổi hành vi có kiểm soát):** 2 cell CÙNG HÀNG có baseline TRÙNG NHAU
+(layout side-by-side cùng yCur) — y-pick hiện tại (greedy so kề, tie giữ dòng TRƯỚC)
+làm MỌI click vào cell phải resolve về dòng cell trái. Fix: chuyển so-kề sang
+so-with-best + tie-break theo x-span (dòng chứa x thắng khi baseline bằng nhau).
+Table-free byte-identical (không bao giờ có baseline trùng); draw path KHÔNG qua hitTest
+→ parity-view không chịu ảnh hưởng; gate 14 +checks chứng minh (cặp collision → hitTest
+trả dòng đúng cell theo x; 93 checks cũ nguyên). hitTest `Hit` +cellPara stamp từ line.
+
+**e) Double-click word + triple-click paragraph.** WKWebView không có event triple;
+`dblclick` event không cho count mở rộng → **đếm click thủ công**: mousedown cách
+< 500 ms + < 4 px của click trước → count+1, else reset 1 (chuẩn chung các editor);
+probe gọi `mouseDownAt(x, y, extend, clicks)` trực tiếp (tiền đề offsetX T-A28 —
+deterministic, không phụ thuộc timing). Handler mousedown thật tính count rồi truyền
+cùng. Semantics (từ layout tokens — words/spaces có sẵn, KHÔNG regex mới):
+
+| Gesture | Hành động |
+|---|---|
+| click (1) | đặt caret như cũ |
+| double (2) | chọn word: expand quanh offset trong run text qua biên non-space (`selectWord`); clicked-space → collapse; word KHÔNG vắt run (tokens không vắt run — ceiling) |
+| triple (3) | chọn paragraph: anchor đầu (run 0, offset 0) → focus cuối (run cuối, offset len) của ĐÚNG paragraph chứa caret (cellPara trong cell) |
+
+Cả hai hoạt động top-level + trong cell (selection same-cell rule mục c); `emitSel`
+chạy sau mỗi gesture (evidence span chứng minh). Sau dblclick/triple, gõ = insert thay
+selection (đường range T-A28 có sẵn). Ceiling: kéo-chữ-theo-word sau dblclick · word
+vắt run.
+
+**f) Caret blink.** `caretOn: boolean` + interval 500 ms toggle → **repaint từ model
+cache** (drawModel lại, KHÔNG re-layout, KHÔNG evidence); composing → caretOn ép true
+(caret đặc, IME đang sở hữu); mọi render()/moveTo gọi `wakeCaret()` (reset phase). Không
+gate visual — constraint: redraw path dùng lại `render()`-họ (repaint là nửa draw của
+render, cùng overlay callback).
+
+**g) Cmd-A với bảng — GIỮ NGUYÊN (top-level only).** Lý do: mở rộng bao gồm cell
+content tạo span Cell↔top-level mà rule same-cell (mục c) refuse từ đầu — Cmd-A rồi
+edit sẽ luôn lỗi, UX giả; giữ span chỉ-paragraph → Cmd-A + edit refuse loud trên
+"range spans a table" (rule T-A28 có sẵn, đúng ngữ nghĩa). Không dòng code nào đổi.
+
+**h) Evidence + gate plan (ADDITIVE — log contract 9–15 đóng băng).** Log mới
+`nano light cell: op=<kind> row=<r> col=<c> para=<cellPara>` emit từ `edit()` TS khi
+cmd caret mang cell. Hằng `SMOKE_RE_NL_CELL` vào khối đóng băng smoke-lib CÙNG commit
+emitting end. Fixture gate 15: `make_docx_layout.py` +flag `table` (appends 1×2
+"Alpha cell"/"Beta cell" — **default KHÔNG đổi byte** vì gate 12 + parity-view dùng
+chung generator). Probe chain thêm (trước save duy nhất): dblclick word "Beta" trong
+cell B → gõ `T30B` (thay word) → triple-click paragraph MEDIUM (dòng text top-level
+cuối) → gõ `T30P` (thay cả paragraph) → click cuối dòng cell A → gõ `T30C` → enter →
+gõ `T30C2` → save → reopen. Parse-back (crate CLI) assert MỚI: `T30B`/`T30P`/`T30C`/
+`T30C2` có · "Beta" + "bundled font metrics" MẤT (word/para bị thay thật) · "cell"
+còn (word kế nguyên) · JSON structure: bảng 2 cell, cell A 2 paragraph (enter trong
+cell), cell B text đổi ĐÚNG word. Selection evidence: span của dblclick = len("Beta")
+= 4 — assert `4 in spans`. Negative mới `NANO_LIGHT_NEGATIVE=celldoctor`: assert cell A
+1 paragraph (contradict thật tế 2) → cắn exit 1 — chứng minh gate ĐỌC cấu trúc cell
+từ parse-back, pattern doctor T-A27..A29. Rust unit tests: cell verbs qua `apply`
+(insert/enter/backspace + caret identity往返) · save round-trip qua crate thật (cell
+đổi, cell khác + cấu trúc nguyên) · selection same-cell OK + mixed refuse · stale/
+nested refuse. Gate 14 +checks: cellPara stamp, caretXY full-identity, tie-break
+collision. Gate 12 số KHÔNG đổi; parity-view 6/6 ×2 BẮT BUỘC (layout.ts đụng).
+
+**i) Ceilings mở/đóng** — ghi §10: ĐÓNG "blink", "selection/sửa trong bảng (refuse)",
+"double/triple-click". MỚI: Tab/Shift-Tab nav giữa cell · tạo/xoá bảng/hàng/cột ·
+merge/split cell · cross-cell selection · tblPr/tcPr styling · arrows nhảy QUA bảng
+(vẫn no-op tại biên) · Up/Down bỏ qua dòng ảnh · nested-table editing (cellPara null)
+· word vắt run / kéo-theo-word sau dblclick · Cmd-A bao gồm cell content · blink
+visual gate.
+
 ## 6. Rủi ro + mitigations
+
 
 | Rủi ro | Mitigation |
 |---|---|
@@ -459,7 +592,9 @@ không chặn slice này).
   Up/Down bỏ qua dòng ảnh.
 - Ảnh: vẫn own-line (ceiling V3 kế thừa); enter/backspace quanh run chứa ảnh giữ
   ảnh theo run (kèm rules §3.1).
-- Edit trong bảng: refuse (toạ độ `pi` cell mơ hồ — ceiling T-V7 walk).
+- Edit trong bảng: **ĐÓNG ở slice A4 #3 (T-A30, §5.5)** — refuse §2 bỏ (identity
+  block+cell+cellPara giải tọa độ); ceilings còn lại của bảng ghi ở §5.5(i).
 - Canvas cao = toàn tài liệu, cap 8192 px logic (ceiling V5 kế thừa; pagination
   post-A3).
-- Blink caret: không (rect tĩnh).
+- Blink caret: **ĐÓNG ở slice A4 #3 (T-A30, §5.5f)** — 500 ms toggle, repaint từ model
+  cache, đặc khi composing; visual gate = ceiling §5.5(i).
