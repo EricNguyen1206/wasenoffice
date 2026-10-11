@@ -240,17 +240,21 @@
   }
 
   function installErrorForwarding() {
+    // stack capture (T-047): trigger evidence for the engine's pre-contentReady error-dialog mapping
     window.addEventListener('error', function (ev) {
       var target = ev.target;
       var resource = target && (target.src || target.href);
-      forwardLog(
-        'error',
-        resource ? 'resource error: ' + resource
-                 : (ev.message + ' @ ' + ev.filename + ':' + ev.lineno + ':' + ev.colno)
-      );
+      if (resource) {
+        forwardLog('error', 'resource error: ' + resource);
+        return;
+      }
+      var stack = ev.error && ev.error.stack ? ' | stack: ' + String(ev.error.stack).slice(0, 500) : '';
+      forwardLog('error', ev.message + ' @ ' + ev.filename + ':' + ev.lineno + ':' + ev.colno + stack);
     }, true);
     window.addEventListener('unhandledrejection', function (ev) {
-      forwardLog('error', 'unhandled rejection: ' + String(ev.reason));
+      var reason = ev.reason;
+      var stack = reason && reason.stack ? ' | stack: ' + String(reason.stack).slice(0, 500) : '';
+      forwardLog('error', 'unhandled rejection: ' + String(reason) + stack);
     });
   }
 

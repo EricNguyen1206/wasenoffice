@@ -416,7 +416,7 @@ và `<m_sFileFrom>` trỏ vào thư mục chứa `changes/`.
 |---|---|---|
 | Shim bridge đầy đủ | `ONLYOFFICE/desktop-sdk` ✅ | nguồn chân lý native surface + cơ chế inject |
 | Build engine/x2t từ source | `ONLYOFFICE/build_tools` | pipeline deps + WASM + packaging |
-| Mac app layer (editor:config answer, recents push, app lifecycle) | repo mac của ONLYOFFICE (chưa xác định) | fidelity UI desktop còn thiếu: editor:config reply, `onupdaterecents` push, dialog lỗi iLa từ viewer api (diagnostics 27.09) |
+| Mac app layer (editor:config answer, recents push, app lifecycle) | repo mac của ONLYOFFICE (chưa xác định) | fidelity UI desktop còn thiếu: editor:config reply, `onupdaterecents` push (diagnostics 27.09; dialog mở-file đã giải minh — mục dưới) |
 
 ## Viewer oracle CDP — cursor-probe walk trên app thật (mới 03.10, T-V4, rung A3)
 
@@ -453,3 +453,33 @@ tái lập: boot `ONLYOFFICE --remote-debugging-port=9222` nền + `open -g <fil
 - **Quit app:** `osascript quit app "ONLYOFFICE"` có thể BỎ QUA im lặng trên app chưa từng
   được activate (observed 03.10) — harness phải verify port 9222 đóng + fallback
   `kill -TERM` pid listener.
+
+## Dialog "An error has occurred while opening the file" — catch-all của engine, KHÔNG phải viewer api (11.10, T-047)
+
+Sửa nhận định 27.09 (T-002): `iLa` trong sdk-all-min KHÔNG phải emitter viewer api —
+là hằng error-id minified `Kd.ConvertationOpenError=Kd.iLa` (sdk-all-min.js, khối
+`c_oAscError.ID`). Build word chứa **0** call-site `AscViewer.open` (grep sdk-all.js).
+Lỗi đi đường chính thống `asc_onError` của api chính:
+
+- Nguồn phát "thỉnh thoảng": `sdkjs/common/apiBase.js:356-386` — `sendUnhandledError`
+  map MỌI uncaught error/rejection đầu tiên thành `ConvertationOpenError` (Critical)
+  khi `isDocumentLoadComplete=false`, hoặc `EditingError` (NoCritical) khi đã mở xong;
+  wiring one-shot `window.onerror`/`window.onunhandledrejection` tại `apiBase.js:379-424`
+  (tự khôi phục handler cũ sau lỗi ĐẦU TIÊN — một lỗi lạc = một dialog, open vẫn tiếp tục).
+  `isDocumentLoadComplete=true` chỉ đặt trong `onDocumentContentReady`
+  (`apiBase.js:1511`) → cửa sổ dính lỗi = api-creation → contentReady.
+- Dialog do web-apps render: đăng ký `Main.js:241` (`asc_registerCallback('asc_onError')`),
+  handler `onError` `Main.js:2176`, case `ConvertationOpenError` → `openErrorText`
+  (`Main.js:2213-2216`), level Critical + `canRequestClose` → title "Error" +
+  'Press "OK" to close the editor' (`Main.js:2424-2442`) — khớp ảnh 27.09 (document
+  render hoàn chỉnh ĐẰNG SAU dialog). Đường `showerror` (`Main.js:259`) loại — chỉ
+  ComboSeriesError trigger (Toolbar.js:2605, ChartSettings.js:804).
+- Các raise-site `ConvertationOpenError` khác đều LOẠI cho flow offline của mình:
+  `Local/common.js:199/211` (EndLoad data rỗng/binary_content — deterministic, mâu thuẫn
+  render-OK), `apiBase.js:1470` (crypt), `apiBase.js:2243/2256` (co-edit service),
+  `word/api.js:13277/13293` (compare/merge), `editorscommon.js:1067` (server error map),
+  `editorscommon.js:16162` (crypto), `frameManager.js:174` (openExternalReference),
+  `pdf/src/viewer.js:1205/1261` (build pdf).
+- Trigger cụ thể (lỗi lạc nào) CHƯA định danh — hiếm (0/15 boot gate 10-11.10); shim
+  (`src/shim/desktopEditor.js` installErrorForwarding) đã log raw error + stack từ 11.10
+  → lần occurrence kế cho ra bằng chứng trigger ngay trên stdout.
