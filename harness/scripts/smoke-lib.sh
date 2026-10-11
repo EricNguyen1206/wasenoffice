@@ -122,6 +122,11 @@ smoke_boot() {
   local log="${!#}"
   local -a envs=()
   while [ $# -gt 1 ]; do envs+=("$1"); shift; done
+  # Rule 6b (AGENTS.md): mỗi boot gate chạy NỀN — Accessory activation policy
+  # (lib.rs đọc NANO_OFFICE_BACKGROUND): process không bao giờ activate, không
+  # cướp Space/menu bar; window vẫn visible cho engine probes. Đặt ĐẦU mảng —
+  # env trùng tên phía sau ghi đè (env giữ phép gán CUỐI).
+  envs=("NANO_OFFICE_BACKGROUND=1" "${envs[@]}")
   # Job control: background job có process group riêng để trap EXIT giết cả
   # cây (pnpm → tauri-cli → cargo → app) mà không đụng process lạ.
   set -m

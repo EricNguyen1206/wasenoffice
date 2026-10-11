@@ -82,13 +82,15 @@ pub(crate) fn open_surface_window(
     title: String,
     tag: &str,
 ) -> Result<(), String> {
-    WebviewWindowBuilder::new(app, label, WebviewUrl::App(html.into()))
+    let mut b = WebviewWindowBuilder::new(app, label, WebviewUrl::App(html.into()))
         .title(title)
         .inner_size(1000.0, 700.0)
         .visible(true)
-        .focused(false)
-        .build()
-        .map_err(|e| format!("{tag}: open window: {e}"))?;
+        .focused(false);
+    if let Some((x, y)) = crate::bg_sliver_position(app) {
+        b = b.decorations(false).position(x, y);
+    }
+    b.build().map_err(|e| format!("{tag}: open window: {e}"))?;
     Ok(())
 }
 

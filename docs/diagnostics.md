@@ -94,6 +94,45 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 - **Gotcha:** diagnostics.md dùng chung với session song song (entry Rule 6b của họ
   chưa commit) — stage hunk của mình bằng strip-script, giữ nguyên working copy của họ.
 
+## 2026-10-04 · Rule 6b enforce: Accessory activation policy set TRƯỚC run (hết cướp focus khi gate boot app)
+
+- **Triệu chứng (user báo 04.10):** mỗi lần agent boot app để test, màn Terminal mất
+  focus — phải Cmd-Tab lại. `visible(true)+focused(false)` (enforce 03.10) chỉ dừng
+  WINDOW lấy key, không dừng PROCESS activate.
+- **Nguyên nhân (đọc tao 0.35.3 source):** `app_state.rs::launched()` (=
+  `applicationDidFinishLaunching`) chạy `apply_activation_policy` (đọc aux-state,
+  default Regular) → `window_activation_hack` (`makeKeyAndOrderFront` mọi window
+  visible) → `activateIgnoringOtherApps(true)` — app Regular activate lúc launch,
+  TRƯỚC khi tauri setup chạy.
+- **Bẫy:** tauri `setup` chạy tại `RunEvent::Ready` — BÊN TRONG event loop, SAU
+  launched → `set_activation_policy` trong setup (cả qua `app.handle()`, message
+  xử lý sau) là MUỘN, vẫn steal (đo được: app giữ front ~6 s). Đường đúng:
+  `Builder::build()` → `App::set_activation_policy(&mut)` khi runtime còn `Some` →
+  ghi thẳng aux-state delegate → `launched()` áp Accessory TRƯỚC activate
+  (`lib.rs::run`, env `NANO_OFFICE_BACKGROUND=1`).
+- **Wire 1 nhà:** `smoke-lib.sh::smoke_boot` prepend `NANO_OFFICE_BACKGROUND=1`
+  (đầu mảng envs — env trùng tên sau đó vẫn ghi đè) → mọi gate boot tự nền.
+- **Bằng chứng:** `lsappinfo list` app `type="UIElement"` (Accessory applied);
+  System Events `frontmost` 27/27 mẫu (300 ms) = Terminal xuyên boot + mở window;
+  gate 12 GREEN (first-draw 27 ms, RSS 118 MB); verify FULL exit 0.
+- **Gotcha đo đạc:** `lsappinfo front` thỉnh thoảng báo app UIElement là "front"
+  (z-order layer) — chỉ tin System Events `frontmost` (menu-bar owner thật).
+  Full-hide vẫn cấm (engine save-probes throttled — 03.10); Accessory giữ window
+  visible nên probes nguyên vẹn.
+- **Follow-up cùng ngày — offscreen sliver (user chốt phương án A):** Accessory chỉ
+  bỏ activation, window vẫn `orderFront` đè lên màn (tao window.rs:631). Fix: bg mode
+  → `decorations(false)` + `position(sw-8, sh-8)` trên primary monitor
+  (`lib.rs::bg_sliver_position`, áp cho cả 4 builder — 3 trong setup + `viewer.rs::
+  open_surface_window` cho window UI mở runtime). Invariant: **≥1 pixel lộ = full
+  render** (WebKit check occlusion theo-window, không theo-area; full-occluded mới
+  throttle — T-050/full-hide 4fe56f9), position-only nên `innerWidth/innerHeight`
+  không đổi → số liệu frozen của gate 12/15 byte-identical. Bằng chứng hình học:
+  CGWindowList (không cần quyền assistive) — screen logical 1440×900 → window
+  bounds X=1432 Y=892 W=1000 H=700, sliver 8×8 góc dưới-phải, còn lại ngoài màn;
+  CGWindowList `.optionOnScreenOnly` vẫn liệt kê → WindowServer tính là on-screen.
+  Lưu ý đo: System Events đọc `position of window` cần Accessibility (bị từ chối
+  -1719) — dùng swift CoreGraphics thay thế.
+
 ## 2026-10-04 · T-055 #6: review kiến trúc post-rung A4 (3 reviewer song song — 7 LAND / 4 DEFER / 7 REJECT)
 
 - **Bằng chứng (3 commit, mỗi cụm 1 lần verify FULL exit 0):** `712bee4` TS C1+C2+C3

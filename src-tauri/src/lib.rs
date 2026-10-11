@@ -244,13 +244,34 @@ fn frontend_log(level: String, message: String) {
     }
 }
 
+/// Rule 6b bg-mode (NANO_OFFICE_BACKGROUND=1): origin placing the window with
+/// only an 8-logical-px patch inside the primary screen's bottom-right corner.
+/// Any unoccluded pixel keeps NSWindow occlusionState `visible` (WebKit
+/// throttles rAF/timers for FULLY occluded windows — full-hide killed the
+/// engine save-probes, commit 4fe56f9) so gate evidence renders at full speed
+/// while the window stays out of the user's working area. Position-only +
+/// borderless: innerWidth/innerHeight unchanged (frozen `viewer layout:`
+/// numbers byte-identical); constrainFrameRect doesn't touch borderless
+/// windows. None = not background mode → normal window.
+pub(crate) fn bg_sliver_position(app: &tauri::AppHandle) -> Option<(f64, f64)> {
+    if !std::env::var("NANO_OFFICE_BACKGROUND").is_ok_and(|v| !v.is_empty() && v != "0") {
+        return None;
+    }
+    let m = app.primary_monitor().ok()??;
+    let sliver = 8.0;
+    Some((
+        m.size().width as f64 / m.scale_factor() - sliver,
+        m.size().height as f64 / m.scale_factor() - sliver,
+    ))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // `log` has no backend by default; PH-0 evidence (bridge UNIMPL hits,
     // protocol traffic) flows to stdout via env_logger.
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
-    tauri::Builder::default()
+    let mut app = tauri::Builder::default()
         .manage(Arc::new(FileRegistry::default()))
         .manage(Arc::new(viewer::QuickViewRequest::default()))
         .manage(Arc::new(editor::EditorSessions::default()))
@@ -305,6 +326,8 @@ pub fn run() {
             if let Err(e) = protocol::filesrv::spawn(registry) {
                 log::error!("{e} — document open will not work");
             }
+            // Rule 6b: offscreen sliver for every boot window (bg_sliver_position doc).
+            let bg_pos = bg_sliver_position(app.handle());
             // Probe gate for the shim's diagnostics probes (src/shim/delivery.js
             // `probesEnabled()`): default ON in debug builds (dev evidence
             // depends on them), OFF in release; NANO_OFFICE_PROBE=0/1 forces
@@ -375,6 +398,9 @@ pub fn run() {
                         .inner_size(1000.0, 700.0)
                         .visible(true)
                         .focused(false);
+                if let Some((x, y)) = bg_pos {
+                    win = win.decorations(false).position(x, y);
+                }
                 if !hit_test_js.is_empty() {
                     win = win.initialization_script_for_all_frames(hit_test_js);
                 }
@@ -394,6 +420,9 @@ pub fn run() {
                         .inner_size(1000.0, 700.0)
                         .visible(true)
                         .focused(false);
+                if let Some((x, y)) = bg_pos {
+                    win = win.decorations(false).position(x, y);
+                }
                 if !nl_probe_js.is_empty() {
                     win = win.initialization_script_for_all_frames(&nl_probe_js);
                 }
@@ -409,6 +438,9 @@ pub fn run() {
                 .min_inner_size(940.0, 560.0)
                 .visible(true)
                 .focused(false);
+            if let Some((x, y)) = bg_pos {
+                win = win.decorations(false).position(x, y);
+            }
             for js in [
                 ux_probe_js.as_str(),
                 save_probe_js.as_str(),
@@ -431,6 +463,28 @@ pub fn run() {
             let _ = win;
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    // Rule 6b (AGENTS.md): agent/dev boots must not steal the user's screen.
+    // NANO_OFFICE_BACKGROUND=1 (smoke-lib.sh::smoke_boot sets it for every
+    // gate boot) switches to Accessory policy — the app never activates, no
+    // Dock icon, windows still visible (full-hide breaks engine save-probes,
+    // throttled frames — verified 03.10). Product default (no env) stays a
+    // regular Dock app.
+    //
+    // MUST run BEFORE app.run(): tauri's setup hook fires at RunEvent::Ready,
+    // after macOS applicationDidFinishLaunching already applied the default
+    // Regular policy and activateIgnoringOtherApps (tao app_state.rs::launched
+    // → apply_activation_policy) — setting it there still steals focus for the
+    // first seconds (verified 04.10). App::set_activation_policy pre-run takes
+    // the runtime path straight into the tao delegate aux state, which
+    // launched() applies BEFORE activating.
+    #[cfg(target_os = "macos")]
+    if std::env::var("NANO_OFFICE_BACKGROUND").is_ok_and(|v| !v.is_empty() && v != "0") {
+        app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+        log::info!("background: accessory activation policy (NANO_OFFICE_BACKGROUND)");
+    }
+
+    app.run(|_app_handle, _event| {});
 }

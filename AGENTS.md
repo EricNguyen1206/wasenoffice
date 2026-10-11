@@ -49,8 +49,13 @@ nanooffice/
 5. **Verification trước khi tuyên bố xong.** Lệnh kiểm chứng + exit code phải được nêu trong
    báo cáo. "ZCode/chrome devtools nói chạy được" ≠ đã verify.
 6b. **App boot nền.** Mọi lần agent khởi động app (dev/binary/smoke gates/verify) phải
-   chạy background — không đưa cửa sổ lên frontmost, không cướp focus màn user (user
-   chỉ thị 03.10; enforce: Tauri `visible/focus:false`, `open -g`).
+   chạy background — không đưa cửa sổ lên frontmost, không cướp focus màn user, không
+   đè lên màn hình làm việc (user chỉ thị 03.10, mở rộng 04.10; enforce:
+   `NANO_OFFICE_BACKGROUND=1` → `ActivationPolicy::Accessory` set TRƯỚC `run()` +
+   offscreen sliver 8px góc dưới-phải (`bg_sliver_position` — giữ `occlusionState
+   .visible` cho engine probes) — `smoke_boot` tự bắn cho mọi gate boot; kèm Tauri
+   `focused:false`). Diagnostics 04.10: policy set trong `setup` là MUỘN — phải set
+   trước run.
 6. **MIT purity.** Không copy code/text từ `upstream/` vào code của mình (kể cả gián tiếp qua
    subagent); dependency mới phải qua license gate trong verify.sh; `engines/**` không commit.
    Xem `harness/rules/mit-purity.md`.
