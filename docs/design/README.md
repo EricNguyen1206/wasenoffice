@@ -22,6 +22,7 @@ type: registry
 | **K** | Converter core Track A (kiến trúc component — KHÔNG phải màn UI) | K01 | cấp 02.10 (T-A20) — handoff đề xuất "AC" 2 chữ vi phạm `[Chữ][2 số]`; folder đặt `converter-a2/` theo handoff |
 | **V** | Viewer Rust Track A (kiến trúc component — KHÔNG phải màn UI) | V01 | cấp 03.10 (T-A25) — folder đặt `viewer-a3/` theo handoff (tiền lệ K01) |
 | **L** | Editor core Track A "Nano Light" (kiến trúc component — KHÔNG phải màn UI) | L01 | cấp 03.10 (T-A27) — folder đặt `editor-a4/` theo handoff (tiền lệ K01/V01) |
+| **U** | UI editor riêng Track A (kiến trúc component UI — thay web-apps) | U01 | cấp 11.10 (T-A33) — folder đặt `editor-ui-a5/` (tiền lệ K01/V01/L01) |
 | **M** | Editor Markdown (kiểu Obsidian) | — | ngoài roadmap hiện tại — giữ namespace |
 | **T** | Editor txt (kiểu Notepad++) | — | ngoài roadmap hiện tại — giữ namespace |
 | **X** | Cài đặt | X01 | |
@@ -41,6 +42,7 @@ type: registry
 | K01 | Converter core A2 — Rust thay x2t (Track A) | — | 🟦 draft | Track A (A2) | [DD](converter-a2/DD.md) | — (parity plan trong DD §7) | `src-tauri/crates/nanooffice-ooxml` |
 | V01 | Viewer Rust đọc-only "quick view" A3 (Track A) | — | 🟦 draft | Track A (A3) | [DD](viewer-a3/DD.md) | — (kiểm thử trong DD §7) | `src-tauri/src/viewer.rs`, `src/viewer.html`, `src/viewer.ts` |
 | L01 | Editor core A4 "Nano Light" (Track A) | — | 🟦 draft | Track A (A4) | [DD](editor-a4/DD.md) | — (kiểm thử trong DD §7) | `src-tauri/src/editor.rs`, `editor.html`, `src/editor.ts` |
+| U01 | UI editor riêng A5 — chrome + framework (Track A) | — | 🟦 draft | Track A (A5) | [DD](editor-ui-a5/DD.md) | — (kiểm thử trong DD §7) | `src/editor.html`, `src/editor.ts`, `src/viewer/surface.ts` |
 
 ## Vòng đời trạng thái
 
