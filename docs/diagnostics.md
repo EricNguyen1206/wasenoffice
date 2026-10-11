@@ -8,6 +8,30 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-11 · T-049: save multi-format XLSX/PPTX wired — gate 16 tầng x2t, edit-probe cell/slide PARKED
+
+- **Nhiệm vụ:** save chỉ docx (gate 10) — xlsx 257 known-unwired, pptx unidentified.
+- **QĐ1 — pptx = fallback-extension:** KHÔNG truyền `m_nFormatTo` (514/515/516/512/1025/
+  8193/4097/258 đều fail từ oracle 29.09), extension output `.pptx` quyết định; variant mới
+  `SaveCode::WiredByExtension`, xoá `KnownUnwired`+`Unidentified` (0 consumer còn lại);
+  pdf = `NotWired` (pipeline khác `localSaveToDrawingFormat` — OQ-F01-1, 513 là export-PDF).
+- **QĐ2 — gate 16 ở tầng x2t, không boot app:** engine edit-probe cell/slide KHÔNG có API
+  public string-keyed — `asc_enterText` có trong source (`cell/api.js:9102`, `slide/api.js:8766`)
+  nhưng 0 hit trong build `engines/editors/sdkjs/{cell,slide}/sdk-all-min.js` (chỉ word có
+  export entry); `asc_Save` no-op khi doc chưa sửa (`apiBase.js:3130` guard
+  `asc_isDocumentCanSave()/_haveChanges()`) → "save-only qua engine UI" không đáng tin.
+  Gate = round-trip fixture thật → Editor.bin → params XML từ CHÍNH builder thuần mới tách
+  trong `bridge/save.rs` (không drift) → assert zip root part (`xl/workbook.xml` /
+  `ppt/presentation.xml`); negative = Editor.bin rác phải fail + pdf vẫn refuse.
+- **Bằng chứng:** gate 16 3/3 exit 0 (~1.6 s); cargo test --workspace 44 shell (1 ignored)
+  + 11 + 6 crate, 0 failed; verify FULL exit 0 (19 ▸ 20 steps) ×2.
+- **Gotcha:** x2t "Couldn't create temp folder" khi dir đích chưa tồn tại (test quên
+  `create_dir_all` workdir — app làm sẵn ở delivery); exit code cargo test qua pipe zsh
+  đọc `${pipestatus[1]}` (cắn lần 2 — lesson cũ tái diễn).
+- **Ceiling:** from-changes=true cho xlsx/pptx chưa chạy end-to-end (đợi engine edit-probe —
+  DoctRenderer apply cho cell/slide untested; font params đã truyền như docx). PDF save
+  OQ-F01-1. Spec-ref `AVS_OFFICESTUDIO_FILE_*` cho pptx code đúng chuẩn = việc sau.
+
 ## 2026-10-05 · Setup: gate-cmds 1 nhà + dev-check + pin 5 format mark + conventions vận hành (từ tự-review 04.10)
 
 - **Nguồn:** tự-review phiên T-055 #6 + T-V6 — 4 verify lãng phí, ~1 giờ parity chạy lại,

@@ -123,14 +123,25 @@ filetype/doctype/isForm); delivery nhánh pdf: `src-tauri/src/lib.rs`
 | cell (XLSX) | `AscFonts.mye.prototype.cZa` | GE/Wa/TR/iXb | `uac` | `Nmc` | `hj.RIe` |
 | slide (PPTX) | `AscFonts.K8d.prototype.VMa` | Pz/Na/gY/wFb | `FTb` | `D3b` | `mi.Zie` |
 
-- **Format code x2t cho save multi-format (quan sát 29.09 cho T-049 — chưa implement):**
+- **Format code x2t cho save multi-format (quan sát 29.09 cho T-049 — WIRED 11.10):**
   oracle params XML `<m_nFormatTo>`: **257 = XLSX** (exit 0, `file` = "Microsoft Excel
   2007+"); **513 = EXPORT PDF** từ editor binary bất kỳ (PPTY/XLSY → %PDF 1.7 — KHÔNG
-  phải PPTX); PPTX code chưa định danh (514/515/516/512/1025/8193/4097/258 đều fail) —
-  fallback không truyền `m_nFormatTo` mà dựa extension output hoạt động (PK hợp lệ);
-  cần spec-ref `AVS_OFFICESTUDIO_FILE_*` (core chưa clone) hoặc oracle tiếp. PPTY→PPTX
-  cần `<m_sAllFontsPath>`/`<m_sFontDir>` như DOCX (thiếu → `DoctRenderer error code=open`,
-  exit 80 — cùng signature bài học T-010).
+  phải PPTX); PPTX code chưa định danh (514/515/516/512/1025/8193/4097/258
+  đều fail) — **fallback WIRED: không truyền `m_nFormatTo`, extension output quyết định
+  (PK hợp lệ; gate 16 round-trip thật qua x2t GREEN 11.10)**. Code đúng chuẩn PPTX =
+  spec-ref `AVS_OFFICESTUDIO_FILE_*` (core chưa clone — KHÔNG clone chỉ vì format code).
+  PPTY→PPTX cần `<m_sAllFontsPath>`/`<m_sFontDir>` như DOCX (thiếu → `DoctRenderer error code=open`,
+  exit 80 — cùng signature bài học T-010); save.rs truyền font params cho MỌI format.
+- **Engine edit-probe cho cell/slide KHÔNG có API public string-keyed (quan sát 11.10, T-049 —
+  ceiling):** word export chain giữ `asc_AddText` (`upstream/sdkjs/word/api.js:15634`) + cả
+  `asc_enterText` (source `word/api.js:12792`, `cell/api.js:9102`, `slide/api.js:8766` — nhưng
+  KHÔNG nằm trong export table của cell/slide) → build minified: `asc_enterText` 0 hit trong
+  `engines/editors/sdkjs/cell/sdk-all-min.js` lẫn `slide/…`; cell/slide api.js source 0 entry
+  `prototype['asc_…']` (word: 727). `asc_Save` trên doc CHƯA sửa no-op (guard
+  `asc_isDocumentCanSave()/_haveChanges()` — `upstream/sdkjs/common/apiBase.js:3130`) → probe
+  "save-only qua engine UI" không đáng tin. Hệ quả: gate 16 = round-trip x2t qua chính params
+  builder của `bridge/save.rs` (fixture thật → Editor.bin → save params → zip root part);
+  marker-assert trong file save cell/slide đợi edit-probe (parked) — `inner_xml_path` vẫn None.
 
 ## Converter bundle (x2t) — layout + runtime deps (mới 30.09, T-A10, rung A1)
 
