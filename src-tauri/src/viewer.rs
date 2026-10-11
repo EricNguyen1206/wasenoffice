@@ -7,7 +7,7 @@
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use serde::Serialize;
 use tauri::State;
@@ -16,25 +16,7 @@ use nanooffice_ooxml::{Document, Page, PageMar, RBlock, RenderDoc};
 
 use crate::protocol::FileRegistry;
 
-/// Path handoff from the Quick View action to the window's single
-/// `viewer_open` call. `take()` semantics: one stash per open; a second click
-/// overwrites before its own window consumes — in practice viewer_open fires
-/// on page load, well before the next click (V5, DD §4).
-#[derive(Default)]
-pub struct QuickViewRequest(Mutex<Option<String>>);
-
-impl QuickViewRequest {
-    fn stash(&self, path: String) {
-        *self.0.lock().expect("quick-view request mutex poisoned") = Some(path);
-    }
-
-    fn take(&self) -> Option<String> {
-        self.0
-            .lock()
-            .expect("quick-view request mutex poisoned")
-            .take()
-    }
-}
+pub(crate) use crate::window::SurfaceHandoff;
 
 /// UI wiring (V5 — DD V01 §4; OQ-V01-3 closed as toggle): validate the path,
 /// stash it and open a dedicated viewer window. Refusing here keeps the error
@@ -42,7 +24,7 @@ impl QuickViewRequest {
 #[tauri::command]
 pub fn viewer_view(
     app: tauri::AppHandle,
-    quick: State<'_, Arc<QuickViewRequest>>,
+    quick: State<'_, Arc<SurfaceHandoff>>,
     path: String,
 ) -> Result<(), String> {
     if !std::path::Path::new(&path).is_file() {
@@ -56,7 +38,7 @@ pub fn viewer_view(
         .file_name()
         .map(|f| f.to_string_lossy().into_owned())
         .unwrap_or_else(|| path.clone());
-    quick.stash(path.clone());
+    quick.stash(&label, path.clone());
     open_surface_window(
         &app,
         &label,
@@ -140,13 +122,13 @@ pub(crate) fn render_payload(
 #[tauri::command]
 pub fn viewer_open(
     registry: State<'_, Arc<FileRegistry>>,
-    quick: State<'_, Arc<QuickViewRequest>>,
+    quick: State<'_, Arc<SurfaceHandoff>>,
     window: tauri::WebviewWindow,
 ) -> Result<QuickView, String> {
     // V5: the UI path stashes the path and the window consumes it; the env
     // stays as the dev/gate-12 trigger (DD §3.1/§4).
     let path = quick
-        .take()
+        .take(window.label())
         .or_else(|| {
             std::env::var("NANO_OFFICE_QUICK_VIEW")
                 .ok()

@@ -114,3 +114,54 @@ pub(crate) fn open_surface_window(
     b.build().map_err(|e| format!("{tag}: open window: {e}"))?;
     Ok(())
 }
+
+/// Thread-safe window-keyed document path handoff (T-063, Candidate 3).
+///
+/// Eliminates the single-slot race where rapid opens overwrite unconsumed paths.
+/// Keyed by window label, matching the T-059 FileRegistry owner model.
+#[derive(Default)]
+pub struct SurfaceHandoff {
+    entries: std::sync::Mutex<std::collections::HashMap<String, String>>,
+}
+
+impl SurfaceHandoff {
+    pub fn stash(&self, label: &str, path: String) {
+        self.entries
+            .lock()
+            .expect("surface handoff mutex poisoned")
+            .insert(label.to_string(), path);
+    }
+
+    pub fn take(&self, label: &str) -> Option<String> {
+        self.entries
+            .lock()
+            .expect("surface handoff mutex poisoned")
+            .remove(label)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_surface_handoff_keyed_multiple_windows() {
+        let handoff = SurfaceHandoff::default();
+        handoff.stash("quickview-1", "/docs/a.docx".into());
+        handoff.stash("quickview-2", "/docs/b.docx".into());
+
+        // Each window takes only its own path, order independent
+        assert_eq!(handoff.take("quickview-2"), Some("/docs/b.docx".into()));
+        assert_eq!(handoff.take("quickview-1"), Some("/docs/a.docx".into()));
+    }
+
+    #[test]
+    fn test_surface_handoff_take_once() {
+        let handoff = SurfaceHandoff::default();
+        handoff.stash("nanolight-1", "/docs/edit.docx".into());
+
+        assert_eq!(handoff.take("nanolight-1"), Some("/docs/edit.docx".into()));
+        assert_eq!(handoff.take("nanolight-1"), None);
+        assert_eq!(handoff.take("unknown"), None);
+    }
+}

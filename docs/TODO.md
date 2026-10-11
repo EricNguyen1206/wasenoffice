@@ -15,7 +15,7 @@ type: queue
 
 ## Tình hình nhanh
 
-▶ Kế tiếp: **T-063** (surface document handoff keyed theo window_label) / **A5 Slice 1** / **T-062 ĐÓNG 11.10**
+▶ Kế tiếp: **Milestone A5 — Slice 1** (start page migration sang own-UI layout + theme graphite) / **T-063 ĐÓNG 11.10** (SurfaceHandoff keyed theo window_label) / **T-062 ĐÓNG 11.10**
 
 | Phase | Tổng | ✅ | 🟨 | ⏸ | ⬜ |
 |---|---|---|---|---|---|
@@ -23,7 +23,7 @@ type: queue
 | PH-1  |  12 | 11 | 0  | 0  | 1  |
 | PH-4  |  4  | 0  | 0  | 0  | 4  |
 | Track A (QĐ9) |  28 | 28 | 0  | 0  | 0  |
-| META  | 16  | 11 | 0  | 0  | 5  |
+| META  | 16  | 12 | 0  | 0  | 4  |
 
 ## PH-0 — Spike editor + render DOCX (go/no-go) — ĐÃ ĐÓNG 27.09 · verdict GO WITH CAVEAT
 
@@ -96,7 +96,7 @@ type: queue
 
 - [ ] ⬜ T-055 · **[ĐỊNH KỲ] Review kiến trúc** (`improve-codebase-architecture` + `ponytail-audit` ghép cặp) — chạy SAU MỖI RUNG Track A đóng / phase PH đóng (#7 ĐÃ CHẠY 11.10: Candidate 1 đã implement và verify thành **T-046** ✅; C2/C3/C4 land thành **T-062** / **T-063** / **T-064** bên dưới; HTML report trong $TMPDIR đã mở cho user; lần kế #8 sau khi A5 mở màn hoặc PH-2)
 - [x] ✅ T-062 · Atomic save seam: gom logic file tạm + rename nguyên tử an toàn đĩa giữa `bridge/save.rs` và `editor/mod.rs` (Candidate 2 review #7): module `src-tauri/src/storage.rs` (`sibling_tmp_path`, `atomic_swap`, `atomic_write_bytes`, `atomic_save`); xóa bỏ `atomic_replace` cục bộ; 5 unit tests storage; gates 10 & 15 PASSED; verify FULL exit 0, 20 ▸ steps · 11.10 · diagnostics 11.10 (T-062)
-- [ ] ⬜ T-063 · Surface document hand-off keyed theo window_label: xoá bỏ `Mutex<Option<String>>` unkeyed của `QuickViewRequest` và `NanoLightRequest` (Candidate 3 review #7) · ← T-055 #7
+- [x] ✅ T-063 · Surface document hand-off keyed theo window_label: xoá bỏ `Mutex<Option<String>>` unkeyed của `QuickViewRequest` và `NanoLightRequest` (Candidate 3 review #7): struct `SurfaceHandoff` (`src-tauri/src/window.rs`), `stash(label, path)` + `take(label)` loại bỏ race condition khi mở đồng thời nhiều cửa sổ; 2 unit tests; gates 13 & 15 PASSED; verify FULL exit 0, 20 ▸ steps · 11.10 · diagnostics 11.10 (T-063)
 - [x] ✅ T-064 · DocumentSurface host: rút trích container chung cho canvas viewport/resize/dpr trước khi chrome A5 phân nhánh giữa viewer và editor (Candidate 4 review #7): class `DocumentSurface` (`src/viewer/surface.ts`) đóng gói context 2D, dpr, `vw`/`vh`, `layoutAndDraw()`, `countInked()`, `showFatal()`, `showWarnings()`; Vite tách shared chunk `surface-*.js`; gates 12/13/15 PASSED; verify FULL exit 0, 20 ▸ steps · 11.10 · diagnostics 11.10 (T-064)
 - [ ] ⬜ T-020 · Add 2 skill theo audit 26.09: `systematic-debugging` (superpowers) + `handoff` (mattpocock) qua cổng acceptance · **chờ user duyệt**
 - [ ] ⬜ T-021 · CI + gates số liệu size/RAM/startup · trigger: PH-4

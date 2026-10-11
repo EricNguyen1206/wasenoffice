@@ -8,6 +8,21 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-11 · T-063: Surface document hand-off keyed theo window_label (Candidate 3 review #7)
+
+- **Nhiệm vụ:** Thay thế 2 struct `QuickViewRequest` và `NanoLightRequest` độc lập (dùng pattern `Mutex<Option<String>>` unkeyed) bằng cơ chế tra cứu theo `window_label`.
+- **Thiết kế sâu:**
+  - Tạo struct `SurfaceHandoff` trong `src-tauri/src/window.rs` dùng `Mutex<HashMap<String, String>>`.
+  - `stash(label, path)` và `take(label)`: Keying trực tiếp theo nhãn cửa sổ (`quickview-1`, `nanolight-1`, v.v.).
+  - Cả Quick View và Nano Light dùng chung một managed state `SurfaceHandoff` duy nhất trong `lib.rs`.
+  - Bổ sung 2 unit tests cho `SurfaceHandoff` trong `window.rs`.
+- **Kết quả:**
+  - Xóa bỏ hoàn toàn 2 struct `QuickViewRequest` và `NanoLightRequest` unkeyed; loại bỏ triệt để nguy cơ race condition khi mở đồng thời nhiều tài liệu.
+  - Gate 13 (quick-view UX wiring) và Gate 15 (Nano Light editor reopen) đều PASSED; cargo test 72 passed.
+  - `./harness/scripts/verify.sh` FULL exit 0 cả 20 gates.
+
+---
+
 ## 2026-10-11 · T-062: Atomic save seam an toàn đĩa giữa bridge/save.rs và editor/mod.rs (Candidate 2 review #7)
 
 - **Nhiệm vụ:** Gom logic an toàn file đĩa (tạo file tạm sibling cùng volume, kiểm tra output không rỗng, và rename nguyên tử chống corrupt file) bị phân mảnh giữa `bridge/save.rs` và `editor/mod.rs`.

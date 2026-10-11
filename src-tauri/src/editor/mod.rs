@@ -231,23 +231,7 @@ impl EditorSessions {
     }
 }
 
-/// Path handoff from the start-page action to the window's single
-/// `nano_light_open` call (pattern `QuickViewRequest`).
-#[derive(Default)]
-pub struct NanoLightRequest(Mutex<Option<String>>);
-
-impl NanoLightRequest {
-    fn stash(&self, path: String) {
-        *self.0.lock().expect("nano-light request mutex poisoned") = Some(path);
-    }
-
-    fn take(&self) -> Option<String> {
-        self.0
-            .lock()
-            .expect("nano-light request mutex poisoned")
-            .take()
-    }
-}
+pub(crate) use crate::window::SurfaceHandoff;
 
 /// Window-label sequence for UI-opened Nano Light windows ("main" = env boot).
 static WINDOW_SEQ: AtomicU32 = AtomicU32::new(0);
@@ -256,7 +240,7 @@ static WINDOW_SEQ: AtomicU32 = AtomicU32::new(0);
 /// itself lives in `viewer::open_surface_window`, T-060 C2).
 fn open_window(
     app: &tauri::AppHandle,
-    request: &NanoLightRequest,
+    handoff: &SurfaceHandoff,
     path: String,
 ) -> Result<(), String> {
     let label = format!(
@@ -267,7 +251,7 @@ fn open_window(
         .file_name()
         .map(|f| f.to_string_lossy().into_owned())
         .unwrap_or_else(|| path.clone());
-    request.stash(path.clone());
+    handoff.stash(&label, path.clone());
     crate::viewer::open_surface_window(
         app,
         &label,
@@ -285,13 +269,13 @@ fn open_window(
 #[tauri::command]
 pub fn nano_light_view(
     app: tauri::AppHandle,
-    request: State<'_, Arc<NanoLightRequest>>,
+    handoff: State<'_, Arc<SurfaceHandoff>>,
     path: String,
 ) -> Result<(), String> {
     if !std::path::Path::new(&path).is_file() {
         return Err(format!("nano light: no such file: {path}"));
     }
-    open_window(&app, request.inner(), path)
+    open_window(&app, handoff.inner(), path)
 }
 
 /// Reopen THIS session's document in a new Nano Light window (reads the file
@@ -299,12 +283,12 @@ pub fn nano_light_view(
 #[tauri::command]
 pub fn nano_light_reopen(
     app: tauri::AppHandle,
-    request: State<'_, Arc<NanoLightRequest>>,
+    handoff: State<'_, Arc<SurfaceHandoff>>,
     sessions: State<'_, Arc<EditorSessions>>,
     window: tauri::WebviewWindow,
 ) -> Result<(), String> {
     let path = sessions.with_session(window.label(), |s| Ok(s.path.clone()))?;
-    open_window(&app, request.inner(), path.display().to_string())
+    open_window(&app, handoff.inner(), path.display().to_string())
 }
 
 /// The Nano Light payload — same shape as the viewer's `QuickView` (the two
@@ -329,14 +313,14 @@ pub struct NanoLightDoc {
 #[tauri::command]
 pub fn nano_light_open(
     registry: State<'_, Arc<FileRegistry>>,
-    request: State<'_, Arc<NanoLightRequest>>,
+    handoff: State<'_, Arc<SurfaceHandoff>>,
     sessions: State<'_, Arc<EditorSessions>>,
     window: tauri::WebviewWindow,
 ) -> Result<NanoLightDoc, String> {
     // UI path stashes the path and the window consumes it; the env stays as
     // the dev/gate-15 trigger (pattern V5).
-    let path = request
-        .take()
+    let path = handoff
+        .take(window.label())
         .or_else(|| {
             std::env::var("NANO_OFFICE_NANO_LIGHT")
                 .ok()

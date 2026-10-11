@@ -256,9 +256,8 @@ pub fn run() {
     let mut app = tauri::Builder::default()
         .manage(Arc::clone(&config))
         .manage(Arc::new(FileRegistry::default()))
-        .manage(Arc::new(viewer::QuickViewRequest::default()))
+        .manage(Arc::new(window::SurfaceHandoff::default()))
         .manage(Arc::new(editor::EditorSessions::default()))
-        .manage(Arc::new(editor::NanoLightRequest::default()))
         .register_uri_scheme_protocol(protocol::ENGINE_SCHEME, protocol::handle_engine)
         .register_uri_scheme_protocol(protocol::FILE_SCHEME, protocol::handle_file)
         // T-059 cleanup: the registry used to only ever grow. A destroyed
