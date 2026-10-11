@@ -8,6 +8,43 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-11 · T-047: dialog "An error has occurred…" = catch-all uncaught-error của engine, KHÔNG phải lỗi mở file
+
+- **Root cause (confirmed bằng code-chain, full bằng chứng file:line ở reference.map §
+  dialog mở-file 11.10):** `sdkjs/common/apiBase.js:356-386` (`sendUnhandledError`) map
+  MỌI uncaught error/rejection ĐẦU TIÊN (wiring one-shot `window.onerror` +
+  `onunhandledrejection`, `apiBase.js:379-424`) trước `isDocumentLoadComplete=true`
+  (`apiBase.js:1511`, chỉ đặt trong `onDocumentContentReady`) thành
+  `ConvertationOpenError` Critical → web-apps `Main.js:241/2176/2213-2216/2424-2442`
+  render thành đúng dialog "An error has occurred while opening the file / Press OK to
+  close the editor". Vì handler one-shot tự khôi phục sau lỗi đầu, open VẪN TIẾP TỤC →
+  contentReady bắn + render hoàn chỉnh ĐẰNG SAU dialog — đúng ảnh 27.09. Dialog ≠ open fail.
+- **Sửa nhận định 27.09 (T-002):** `iLa` KHÔNG phải emitter viewer api — là hằng error-id
+  minified (`Kd.ConvertationOpenError=Kd.iLa`, sdk-all-min.js); build word chứa 0 call-site
+  `AscViewer.open` (grep). Lỗi đi đúng đường `asc_onError` của api chính — đường
+  `showerror` (Main.js:259) loại (chỉ ComboSeriesError). Mọi raise-site
+  `ConvertationOpenError` khác loại cho flow offline (bảng loại trừ ở reference.map).
+- **Không tái hiện được tự nhiên:** 0/15 boot gate 10-11.10, 0 dòng lỗi trong
+  /tmp/nanooffice-smoke-* (trừ `probe decode failed` — do MÌNH catch sẵn). Trigger cụ thể
+  (lỗi lạc nào) chưa định danh — tái hiện cưỡng bức cần env riêng → phải đụng lib.rs
+  (ngoài scope T-047 theo GUARD) → seed.
+- **Instrument đã land (shim của mình, ADDITIVE):** `desktopEditor.js`
+  `installErrorForwarding` gắn `| stack: …` (≤500 chars) vào log uncaught error +
+  unhandled rejection → lần occurrence kế cho ra trigger + stack ngay trên stdout
+  (trước đây chỉ có message @ file:line:col, thiếu call-chain).
+- **Trạng thái:** root cause confirmed (code-chain + khớp triệu chứng); trigger = candidate
+  chờ bằng chứng runtime; seed task cho trigger-hunt (+ cân nhắc env-gated dialog-probe
+  counterfactual khi đụng được lib.rs).
+- **Flake verify quan sát được (2/4 FULL run sáng 11.10, KHÔNG do diff T-047):** run 1 gate
+  15 fail `paste result 'Xin Xin chàochào' not in parse-back` — copy-all TRONG NHỚ đúng,
+  file lưu parse-back thành `'Xin rXin chàochào'`; gate 15 standalone ×3 PASS + run cuối
+  FULL GREEN trên cùng tree (diff T-047 = shim JS không load ở Nano Light + docs). Run fail
+  có `op=copy sys=ok`, run pass `sys=fail` (đường clipboard hệ thống vs stash) — nghi class
+  flake boot-gate/timing (bài học T-050); run 2 fail step sớm (log mất — bẫy `| tail` cắt
+  evidence verify dài: bắn full log ra file từ đầu). Theo dõi: tái diễn → mổ riêng.
+
+---
+
 ## 2026-10-11 · T-049: save multi-format XLSX/PPTX wired — gate 16 tầng x2t, edit-probe cell/slide PARKED
 
 - **Nhiệm vụ:** save chỉ docx (gate 10) — xlsx 257 known-unwired, pptx unidentified.
