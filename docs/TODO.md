@@ -23,7 +23,7 @@ type: queue
 | PH-1  |  12 | 11 | 0  | 0  | 1  |
 | PH-4  |  4  | 0  | 0  | 0  | 4  |
 | Track A (QĐ9) |  27 | 27 | 0  | 0  | 0  |
-| META  | 13  | 9  | 0  | 0  | 4  |
+| META  | 16  | 9  | 0  | 0  | 7  |
 
 ## PH-0 — Spike editor + render DOCX (go/no-go) — ĐÃ ĐÓNG 27.09 · verdict GO WITH CAVEAT
 
@@ -93,7 +93,10 @@ type: queue
 
 ## META — harness / docs / skills
 
-- [ ] ⬜ T-055 · **[ĐỊNH KỲ] Review kiến trúc** (`improve-codebase-architecture` + `ponytail-audit` ghép cặp) — chạy SAU MỖI RUNG Track A đóng / phase PH đóng (#5 ĐÃ CHẠY 03.10 post-T-A27 sớm theo chỉ thị user — C3/C1/C2 → **T-060**; C4 lib.rs surface-table chờ surface thứ 4 (YAGNI); C5 casing-unify/type-1-nhà hoãn — chỉ `session_mut` gộp T-060; C7 smoke-lib hằng đơn-consumer chỉ khi đụng vì lý do khác (rủi ro frozen block); lần này chỉ improve-codebase-architecture + codebase-design vocabulary, ponytail-audit không chạy — T-060 có ponytail-review pre-commit · nhịp: #1 post-PH-0 27.09 · #2 post-A1 02.10 · #3 post-A2 03.10 · #4 post-A3 03.10 đã chạy — candidates: T-059 + T-V7 + deps T-A27, report HTML tạm + diagnostics 03.10) · **#6 ĐÃ CHẠY 04.10 post-rung A4** — 3 reviewer song song Rust/TS/crate (vocabulary codebase-design): **7 LAND** landed 3 commit `712bee4` (TS C1 Hit seam 1 ngôn ngữ toạ độ + C2 evidence builders 1 nhà render.ts + C3 ordered()) · `3a8df66` (Rust C8 editor/mutations.rs split — mod.rs 2138→1691) · `2cad6ff` (crate C1 OPC plumbing 1 nhà opc.rs + main_document_part() · C4 docs invariant hyperlink · C5 gộp 2 warn-door arm) — verify FULL exit 0 sau TỪNG cụm; **4 DEFER có trigger**: Rust C9 gộp surface shell (surface thứ 3/C4 #5) · TS C5 selection-math module (consumer thứ 2 đọc body) · TS C6 clipboard drift seam (clipboard fidelity) · Crate C2 PackageAcc (kênh state mới); **7 REJECT có deletion-test**; report `$TMPDIR/architecture-review-20261004-a4.html` + diagnostics 04.10; normal-review: paste `\t` đứt giữa chừng (TS paste không lọc control chars — C6 trigger) · silent-drop policy (hyperlink trong mc:Choice/AC block + detect thiếu pict/txbxContent) · clone-per-keystroke perf (theo dõi); lần kế: **#7 — sau rung A5/PH kế đóng** (hiện hướng: A4 đợt đầu đóng rung); sau mỗi lần chạy: candidates land thành task + task này ĐẶT LẠI ⬜ (vĩnh viễn kiểu nhịp, không sink ✅) · user chỉ thị 03.10
+- [ ] ⬜ T-055 · **[ĐỊNH KỲ] Review kiến trúc** (`improve-codebase-architecture` + `ponytail-audit` ghép cặp) — chạy SAU MỖI RUNG Track A đóng / phase PH đóng (#7 ĐÃ CHẠY 11.10: Candidate 1 đã implement và verify thành **T-046** ✅; C2/C3/C4 land thành **T-062** / **T-063** / **T-064** bên dưới; HTML report trong $TMPDIR đã mở cho user; lần kế #8 sau khi A5 mở màn hoặc PH-2)
+- [ ] ⬜ T-062 · Atomic save seam: gom logic file tạm + rename nguyên tử an toàn đĩa giữa `bridge/save.rs` và `editor/mod.rs` (Candidate 2 review #7) · ← T-055 #7
+- [ ] ⬜ T-063 · Surface document hand-off keyed theo window_label: xoá bỏ `Mutex<Option<String>>` unkeyed của `QuickViewRequest` và `NanoLightRequest` (Candidate 3 review #7) · ← T-055 #7
+- [ ] ⬜ T-064 · DocumentSurface host: rút trích container chung cho canvas viewport/resize/dpr trước khi chrome A5 phân nhánh giữa viewer và editor (Candidate 4 review #7) · ← T-055 #7
 - [ ] ⬜ T-020 · Add 2 skill theo audit 26.09: `systematic-debugging` (superpowers) + `handoff` (mattpocock) qua cổng acceptance · **chờ user duyệt**
 - [ ] ⬜ T-021 · CI + gates số liệu size/RAM/startup · trigger: PH-4
 - [ ] ⬜ T-034 · Bật GitNexus index `upstream/sdkjs` phục vụ reverse font pipeline (trigger đã chạm: bridge first wave xong) · ← T-001 · skill: gitnexus-cli
