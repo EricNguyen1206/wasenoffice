@@ -8,6 +8,20 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-11 · T-A34: A5 slice 1 — Start page migration sang layout và theme Graphite neutral-minimal
+
+- **Nhiệm vụ:** Chuyển đổi start page (`index.html`, `src/main.ts`) sang layout và theme tokens Graphite neutral-minimal; loại bỏ nhãn "PH-0 spike" cũ.
+- **Thay đổi:**
+  - `src/main.ts`: Thay nhãn "PH-0 spike" bằng tiêu đề thương hiệu sạch `NanoOffice`; chuẩn hóa `CONTROL_SKIN` sử dụng tokens `rounded-panel border border-edge bg-panel text-fg hover:bg-panel-active`; thanh header thêm padding và border-edge; log element `#ph0-log` đồng bộ nền `bg-panel` và border-edge.
+  - `index.html`: Chuyển sang container `bg-bg text-fg`, loại bỏ `justify-center text-center` cũ để header neo tự nhiên ở đỉnh và `main#editor-root` chiếm toàn bộ không gian còn lại (`flex-1 bg-paper`).
+  - Bảo toàn 100% các ID (`#app`, `#open-form`, `#doc-path`, `#quick-view-btn`, `#nano-light-btn`, `#ph0-log`, `#editor-root`).
+- **Bằng chứng:**
+  - Gate 13 (`smoke-quick-view-ui.sh`) PASSED (first-draw 15.0 ms).
+  - Gate 9 (`smoke-render.sh`) PASSED (engine open mount qua start page thành công).
+  - `./harness/scripts/verify.sh` FULL exit 0 cả 20 gates.
+
+---
+
 ## 2026-10-11 · T-063: Surface document hand-off keyed theo window_label (Candidate 3 review #7)
 
 - **Nhiệm vụ:** Thay thế 2 struct `QuickViewRequest` và `NanoLightRequest` độc lập (dùng pattern `Mutex<Option<String>>` unkeyed) bằng cơ chế tra cứu theo `window_label`.

@@ -156,31 +156,31 @@ const log: HTMLDivElement = document.createElement('div');
 log.id = 'ph0-log';
 // was the `#ph0-log` rule (styles.css pre-T-058); font-mono's first family
 // ui-monospace renders the same face the old 2-family stack picked
-log.className = 'max-h-[4.5em] overflow-auto px-4 font-mono text-[0.72em] opacity-75';
+log.className = 'max-h-[4.5em] overflow-auto px-4 py-1.5 font-mono text-[0.72em] opacity-80 border-t border-edge bg-panel text-fg';
 
-// Shared control skin (input + button) — one home; states/differences append.
+// Shared control skin (input + button) using Graphite tokens (DD U01 §3).
 const CONTROL_SKIN =
-  'rounded-panel border border-transparent bg-panel px-[1.2em] py-[0.6em] text-[1em] font-medium font-[family-name:inherit] text-fg shadow-[0_2px_2px_rgba(0,0,0,0.2)] outline-none transition-[border-color] duration-[250ms] ease-[ease] dark:text-white';
+  'rounded-panel border border-edge bg-panel px-[1.2em] py-[0.5em] text-[0.9em] font-medium font-[family-name:inherit] text-fg shadow-sm outline-none transition-colors duration-150 hover:bg-panel-active active:bg-panel-active focus:border-accent disabled:opacity-50';
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-  <header class="flex items-center gap-3 px-4 py-2">
-    <div class="flex items-center gap-2">
+  <header class="flex items-center gap-4 border-b border-edge bg-panel px-4 py-2.5 shadow-sm">
+    <div class="flex items-center gap-2.5 shrink-0">
       <img src="/src/assets/logo.png" alt="NanoOffice" class="h-6 w-6 rounded object-contain" />
-      <h1 class="m-0 text-[1.1em]">NanoOffice <small class="font-normal opacity-60">PH-0 spike</small></h1>
+      <h1 class="m-0 text-[1.05em] font-semibold text-fg tracking-tight">NanoOffice</h1>
     </div>
-    <form id="open-form" class="flex flex-1 gap-2">
+    <form id="open-form" class="flex flex-1 items-center gap-2">
       <input
         id="doc-path"
         type="text"
         placeholder="/absolute/path/to/document (.docx .xlsx .pptx .pdf)"
         class="flex-1 ${CONTROL_SKIN}"
       />
-      <button type="submit" class="cursor-pointer hover:border-edge active:border-edge active:bg-panel-active ${CONTROL_SKIN}">Open</button>
-      <button type="button" id="quick-view-btn" class="cursor-pointer hover:border-edge active:border-edge active:bg-panel-active ${CONTROL_SKIN}">Quick view</button>
-      <button type="button" id="nano-light-btn" class="cursor-pointer hover:border-edge active:border-edge active:bg-panel-active ${CONTROL_SKIN}">Nano Light</button>
+      <button type="submit" class="cursor-pointer ${CONTROL_SKIN}">Open</button>
+      <button type="button" id="quick-view-btn" class="cursor-pointer ${CONTROL_SKIN}">Quick view</button>
+      <button type="button" id="nano-light-btn" class="cursor-pointer ${CONTROL_SKIN}">Nano Light</button>
     </form>
   </header>
-  <main id="editor-root" class="relative flex-1"></main>
+  <main id="editor-root" class="relative flex-1 bg-paper"></main>
 `;
 document.querySelector<HTMLDivElement>('#app')!.appendChild(log);
 
