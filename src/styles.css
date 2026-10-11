@@ -27,14 +27,14 @@
  * (--color-accent currently has none — the start page grew no anchors) —
  * keeps the A5 slot contract greppable in dist. */
 @theme static {
-  --color-bg: #f6f6f6; /* page background */
-  --color-fg: #0f0f0f; /* default ink */
-  --color-accent: #646cff; /* interactive accent (A5 decides) */
+  --color-bg: #f4f4f5; /* page background (zinc-100) */
+  --color-fg: #18181b; /* default ink (zinc-900) */
+  --color-accent: #2563eb; /* interactive accent (blue-600) */
   --color-panel: #ffffff; /* control surface (input/button) */
-  --color-panel-active: #e8e8e8; /* control pressed */
-  --color-edge: #396cd8; /* control hover/active border */
+  --color-panel-active: #e4e4e7; /* control pressed (zinc-200) */
+  --color-edge: #d4d4d8; /* control border (zinc-300) */
   --color-paper: #ffffff; /* viewer document surface */
-  --radius-panel: 8px; /* control corner */
+  --radius-panel: 6px; /* control corner */
   /* spacing: Tailwind default 4px scale — the only scale this UI uses */
 }
 
@@ -63,10 +63,11 @@
 
   @media (prefers-color-scheme: dark) {
     :root {
-      --color-bg: #2f2f2f;
-      --color-fg: #f6f6f6;
-      --color-panel: #0f0f0f98;
-      --color-panel-active: #0f0f0f69;
+      --color-bg: #18181b;
+      --color-fg: #f4f4f5;
+      --color-panel: #27272a;
+      --color-panel-active: #3f3f46;
+      --color-edge: #3f3f46;
     }
   }
 }

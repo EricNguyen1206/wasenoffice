@@ -8,6 +8,21 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-11 · T-A33: A5 mở màn UI riêng (DD U01 design-first + slice 0 Nano Light chrome)
+
+- **Nhiệm vụ:** Mở màn Milestone A5 — tự chủ UI editor thay web-apps cho các surface của mình (DD U01 + slice 0).
+- **Quyết định (DD U01):**
+  - Framework RATIFY: Slice 0 chạy Vanilla TypeScript + Tailwind v4 (0 runtime dep, 0KB overhead); trigger kích hoạt Preact (~4.5KB) khi bước vào component stateful phức tạp (Tab bar đa tài liệu hoặc Toolbar định dạng văn bản) vượt ngưỡng 100 dòng manual DOM sync. Loại Svelte 5 vì agent-fluency thấp hơn JSX.
+  - Theme values: Chốt bảng màu Graphite neutral-minimal (zinc/slate tones: `--color-bg: #f4f4f5`, `--color-fg: #18181b`, `--color-panel: #ffffff`, `--color-panel-active: #e4e4e7`, `--color-edge: #d4d4d8`, `--color-accent: #2563eb`, radius `6px`). Dark mode tự động theo prefers-color-scheme.
+  - Kiến trúc chrome: Header chrome bọc ngoài viewport canvas (`editor.html`), hiển thị `#doc-name`, `#dirty-dot`, `#save-btn` gọi `nano_light_save` thật.
+- **Bằng chứng:**
+  - DD U01 commit trước code (`8b3aa2b`); check-docs 33 files GREEN.
+  - Gate 15 smoke Nano Light: first-draw 19.0 ms, save 2.9 ms, positive PASSED + negative garbage/doctor exit 1.
+  - Gate 12 & 13 (quick-view) không thoái hóa (first-draw 15–81 ms).
+  - `./harness/scripts/verify.sh` FULL exit 0 cả 20 gates.
+
+---
+
 ## 2026-10-11 · T-064: DocumentSurface host container (Candidate 4 review #7)
 
 - **Nhiệm vụ:** Rút trích container chung cho canvas viewport/resize/dpr trước khi chrome Milestone A5 phân nhánh giữa viewer và editor.

@@ -10,14 +10,14 @@
     <!-- L01 round-1 chrome: name + dirty dot + Save (Cmd-S). Canvas keeps the
          UA-default typography the viewer was pixel-baselined on (T-058 trap:
          canvas fillText follows document font smoothing). -->
-    <header class="flex shrink-0 items-center gap-3 border-b border-black/10 px-4 py-2">
+    <header class="flex shrink-0 items-center gap-3 border-b border-edge bg-panel px-4 py-2">
       <img src="/src/assets/logo.png" alt="NanoOffice" class="h-5 w-5 rounded object-contain" />
-      <span id="doc-name" class="truncate text-[0.9em] font-medium"></span>
+      <span id="doc-name" class="truncate text-[0.9em] font-medium text-fg"></span>
       <span id="dirty-dot" class="hidden h-2 w-2 shrink-0 rounded-full bg-accent"></span>
       <span class="flex-1"></span>
       <button
         id="save-btn"
-        class="cursor-pointer rounded-panel border border-transparent bg-panel px-[1.2em] py-[0.5em] text-[0.9em] font-medium text-fg shadow-[0_2px_2px_rgba(0,0,0,0.2)] outline-none hover:border-edge active:border-edge active:bg-panel-active"
+        class="cursor-pointer rounded-panel border border-edge bg-panel px-[1.2em] py-[0.4em] text-[0.85em] font-medium text-fg shadow-sm outline-none hover:bg-panel-active active:bg-panel-active disabled:opacity-50"
       >
         Save
       </button>
