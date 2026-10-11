@@ -526,7 +526,8 @@ fn save_session(session: &mut EditorSession) -> Result<(), String> {
     let started = std::time::Instant::now();
     let out = nanooffice_ooxml::write_docx(&session.doc, Some(&session.media_src))
         .map_err(|e| format!("nano light: write docx: {e}"))?;
-    atomic_replace(&session.path, &out, "nanooffice-nl", "nano light")?;
+    crate::storage::atomic_write_bytes(&session.path, &out, "nanooffice-nl")
+        .map_err(|e| format!("nano light: {e}"))?;
     session.saved = Some(session.doc.clone());
     let ms = started.elapsed().as_secs_f64() * 1000.0;
     log::info!(
@@ -534,31 +535,6 @@ fn save_session(session: &mut EditorSession) -> Result<(), String> {
         session.path.display(),
         out.len()
     );
-    Ok(())
-}
-
-/// Atomic file swap (T-060 C2, pattern `bridge/save.rs:251-254,323`): write
-/// to a tmp sibling in the SAME directory (same volume), rename over the
-/// target, clean the tmp up when the rename fails. The engine save path does
-/// NOT use this — its tmp is written by x2t on disk, not from memory bytes.
-fn atomic_replace(
-    path: &std::path::Path,
-    bytes: &[u8],
-    tmp_tag: &str,
-    err_tag: &str,
-) -> Result<(), String> {
-    let ext = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .unwrap_or("docx")
-        .to_string();
-    let tmp = path.with_extension(format!("{tmp_tag}.{ext}"));
-    std::fs::write(&tmp, bytes)
-        .map_err(|e| format!("{err_tag}: write tmp {}: {e}", tmp.display()))?;
-    if let Err(e) = std::fs::rename(&tmp, path) {
-        let _ = std::fs::remove_file(&tmp);
-        return Err(format!("{err_tag}: rename over original: {e}"));
-    }
     Ok(())
 }
 

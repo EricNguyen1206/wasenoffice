@@ -297,9 +297,8 @@ pub fn save_document(app: &tauri::AppHandle, registry: &FileRegistry, payload: &
     let changes = work.changes_file();
     let from_changes = changes.metadata().map(|m| m.len() > 0).unwrap_or(false);
 
-    // Atomic-ish write: x2t renders next to the target, rename over it after
-    // a complete conversion (same directory → same volume).
-    let tmp_out = disk.with_extension(format!("nanooffice-save.{ext}"));
+    // Atomic write (T-062): x2t renders to temporary sibling, then atomic swap.
+    let tmp_out = crate::storage::sibling_tmp_path(&disk, "nanooffice-save");
     let _ = std::fs::remove_file(&tmp_out);
 
     let allfonts = crate::protocol::allfonts::ensure_written();
@@ -334,16 +333,10 @@ pub fn save_document(app: &tauri::AppHandle, registry: &FileRegistry, payload: &
         Err(e) => return finish(app, Some(&disk), false, 2, &e.note),
     };
 
-    if let Err(e) = std::fs::rename(&tmp_out, &disk) {
-        return finish(
-            app,
-            Some(&disk),
-            false,
-            2,
-            &format!("rename over original: {e}"),
-        );
-    }
-    let len = std::fs::metadata(&disk).map(|m| m.len()).unwrap_or(0);
+    let len = match crate::storage::atomic_swap(&tmp_out, &disk) {
+        Ok(len) => len,
+        Err(e) => return finish(app, Some(&disk), false, 2, &e),
+    };
     // gate 10 (harness/scripts/smoke-save.sh) greps `save delivered:` — keep
     // verbatim (log contract, change in the same commit as the gate).
     log::info!(

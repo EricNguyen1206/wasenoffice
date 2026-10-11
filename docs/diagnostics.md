@@ -8,6 +8,23 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-11 · T-062: Atomic save seam an toàn đĩa giữa bridge/save.rs và editor/mod.rs (Candidate 2 review #7)
+
+- **Nhiệm vụ:** Gom logic an toàn file đĩa (tạo file tạm sibling cùng volume, kiểm tra output không rỗng, và rename nguyên tử chống corrupt file) bị phân mảnh giữa `bridge/save.rs` và `editor/mod.rs`.
+- **Thiết kế sâu:**
+  - Tạo module sâu `src-tauri/src/storage.rs`:
+    * `sibling_tmp_path`: Quy tắc tạo đường dẫn file tạm cùng thư mục cha (cùng filesystem volume).
+    * `atomic_swap`: Hoán đổi nguyên tử file tạm đã sinh ra đè lên file đích, tự động dọn dẹp file tạm khi fail hoặc khi file rỗng.
+    * `atomic_write_bytes`: Ghi mảng byte bộ nhớ qua file tạm rồi rename nguyên tử.
+    * `atomic_save`: Closure writer seam linh hoạt.
+    * Bổ sung 5 unit tests độc lập cho `storage.rs`.
+- **Kết quả:**
+  - `bridge/save.rs` và `editor/mod.rs` chuyển sang dùng `crate::storage`; xóa bỏ hàm `atomic_replace` cục bộ.
+  - Gate 10 (smoke engine save) và Gate 15 (smoke Nano Light save) đều PASSED; cargo test 70 passed.
+  - `./harness/scripts/verify.sh` FULL exit 0 cả 20 gates.
+
+---
+
 ## 2026-10-11 · T-A33: A5 mở màn UI riêng (DD U01 design-first + slice 0 Nano Light chrome)
 
 - **Nhiệm vụ:** Mở màn Milestone A5 — tự chủ UI editor thay web-apps cho các surface của mình (DD U01 + slice 0).

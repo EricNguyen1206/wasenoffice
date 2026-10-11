@@ -19,6 +19,7 @@ mod editor;
 mod formats;
 mod protocol;
 mod sidecar;
+pub(crate) mod storage;
 mod viewer;
 mod window;
 
