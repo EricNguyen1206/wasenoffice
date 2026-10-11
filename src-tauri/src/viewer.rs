@@ -144,7 +144,12 @@ pub fn viewer_open(
         p.parse_ms,
         p.fonts.len()
     );
+    let name = std::path::Path::new(&path)
+        .file_name()
+        .map(|f| f.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.clone());
     Ok(QuickView {
+        name,
         parse_ms: p.parse_ms,
         doc: p.render,
         fonts: p.fonts,
@@ -162,6 +167,7 @@ pub fn viewer_open(
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QuickView {
+    pub name: String,
     pub parse_ms: f64,
     pub doc: RenderDoc,
     /// OS/2 line metrics (C4-a) per family found in the document:

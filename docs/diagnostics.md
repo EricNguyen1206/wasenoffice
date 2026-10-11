@@ -8,6 +8,21 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-11 · T-A35: A5 slice 2 — Quick View chrome sang own-UI layout + theme Graphite
+
+- **Nhiệm vụ:** Bổ sung thanh header chrome cho Quick View (`viewer.html`, `src/viewer.ts`) đồng bộ layout container và theme Graphite với Nano Light.
+- **Thay đổi:**
+  - `src-tauri/src/viewer.rs`: Bổ sung trường `name: String` vào struct `QuickView` (trích xuất file name từ path tương tự `NanoLightDoc`).
+  - `viewer.html`: Bổ sung thanh header chrome chứa logo, `#doc-name` và badge "Quick View"; canvas đặt bên trong `<main class="flex-1 overflow-auto">` đồng bộ layout container với `editor.html`.
+  - `src/viewer.ts`: Thêm `name: string` vào `QuickView` interface, hiển thị tên file lên `#doc-name`.
+- **Bằng chứng:**
+  - Gate 12 (`smoke-quick-view.sh`) PASSED (first-draw 25.0 ms, layout 15 lines, RSS 124 MB ≤ 300 MB).
+  - Gate 13 (`smoke-quick-view-ui.sh`) PASSED (first-draw 19.0 ms, UI wiring OK).
+  - Gate 15 (`smoke-nano-light.sh`) PASSED (first-draw 78.0 ms, save 2.9 ms).
+  - `./harness/scripts/verify.sh` FULL exit 0 cả 20 gates.
+
+---
+
 ## 2026-10-11 · T-A34: A5 slice 1 — Start page migration sang layout và theme Graphite neutral-minimal
 
 - **Nhiệm vụ:** Chuyển đổi start page (`index.html`, `src/main.ts`) sang layout và theme tokens Graphite neutral-minimal; loại bỏ nhãn "PH-0 spike" cũ.

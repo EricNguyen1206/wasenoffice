@@ -22,6 +22,7 @@ import { DocumentSurface } from './viewer/surface';
  * in the ONE camelCase casing — every Rust→JS payload struct is
  * `#[serde(rename_all = "camelCase")]` (lesson T-059). */
 interface QuickView {
+  name: string;
   parseMs: number;
   doc: { body: Block[] };
   fonts: FontMetrics;
@@ -43,6 +44,8 @@ async function main(): Promise<void> {
   try {
     surface = new DocumentSurface('cv');
     const qv = await invoke<QuickView>('viewer_open');
+    const nameEl = document.getElementById('doc-name');
+    if (nameEl) nameEl.textContent = qv.name;
     const bitmaps = new Map<string, ImageBitmap>();
     if (qv.mediaBase) await loadMedia(qv.doc.body, qv.mediaBase, bitmaps, 'viewer', invoke);
 
