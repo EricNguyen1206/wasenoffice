@@ -29,20 +29,25 @@ pub enum OpenFlavor {
 /// Save-side status of a format (multi-format save = T-049).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SaveCode {
-    /// Save is wired today through x2t with this `<m_nFormatTo>` value.
+    /// Save is wired through x2t with this `<m_nFormatTo>` value.
     Wired(i64),
-    /// Code oracle-confirmed but save NOT wired yet — T-049 will flip this.
-    KnownUnwired(i64),
-    /// Code not identified — T-049 định danh (spec-ref or oracle).
-    Unidentified,
+    /// Wired WITHOUT a code — the output extension picks the format (pptx fallback; reference.map § multi-format).
+    WiredByExtension,
+    /// Not wired — pdf saves through a different pipeline (`localSaveToDrawingFormat`, OQ-F01-1).
+    NotWired,
 }
 
 impl SaveCode {
-    /// The `<m_nFormatTo>` to use IF this format's save is wired today.
+    /// Save goes through the x2t from-changes seam today.
+    pub fn is_wired(self) -> bool {
+        matches!(self, SaveCode::Wired(_) | SaveCode::WiredByExtension)
+    }
+
+    /// The `<m_nFormatTo>` to use IF this format's save is wired with a code.
     pub fn wired_code(self) -> Option<i64> {
         match self {
             SaveCode::Wired(code) => Some(code),
-            SaveCode::KnownUnwired(_) | SaveCode::Unidentified => None,
+            SaveCode::WiredByExtension | SaveCode::NotWired => None,
         }
     }
 }
@@ -72,8 +77,7 @@ pub struct FileFormat {
 }
 
 impl FileFormat {
-    /// The `<m_nFormatTo>` for saving, or None when this format's save is not
-    /// wired (today: everything but docx — multi-format save = T-049).
+    /// The `<m_nFormatTo>` for saving, or None for the extension fallback / unwired formats.
     pub fn wired_save_code(&self) -> Option<i64> {
         self.save.wired_code()
     }
@@ -99,11 +103,9 @@ pub static FORMATS: &[FileFormat] = &[
         doctype: "cell",
         extra_boot_params: &[],
         open: OpenFlavor::Convert,
-        // provenance: 257 = XLSX — oracle-confirmed 29.09 (`<m_nFormatTo>` 257
-        // → exit 0, `file` = "Microsoft Excel 2007+"; reference.map §
-        // multi-format). Save itself NOT wired — T-049.
-        save: SaveCode::KnownUnwired(257),
-        // provenance TBD (T-049) — marker part for the xlsx save gate.
+        // 257 = XLSX (oracle 29.09, exit 0 — reference.map § multi-format), wired T-049.
+        save: SaveCode::Wired(257),
+        // marker assert waits on a cell-editor edit probe (parked T-049).
         inner_xml_path: None,
     },
     FileFormat {
@@ -111,12 +113,9 @@ pub static FORMATS: &[FileFormat] = &[
         doctype: "slide",
         extra_boot_params: &[],
         open: OpenFlavor::Convert,
-        // provenance: PPTX code chưa định danh (514/515/516/512/1025/8193/
-        // 4097/258 đều fail — reference.map § multi-format). 513 = EXPORT PDF
-        // từ editor binary bất kỳ, KHÔNG PHẢI PPTX — đừng tái sử dụng cho
-        // pptx (bẫy đã ghi cho T-049). Định danh = T-049.
-        save: SaveCode::Unidentified,
-        // provenance TBD (T-049) — marker part for the pptx save gate.
+        // fallback-extension: NO code, output extension decides (oracle 29.09); 513 = export-PDF, NOT pptx; real code = spec-ref later.
+        save: SaveCode::WiredByExtension,
+        // marker assert waits on a slide-editor edit probe (parked T-049).
         inner_xml_path: None,
     },
     FileFormat {
@@ -127,7 +126,7 @@ pub static FORMATS: &[FileFormat] = &[
         // provenance: no-conversion flavor — save PDF là pipeline khác
         // (`localSaveToDrawingFormat`, OQ-F01-1); 513 chỉ là code EXPORT PDF
         // (xem pptx ở trên) — không áp dụng cho save pdf gốc.
-        save: SaveCode::Unidentified,
+        save: SaveCode::NotWired,
         // raw PDF delivered as-is — no inner XML part exists.
         inner_xml_path: None,
     },
@@ -225,14 +224,15 @@ mod tests {
         assert_eq!(FORMATS.len(), 4);
     }
 
-    /// Today only docx save is wired — xlsx 257 is KNOWN but unwired (T-049).
-    /// Pins the save gate semantics (xlsx/pptx saves still rejected).
+    /// Save wiring per format (T-049): docx 65 + xlsx 257 coded, pptx fallback, pdf unwired.
     #[test]
-    fn only_docx_save_is_wired() {
+    fn save_wiring_matches_the_oracle() {
         assert_eq!(by_ext("docx").unwrap().wired_save_code(), Some(65));
-        assert_eq!(by_ext("xlsx").unwrap().wired_save_code(), None);
-        assert_eq!(by_ext("pptx").unwrap().wired_save_code(), None);
-        assert_eq!(by_ext("pdf").unwrap().wired_save_code(), None);
+        assert_eq!(by_ext("xlsx").unwrap().wired_save_code(), Some(257));
+        let pptx = by_ext("pptx").unwrap();
+        assert!(pptx.save.is_wired());
+        assert_eq!(pptx.wired_save_code(), None);
+        assert!(!by_ext("pdf").unwrap().save.is_wired());
     }
 
     /// The workdir layout contract (delivery.js consumes `folder`; save.rs

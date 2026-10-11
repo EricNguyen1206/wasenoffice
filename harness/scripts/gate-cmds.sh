@@ -9,3 +9,5 @@ GATE_FMT='(cd src-tauri && cargo fmt --check --all)'
 GATE_CLIPPY='(cd src-tauri && cargo clippy --workspace --quiet -- -D warnings)'
 GATE_BUILD='pnpm build --logLevel error'
 GATE_LAYOUT='./harness/scripts/test-layout.sh'
+# T-049 gate 16: multi-format save round-trip via real x2t (no app boot).
+GATE_SAVE_MULTIFORMAT='(cd src-tauri && cargo test --quiet save_multiformat_)'

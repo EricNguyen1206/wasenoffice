@@ -50,6 +50,9 @@ harness/scripts/smoke-render.sh /tmp/nanooffice-smoke-fixture.pdf || fail=1
 echo "▸ smoke save round-trip behavioral (TC-D01-10: edit → save → disk)"
 harness/scripts/smoke-save.sh || fail=1
 
+echo "▸ smoke save multi-format round-trip (gate 16: xlsx 257 + pptx fallback-extension — T-049)"
+eval "$GATE_SAVE_MULTIFORMAT" || fail=1
+
 echo "▸ smoke clean-machine behavioral (gate 11: open→edit→save, 0 tham chiếu ONLYOFFICE.app — T-A13)"
 harness/scripts/smoke-clean-machine.sh || fail=1
 

@@ -28,6 +28,10 @@ base64 = "0.23.1"
 # sidecar::convert) — workspace-member-only (gates) until parity, T-A23.
 nanooffice-ooxml = { path = "crates/nanooffice-ooxml" }
 
+# T-049 gate 16: assert saved files are real OOXML packages (same spec/version as the runtime crate).
+[dev-dependencies]
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
 [profile.release]
 codegen-units = 1
 lto = true
