@@ -29,27 +29,22 @@
  * composing).
  */
 import {
-  canvasMeasurer,
-  columnWidth,
-  drawFatal,
-  drawModel,
   layoutMetricLine,
   loadMedia,
   mediaEvidenceLine,
-  pageOrigin,
   resizeRelayout,
   toEvidence,
 } from './viewer/render';
 import {
   caretXY,
   hitTest,
-  layoutBlocks,
   type Block,
   type FontMetrics,
   type LineModel,
   type Run,
   type TextLine,
 } from './viewer/layout';
+import { DocumentSurface } from './viewer/surface';
 
 interface Caret {
   /** The BODY BLOCK index (DD L01 §5.3a — `Hit.caret.para`; the layout
@@ -112,25 +107,16 @@ const { invoke } = (window as unknown as { __TAURI__: { core: { invoke: <T>(cmd:
 
 async function main(): Promise<void> {
   const t0 = performance.now();
-  const cv = document.getElementById('cv') as HTMLCanvasElement;
-  const box = cv.parentElement as HTMLElement;
-  const dpr = window.devicePixelRatio || 1;
-  const ctx = cv.getContext('2d')!;
+  let surface: DocumentSurface | null = null;
   const nameEl = document.getElementById('doc-name')!;
   const dotEl = document.getElementById('dirty-dot')!;
   const saveBtn = document.querySelector<HTMLButtonElement>('#save-btn')!;
 
   try {
+    surface = new DocumentSurface('cv');
     const nl = await invoke<NanoLightDoc>('nano_light_open');
     nameEl.textContent = nl.name;
-    if (nl.warnings.length) {
-      // dynamic banner — editor.html is untouched (user-dirty rebrand)
-      const banner = document.createElement('div');
-      banner.textContent = `Nano Light giữ được văn bản cơ bản; sẽ MẤT khi save: ${nl.warnings.join(', ')}. Dùng chế độ nâng cao để giữ đủ.`;
-      banner.style.cssText =
-        'position:fixed;top:0;left:0;right:0;z-index:9;padding:6px 12px;background:#b45309;color:#fff;font:13px system-ui';
-      document.body.appendChild(banner);
-    }
+    surface.showWarnings(nl.warnings);
     let body = nl.doc.body;
     let caret = nl.caret;
     let sel: SelRange | null = null;
@@ -147,7 +133,7 @@ async function main(): Promise<void> {
     let colW = 0;
     const bitmaps = new Map<string, ImageBitmap>();
     if (nl.mediaBase) await loadMedia(body, nl.mediaBase, bitmaps, 'nano light', invoke);
-    const measure = canvasMeasurer(ctx);
+    const measure = surface.measure;
     const updateStatus = (): void => {
       dotEl.classList.toggle('hidden', !dirty);
     };
@@ -181,22 +167,21 @@ async function main(): Promise<void> {
       }
     };
     const repaint = (): void => {
-      if (model) drawModel(model, cv, ctx, dpr, box.clientWidth, box.clientHeight, bitmaps, (c) => drawOverlay(c, model!));
+      if (model) surface!.draw(model, { bitmaps, overlay: (c) => drawOverlay(c, model!) });
     };
 
     const render = (): LineModel => {
-      colW = columnWidth(nl.page, nl.mar, box.clientWidth);
-      const m = layoutBlocks({
+      const res = surface!.layout({
         blocks: body,
-        ...pageOrigin(nl.mar),
-        w: colW,
         fonts: nl.fonts,
-        measure,
+        page: nl.page,
+        mar: nl.mar,
       });
-      model = m;
+      colW = res.colW;
+      model = res.model;
       repaint();
       wakeCaret();
-      return m;
+      return model;
     };
 
     /** Layout + evidence lines (ADDITIVE log contract with
@@ -656,8 +641,8 @@ async function main(): Promise<void> {
       lastClick = { t: now, x, y, n };
       return n;
     };
-    cv.addEventListener('mousedown', (ev) => mouseDownAt(ev.offsetX, ev.offsetY, ev.shiftKey, clickCount(ev.offsetX, ev.offsetY)));
-    cv.addEventListener('mousemove', (ev) => mouseMoveAt(ev.offsetX, ev.offsetY));
+    surface.cv.addEventListener('mousedown', (ev: MouseEvent) => mouseDownAt(ev.offsetX, ev.offsetY, ev.shiftKey, clickCount(ev.offsetX, ev.offsetY)));
+    surface.cv.addEventListener('mousemove', (ev: MouseEvent) => mouseMoveAt(ev.offsetX, ev.offsetY));
     window.addEventListener('mouseup', () => mouseUp());
     saveBtn.addEventListener('click', () => void save());
     window.addEventListener('keydown', (ev) => {
@@ -745,14 +730,14 @@ async function main(): Promise<void> {
     const ms = performance.now() - t0;
     await invoke('frontend_log', {
       level: 'info',
-      message: `nano light first-draw ${ms.toFixed(1)} ms (parse ${nl.parseMs.toFixed(1)} ms, body blocks ${body.length}, canvas ${cv.style.height})`,
+      message: `nano light first-draw ${ms.toFixed(1)} ms (parse ${nl.parseMs.toFixed(1)} ms, body blocks ${body.length}, canvas ${surface.cv.style.height})`,
     });
     logLayoutEvidence();
     // media evidence from the first render only (text edits never move them)
     for (const media of model.media) {
       await invoke('frontend_log', {
         level: 'info',
-        message: `nano light media: ${mediaEvidenceLine(media, ctx, dpr)}`,
+        message: `nano light media: ${mediaEvidenceLine(media, surface.ctx, surface.dpr)}`,
       });
     }
 
@@ -839,7 +824,7 @@ async function main(): Promise<void> {
       }
     }
   } catch (e) {
-    drawFatal(cv, ctx, dpr, box.clientWidth, box.clientHeight, `nano light failed: ${e}`);
+    surface?.showFatal(`nano light failed: ${e}`);
     await invoke('frontend_log', { level: 'error', message: `nano light failed: ${e}` });
   }
 }

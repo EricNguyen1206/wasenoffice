@@ -9,18 +9,14 @@
  * whole document. No engine shim is loaded on this page (see viewer.html).
  */
 import {
-  canvasMeasurer,
-  columnWidth,
-  drawFatal,
-  drawModel,
   layoutMetricLine,
   loadMedia,
   mediaEvidenceLine,
-  pageOrigin,
   resizeRelayout,
   toEvidence,
 } from './viewer/render';
-import { hitTest, layoutBlocks, type Block, type FontMetrics, type LineModel } from './viewer/layout';
+import { hitTest, type Block, type FontMetrics, type LineModel } from './viewer/layout';
+import { DocumentSurface } from './viewer/surface';
 
 /** T-A28 C5: mirrors the Rust `QuickView` payload (src-tauri/src/viewer.rs)
  * in the ONE camelCase casing — every Rust→JS payload struct is
@@ -42,36 +38,23 @@ const { invoke } = (window as unknown as { __TAURI__: { core: { invoke: <T>(cmd:
 
 async function main(): Promise<void> {
   const t0 = performance.now();
-  const cv = document.getElementById('cv') as HTMLCanvasElement;
-  const dpr = window.devicePixelRatio || 1;
-  const ctx = cv.getContext('2d')!;
+  let surface: DocumentSurface | null = null;
 
   try {
+    surface = new DocumentSurface('cv');
     const qv = await invoke<QuickView>('viewer_open');
     const bitmaps = new Map<string, ImageBitmap>();
     if (qv.mediaBase) await loadMedia(qv.doc.body, qv.mediaBase, bitmaps, 'viewer', invoke);
-    const measure = canvasMeasurer(ctx);
-    const render = (): { colW: number; model: LineModel; docH: number } => {
-      const colW = columnWidth(qv.page, qv.mar, innerWidth);
-      const model = layoutBlocks({
-        blocks: qv.doc.body,
-        ...pageOrigin(qv.mar),
-        w: colW,
-        fonts: qv.fonts,
-        measure,
-      });
-      const docH = drawModel(model, cv, ctx, dpr, innerWidth, innerHeight, bitmaps);
-      return { colW, model, docH };
-    };
+
+    const render = () =>
+      surface!.layoutAndDraw(
+        { blocks: qv.doc.body, fonts: qv.fonts, page: qv.page, mar: qv.mar },
+        { bitmaps },
+      );
 
     const { colW, model, docH } = render();
     const ms = performance.now() - t0;
-    // render evidence: count non-white pixels — text actually hit the canvas
-    const img = ctx.getImageData(0, 0, cv.width, cv.height).data;
-    let inked = 0;
-    for (let i = 0; i < img.length; i += 4 * 97) {
-      if (img[i] < 128) inked++; // red channel of every 97th pixel
-    }
+    const inked = surface.countInked();
     const msg = `viewer first-draw ${ms.toFixed(1)} ms (parse ${qv.parseMs.toFixed(1)} ms, body blocks ${qv.doc.body.length}, inked ${inked}, canvas ${docH}px)`;
     await invoke('frontend_log', { level: 'info', message: msg });
     // ADDITIVE log contract with harness/scripts/smoke-quick-view.sh (gate 12):
@@ -93,7 +76,7 @@ async function main(): Promise<void> {
     for (const media of model.media) {
       await invoke('frontend_log', {
         level: 'info',
-        message: `viewer media: ${mediaEvidenceLine(media, ctx, dpr)}`,
+        message: `viewer media: ${mediaEvidenceLine(media, surface.ctx, surface.dpr)}`,
       });
     }
     // T-V7 gate-12 probe: round-trip every text line through hitTest (mid →
@@ -117,9 +100,9 @@ async function main(): Promise<void> {
         const last = line.items[line.items.length - 1];
         const endX = last ? last.x + last.w : line.x;
         const hits = [
-          hitTest(model, measure, line.x - 1, line.baseline),
-          hitTest(model, measure, line.x + line.total / 2, line.baseline),
-          hitTest(model, measure, endX + 1, line.baseline),
+          hitTest(model, surface!.measure, line.x - 1, line.baseline),
+          hitTest(model, surface!.measure, line.x + line.total / 2, line.baseline),
+          hitTest(model, surface!.measure, endX + 1, line.baseline),
         ];
         if (hits.every((h) => inLine(line, k, h))) ok += 1;
         else bad.push(`line ${k} → ${JSON.stringify(hits)}`);
@@ -131,7 +114,7 @@ async function main(): Promise<void> {
     }
     resizeRelayout(() => render());
   } catch (e) {
-    drawFatal(cv, ctx, dpr, innerWidth, innerHeight, `quick view failed: ${e}`);
+    surface?.showFatal(`quick view failed: ${e}`);
     await invoke('frontend_log', { level: 'error', message: `viewer failed: ${e}` });
   }
 }

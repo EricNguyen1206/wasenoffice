@@ -8,6 +8,25 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-11 · T-064: DocumentSurface host container (Candidate 4 review #7)
+
+- **Nhiệm vụ:** Rút trích container chung cho canvas viewport/resize/dpr trước khi chrome Milestone A5 phân nhánh giữa viewer và editor.
+- **Thiết kế sâu:**
+  - `src/viewer/surface.ts`: Class `DocumentSurface` đóng gói toàn bộ vòng đời canvas viewport:
+    khởi tạo context 2D + dpr, đo đạc kích thước viewport linh hoạt theo container hoặc window (`vw`/`vh`),
+    điều phối `layout()` + `draw()` + `layoutAndDraw()`, đếm pixel `countInked()`,
+    hiển thị lỗi fatal `showFatal()`, và banner cảnh báo `showWarnings()`.
+  - `src/viewer.ts` và `src/editor.ts` chuyển sang consume `DocumentSurface`: toàn bộ boilerplate lặp lại
+    về canvas context, DPR, resize debouncing, pixel sampling loop và fatal/warning banner biến mất.
+- **Kết quả:**
+  - Vite tự động phân rã và tách `surface` thành shared bundle chunk riêng (`dist/assets/surface-*.js`)
+    dùng chung cho cả `viewer.html` và `editor.html`.
+  - Gate 12 (quick-view metrics), Gate 13 (quick-view UX wiring E2E) và Gate 15 (Nano Light editor round-trip)
+    đều PASSED với các chỉ số first-draw nhanh (16–88 ms).
+  - `./harness/scripts/verify.sh` FULL exit 0 cả 20 gates.
+
+---
+
 ## 2026-10-11 · T-046: module config `config.rs` + `window.rs` gom 10 env knobs & window factory seam (Candidate 1 review #7)
 
 - **Nhiệm vụ:** Gom các biến môi trường cấu hình launch/boot/probes còn rải trong `lib.rs`

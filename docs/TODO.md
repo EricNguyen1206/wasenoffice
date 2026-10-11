@@ -15,7 +15,7 @@ type: queue
 
 ## Tình hình nhanh
 
-▶ Kế tiếp: **A5 mở màn** (UI editor riêng thay web-apps — design-first khi claim) / **PH-1 hoàn thành 11/12** (chỉ còn seed T-061 chờ occurrence) / **T-046 ĐÓNG 11.10** (config.rs + window.rs gom 10 env knobs + window factory) / **T-047 ĐÓNG 11.10** (6f2e4c2) / **T-049 ĐÓNG 11.10** (d936dd5)
+▶ Kế tiếp: **A5 mở màn** (UI editor riêng thay web-apps — design-first khi claim) / **T-064 ĐÓNG 11.10** (DocumentSurface host container) / **T-046 ĐÓNG 11.10**
 
 | Phase | Tổng | ✅ | 🟨 | ⏸ | ⬜ |
 |---|---|---|---|---|---|
@@ -23,7 +23,7 @@ type: queue
 | PH-1  |  12 | 11 | 0  | 0  | 1  |
 | PH-4  |  4  | 0  | 0  | 0  | 4  |
 | Track A (QĐ9) |  27 | 27 | 0  | 0  | 0  |
-| META  | 16  | 9  | 0  | 0  | 7  |
+| META  | 16  | 10 | 0  | 0  | 6  |
 
 ## PH-0 — Spike editor + render DOCX (go/no-go) — ĐÃ ĐÓNG 27.09 · verdict GO WITH CAVEAT
 
@@ -96,7 +96,7 @@ type: queue
 - [ ] ⬜ T-055 · **[ĐỊNH KỲ] Review kiến trúc** (`improve-codebase-architecture` + `ponytail-audit` ghép cặp) — chạy SAU MỖI RUNG Track A đóng / phase PH đóng (#7 ĐÃ CHẠY 11.10: Candidate 1 đã implement và verify thành **T-046** ✅; C2/C3/C4 land thành **T-062** / **T-063** / **T-064** bên dưới; HTML report trong $TMPDIR đã mở cho user; lần kế #8 sau khi A5 mở màn hoặc PH-2)
 - [ ] ⬜ T-062 · Atomic save seam: gom logic file tạm + rename nguyên tử an toàn đĩa giữa `bridge/save.rs` và `editor/mod.rs` (Candidate 2 review #7) · ← T-055 #7
 - [ ] ⬜ T-063 · Surface document hand-off keyed theo window_label: xoá bỏ `Mutex<Option<String>>` unkeyed của `QuickViewRequest` và `NanoLightRequest` (Candidate 3 review #7) · ← T-055 #7
-- [ ] ⬜ T-064 · DocumentSurface host: rút trích container chung cho canvas viewport/resize/dpr trước khi chrome A5 phân nhánh giữa viewer và editor (Candidate 4 review #7) · ← T-055 #7
+- [x] ✅ T-064 · DocumentSurface host: rút trích container chung cho canvas viewport/resize/dpr trước khi chrome A5 phân nhánh giữa viewer và editor (Candidate 4 review #7): class `DocumentSurface` (`src/viewer/surface.ts`) đóng gói context 2D, dpr, `vw`/`vh`, `layoutAndDraw()`, `countInked()`, `showFatal()`, `showWarnings()`; Vite tách shared chunk `surface-*.js`; gates 12/13/15 PASSED; verify FULL exit 0, 20 ▸ steps · 11.10 · diagnostics 11.10 (T-064)
 - [ ] ⬜ T-020 · Add 2 skill theo audit 26.09: `systematic-debugging` (superpowers) + `handoff` (mattpocock) qua cổng acceptance · **chờ user duyệt**
 - [ ] ⬜ T-021 · CI + gates số liệu size/RAM/startup · trigger: PH-4
 - [ ] ⬜ T-034 · Bật GitNexus index `upstream/sdkjs` phục vụ reverse font pipeline (trigger đã chạm: bridge first wave xong) · ← T-001 · skill: gitnexus-cli
