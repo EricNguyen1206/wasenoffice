@@ -8,6 +8,28 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-11 · T-046: module config `config.rs` + `window.rs` gom 10 env knobs & window factory seam (Candidate 1 review #7)
+
+- **Nhiệm vụ:** Gom các biến môi trường cấu hình launch/boot/probes còn rải trong `lib.rs`
+  về 1 nhà và chuẩn hóa seam dựng cửa sổ (Candidate 1 trong Architecture Review #7;
+  đóng nốt task code cuối cùng của phase PH-1).
+- **Thiết kế sâu:**
+  - `src-tauri/src/config.rs`: Struct `AppConfig` gom 10 biến (`NANO_OFFICE_BACKGROUND`,
+    `NANO_OFFICE_OPEN`, `NANO_OFFICE_DEVTOOLS`, `NANO_OFFICE_QUICK_VIEW`, `NANO_OFFICE_NANO_LIGHT`,
+    `NANO_OFFICE_PROBE`, `NANO_OFFICE_SAVE_PROBE`, `NANO_OFFICE_UX_PROBE`, `NANO_OFFICE_NL_PROBE`,
+    `NANO_OFFICE_QV_HITTEST`). Hàm pure `from_lookup` cho phép unit test độc lập không race env.
+    `startup_document` chuyển sang `Mutex<Option<String>>` với `take_startup_document()`,
+    xóa bỏ `std::env::remove_var` bẩn.
+  - `src-tauri/src/window.rs`: Seam `create_boot_window` và `open_surface_window` (dùng chung cho
+    viewer và editor). Tự động áp dụng Rule 6b background offscreen sliver và tiêm probe scripts.
+- **Kết quả:**
+  - `src-tauri/src/lib.rs` co từ 490 xuống 330 dòng; hook `setup()` giảm từ 140 dòng xuống 25 dòng.
+  - 4 unit tests mới cho `AppConfig` trong `config.rs`.
+  - `./harness/scripts/verify.sh` FULL exit 0 cả 20 gates (cargo check/fmt/clippy, pnpm build,
+    gate 14 unit test 114 checks, 7 smoke behavioral gates).
+
+---
+
 ## 2026-10-11 · T-047: dialog "An error has occurred…" = catch-all uncaught-error của engine, KHÔNG phải lỗi mở file
 
 - **Root cause (confirmed bằng code-chain, full bằng chứng file:line ở reference.map §

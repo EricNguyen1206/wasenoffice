@@ -10,7 +10,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
-use tauri::{State, WebviewUrl, WebviewWindowBuilder};
+use tauri::State;
 
 use nanooffice_ooxml::{Document, Page, PageMar, RBlock, RenderDoc};
 
@@ -71,28 +71,8 @@ pub fn viewer_view(
 /// Window-label sequence for UI-opened quick views ("main" = the env boot).
 static WINDOW_SEQ: AtomicU32 = AtomicU32::new(0);
 
-/// Shared surface-window body (T-060 C2): the viewer and Nano Light view
-/// commands build the same focused(false) window (rule 6b) — label/html/
-/// title differ per surface, the error carries the caller's tag. No shim is
-/// injected on these windows (no bridge, no engine — DD V01 §3.1, DD L01 §2).
-pub(crate) fn open_surface_window(
-    app: &tauri::AppHandle,
-    label: &str,
-    html: &str,
-    title: String,
-    tag: &str,
-) -> Result<(), String> {
-    let mut b = WebviewWindowBuilder::new(app, label, WebviewUrl::App(html.into()))
-        .title(title)
-        .inner_size(1000.0, 700.0)
-        .visible(true)
-        .focused(false);
-    if let Some((x, y)) = crate::bg_sliver_position(app) {
-        b = b.decorations(false).position(x, y);
-    }
-    b.build().map_err(|e| format!("{tag}: open window: {e}"))?;
-    Ok(())
-}
+/// Shared surface-window body (T-060 C2, T-046): delegated to crate::window.
+pub(crate) use crate::window::open_surface_window;
 
 /// The shared open pipeline of the two parse-only surfaces (T-060 C2):
 /// read → parse → resolve → OS/2 font metrics → FileRegistry registration

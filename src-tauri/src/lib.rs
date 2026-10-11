@@ -14,15 +14,18 @@
 //! (delivery.js — open-delivery chain); both also bundled by vite via src/main.ts.
 
 mod bridge;
+mod config;
 mod editor;
 mod formats;
 mod protocol;
 mod sidecar;
 mod viewer;
+mod window;
 
+use config::AppConfig;
 use serde::Serialize;
 use std::sync::Arc;
-use tauri::{Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{Manager, State};
 
 use protocol::FileRegistry;
 
@@ -89,13 +92,11 @@ pub struct OpenedDocument {
 fn get_startup_document(
     window: tauri::WebviewWindow,
     registry: State<'_, Arc<FileRegistry>>,
+    config: State<'_, Arc<AppConfig>>,
 ) -> Result<Option<OpenedDocument>, String> {
-    match std::env::var("NANO_OFFICE_OPEN") {
-        Ok(path) if !path.is_empty() => {
-            std::env::remove_var("NANO_OFFICE_OPEN");
-            open_document(window, path, registry).map(Some)
-        }
-        _ => Ok(None),
+    match config.take_startup_document() {
+        Some(path) => open_document(window, path, registry).map(Some),
+        None => Ok(None),
     }
 }
 
@@ -243,35 +244,16 @@ fn frontend_log(level: String, message: String) {
         _ => log::info!("[web] {message}"),
     }
 }
-
-/// Rule 6b bg-mode (NANO_OFFICE_BACKGROUND=1): origin placing the window with
-/// only an 8-logical-px patch inside the primary screen's bottom-right corner.
-/// Any unoccluded pixel keeps NSWindow occlusionState `visible` (WebKit
-/// throttles rAF/timers for FULLY occluded windows — full-hide killed the
-/// engine save-probes, commit 4fe56f9) so gate evidence renders at full speed
-/// while the window stays out of the user's working area. Position-only +
-/// borderless: innerWidth/innerHeight unchanged (frozen `viewer layout:`
-/// numbers byte-identical); constrainFrameRect doesn't touch borderless
-/// windows. None = not background mode → normal window.
-pub(crate) fn bg_sliver_position(app: &tauri::AppHandle) -> Option<(f64, f64)> {
-    if !std::env::var("NANO_OFFICE_BACKGROUND").is_ok_and(|v| !v.is_empty() && v != "0") {
-        return None;
-    }
-    let m = app.primary_monitor().ok()??;
-    let sliver = 8.0;
-    Some((
-        m.size().width as f64 / m.scale_factor() - sliver,
-        m.size().height as f64 / m.scale_factor() - sliver,
-    ))
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // `log` has no backend by default; PH-0 evidence (bridge UNIMPL hits,
     // protocol traffic) flows to stdout via env_logger.
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
+    let config = Arc::new(AppConfig::from_env());
+
     let mut app = tauri::Builder::default()
+        .manage(Arc::clone(&config))
         .manage(Arc::new(FileRegistry::default()))
         .manage(Arc::new(viewer::QuickViewRequest::default()))
         .manage(Arc::new(editor::EditorSessions::default()))
@@ -326,162 +308,20 @@ pub fn run() {
             if let Err(e) = protocol::filesrv::spawn(registry) {
                 log::error!("{e} — document open will not work");
             }
-            // Rule 6b: offscreen sliver for every boot window (bg_sliver_position doc).
-            let bg_pos = bg_sliver_position(app.handle());
-            // Probe gate for the shim's diagnostics probes (src/shim/delivery.js
-            // `probesEnabled()`): default ON in debug builds (dev evidence
-            // depends on them), OFF in release; NANO_OFFICE_PROBE=0/1 forces
-            // OFF/ON. Published as a one-line init script so every frame can
-            // read the flag synchronously.
-            let probe_enabled = match std::env::var("NANO_OFFICE_PROBE").as_deref() {
-                Ok("0") => false,
-                Ok("1") => true,
-                _ => cfg!(debug_assertions),
-            };
-            let probe_flag_js = format!("window.__NANO_OFFICE_PROBE__ = {probe_enabled};");
-            // Save-proof automation (T-010, probe-gated in the shim): env holds
-            // the text the shim inserts via asc_AddText + asc_Save() after
-            // contentReady — no keystrokes (diagnostics 27.09 T-003).
-            let save_probe_js = match std::env::var("NANO_OFFICE_SAVE_PROBE") {
-                Ok(text) if !text.is_empty() => {
-                    format!(
-                        "window.__NANO_OFFICE_SAVE_PROBE_TEXT__ = {};",
-                        serde_json::json!(text)
-                    )
-                }
-                _ => String::new(),
-            };
-            // V5 UX E2E driver (gate 13, pattern NANO_OFFICE_SAVE_PROBE): env
-            // holds a .docx path the START PAGE fills into its path input and
-            // clicks Quick view with — the real UI handler chain runs
-            // (viewer_view → viewer window → viewer_open). No synthetic
-            // keystrokes, no focus taken; product default (no env) untouched.
-            let ux_probe_js = match std::env::var("NANO_OFFICE_UX_PROBE") {
-                Ok(path) if !path.is_empty() => {
-                    format!(
-                        "window.__NANO_OFFICE_UX_PROBE__ = {};",
-                        serde_json::json!(path)
-                    )
-                }
-                _ => String::new(),
-            };
-            // L01 gate-15 edit driver (pattern NANO_OFFICE_SAVE_PROBE): env
-            // holds the MARKER TEXT the editor page inserts through the SAME
-            // edit() function the keydown handler uses (caret set by a real
-            // hitTest), then saves and reopens in a second window. No
-            // synthetic keystrokes, no focus taken; product default (no env)
-            // untouched.
-            let nl_probe_js = match std::env::var("NANO_OFFICE_NL_PROBE") {
-                Ok(marker) if !marker.is_empty() => {
-                    format!(
-                        "window.__NANO_OFFICE_NL_PROBE__ = {};",
-                        serde_json::json!(marker)
-                    )
-                }
-                _ => String::new(),
-            };
-            // V01 quick-view slice (DD docs/design/viewer-a3/DD.md §3.1): env
-            // trigger opens the dedicated viewer entry — no shim, no engine
-            // iframe. The normal boot path below is untouched.
-            // Rule 6b (AGENTS.md): window shows WITHOUT taking focus; devtools opt-in only.
-            // Full-hide breaks engine save-probes (throttled frames) — verified 03.10.
-            if std::env::var("NANO_OFFICE_QUICK_VIEW").is_ok_and(|v| !v.is_empty()) {
-                // T-V7 gate-12 probe: round-trip every laid-out line through
-                // the layout module's hitTest (env-driven — gate food only).
-                let hit_test_js = match std::env::var("NANO_OFFICE_QV_HITTEST") {
-                    Ok(v) if !v.is_empty() => "window.__NANO_OFFICE_QV_HITTEST__ = true;",
-                    _ => "",
-                };
-                let mut win =
-                    WebviewWindowBuilder::new(app, "main", WebviewUrl::App("viewer.html".into()))
-                        .title("NanoOffice — Quick View")
-                        .inner_size(1000.0, 700.0)
-                        .visible(true)
-                        .focused(false);
-                if let Some((x, y)) = bg_pos {
-                    win = win.decorations(false).position(x, y);
-                }
-                if !hit_test_js.is_empty() {
-                    win = win.initialization_script_for_all_frames(hit_test_js);
-                }
-                let win = win.build()?;
-                let _ = win;
-                return Ok(());
-            }
-            // L01 Nano Light slice (DD docs/design/editor-a4/DD.md §3): env
-            // trigger opens the dedicated editor entry — no shim, no engine,
-            // no Editor.bin on this path. The normal boot path below stays
-            // the DEFAULT (D1 — engine remains the default open; the button
-            // + this env are Nano Light's own entries). Rule 6b as above.
-            if std::env::var("NANO_OFFICE_NANO_LIGHT").is_ok_and(|v| !v.is_empty()) {
-                let mut win =
-                    WebviewWindowBuilder::new(app, "main", WebviewUrl::App("editor.html".into()))
-                        .title("NanoOffice — Nano Light")
-                        .inner_size(1000.0, 700.0)
-                        .visible(true)
-                        .focused(false);
-                if let Some((x, y)) = bg_pos {
-                    win = win.decorations(false).position(x, y);
-                }
-                if !nl_probe_js.is_empty() {
-                    win = win.initialization_script_for_all_frames(&nl_probe_js);
-                }
-                let win = win.build()?;
-                let _ = win;
-                return Ok(());
-            }
-            // Shim load order is load-bearing (BRIDGE_JS before DELIVERY_JS —
-            // module doc); probe scripts + flag only publish globals.
-            let mut win = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
-                .title("NanoOffice")
-                .inner_size(1280.0, 800.0)
-                .min_inner_size(940.0, 560.0)
-                .visible(true)
-                .focused(false);
-            if let Some((x, y)) = bg_pos {
-                win = win.decorations(false).position(x, y);
-            }
-            for js in [
-                ux_probe_js.as_str(),
-                save_probe_js.as_str(),
-                probe_flag_js.as_str(),
-                BRIDGE_JS,
-                DELIVERY_JS,
-            ] {
-                if js.is_empty() {
-                    continue;
-                }
-                win = win.initialization_script_for_all_frames(js);
-            }
-            let win = win.build()?;
-            // Debug builds: engine console opt-in only (rule 6b — devtools default OFF;
-            // the docked panel also skews layout/render verification).
-            #[cfg(debug_assertions)]
-            if std::env::var("NANO_OFFICE_DEVTOOLS").as_deref() == Ok("1") {
-                win.open_devtools();
-            }
-            let _ = win;
+
+            // Window factory seam (T-046): creates initial boot window matching config
+            let config = Arc::clone(app.state::<Arc<AppConfig>>().inner());
+            window::create_boot_window(app.handle(), &config, BRIDGE_JS, DELIVERY_JS)?;
             Ok(())
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
 
     // Rule 6b (AGENTS.md): agent/dev boots must not steal the user's screen.
-    // NANO_OFFICE_BACKGROUND=1 (smoke-lib.sh::smoke_boot sets it for every
-    // gate boot) switches to Accessory policy — the app never activates, no
-    // Dock icon, windows still visible (full-hide breaks engine save-probes,
-    // throttled frames — verified 03.10). Product default (no env) stays a
-    // regular Dock app.
-    //
-    // MUST run BEFORE app.run(): tauri's setup hook fires at RunEvent::Ready,
-    // after macOS applicationDidFinishLaunching already applied the default
-    // Regular policy and activateIgnoringOtherApps (tao app_state.rs::launched
-    // → apply_activation_policy) — setting it there still steals focus for the
-    // first seconds (verified 04.10). App::set_activation_policy pre-run takes
-    // the runtime path straight into the tao delegate aux state, which
-    // launched() applies BEFORE activating.
+    // MUST run BEFORE app.run(): tauri's setup hook fires after macOS
+    // applicationDidFinishLaunching already activated the app (verified 04.10).
     #[cfg(target_os = "macos")]
-    if std::env::var("NANO_OFFICE_BACKGROUND").is_ok_and(|v| !v.is_empty() && v != "0") {
+    if config.background {
         app.set_activation_policy(tauri::ActivationPolicy::Accessory);
         log::info!("background: accessory activation policy (NANO_OFFICE_BACKGROUND)");
     }
