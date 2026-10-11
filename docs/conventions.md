@@ -34,6 +34,15 @@ upstream/           submodule chỉ đọc
   rename sang convention riêng, giúp đối chiếu call-sites và rebase đỡ đau.
 - **Không** hardcode đường đĩa trong engine-facing code; mọi đường file đi qua fileId + custom protocol.
 
+## Quy ước giao tiếp & Thuật ngữ kỹ thuật (Glossary)
+
+- **Ngôn ngữ trao đổi**: Tiếng Việt kỹ thuật chuẩn mực, súc tích, tự nhiên giữa các kỹ sư phần mềm.
+- **Giữ nguyên thuật ngữ tiếng Anh chuẩn**: `Milestone`, `Refactor`, `Seam`, `Patch`, `Commit`, `Build`, `Runtime`, `Interface`, `Workspace`, `Stub`, `Driver`, `Probe`.
+- **Cấm dịch máy gượng gạo**:
+  - *Ladder rung (Track A A0–A6)*: Dùng **Milestone A0–A6** hoặc **Chặng/Nấc A0–A6** (TUYỆT ĐỐI KHÔNG dùng từ "Rung").
+  - *Sink*: Dùng **Lưu trữ** hoặc **Ghi nhận** tài liệu.
+  - *Foreign-dirty*: Dùng **Thay đổi chưa commit từ session song song**.
+
 ## Git
 
 - Branch chính: `main`. Nhánh làm việc: `feat/<phase>-<mô tả>` (vd `feat/ph0-spike-editor-load`).
