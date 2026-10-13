@@ -20,3 +20,10 @@ engines/*
 # pycache từ fixture generators (import docxgen_common khi gate chạy)
 __pycache__/
 /.mimosa/
+
+# local agent-tool artifacts
+/.zcodeignore
+
+# updater private key — KHÔNG BAO GIỜ commit (pubkey nằm trong tauri.conf.json)
+*.key
+*.key.pub
