@@ -126,6 +126,8 @@ impl EditorSession {
             }
         }
         let is_mutation = !matches!(cmd, EditCmd::Undo | EditCmd::Redo);
+        let is_format = matches!(cmd, EditCmd::Format { .. });
+        let format_sel = if is_format { cmd.sel() } else { None };
         // The snapshot carries the caret+selection the COMMAND acted at —
         // TS-side caret movement (arrows/clicks) between commands never syncs
         // back to the session (DD L01 §5.3g ceiling), so `self.caret` would
@@ -162,6 +164,15 @@ impl EditorSession {
                 let (c, _) = collapse_range(bl, c, s)?;
                 apply_enter(bl, c)
             }),
+            EditCmd::Format {
+                bold,
+                italic,
+                underline,
+                caret,
+                sel,
+            } => dispatch(&mut self.doc, caret, Some(sel), |bl, c, s| {
+                apply_format(bl, c, s.unwrap(), bold, italic, underline)
+            }),
             EditCmd::Undo => match self.undo.pop() {
                 Some((doc, caret, sel)) => {
                     self.redo
@@ -187,7 +198,11 @@ impl EditorSession {
             if self.undo.len() > UNDO_CAP {
                 self.undo.remove(0);
             }
-            self.sel = None; // a mutation collapses the selection to a caret
+            if is_format {
+                self.sel = format_sel;
+            } else {
+                self.sel = None; // a mutation collapses the selection to a caret
+            }
         }
         self.caret = caret;
         Ok(caret)
@@ -410,6 +425,16 @@ pub enum EditCmd {
         #[serde(default)]
         sel: Option<SelRange>,
     },
+    Format {
+        #[serde(default)]
+        bold: Option<bool>,
+        #[serde(default)]
+        italic: Option<bool>,
+        #[serde(default)]
+        underline: Option<bool>,
+        caret: Caret,
+        sel: SelRange,
+    },
     Undo,
     Redo,
 }
@@ -421,6 +446,7 @@ impl EditCmd {
             EditCmd::Backspace { .. } => "backspace",
             EditCmd::Delete { .. } => "delete",
             EditCmd::Enter { .. } => "enter",
+            EditCmd::Format { .. } => "format",
             EditCmd::Undo => "undo",
             EditCmd::Redo => "redo",
         }
@@ -433,7 +459,8 @@ impl EditCmd {
             EditCmd::Insert { caret, .. }
             | EditCmd::Backspace { caret, .. }
             | EditCmd::Delete { caret, .. }
-            | EditCmd::Enter { caret, .. } => Some(*caret),
+            | EditCmd::Enter { caret, .. }
+            | EditCmd::Format { caret, .. } => Some(*caret),
             EditCmd::Undo | EditCmd::Redo => None,
         }
     }
@@ -445,6 +472,7 @@ impl EditCmd {
             | EditCmd::Backspace { sel, .. }
             | EditCmd::Delete { sel, .. }
             | EditCmd::Enter { sel, .. } => *sel,
+            EditCmd::Format { sel, .. } => Some(*sel),
             EditCmd::Undo | EditCmd::Redo => None,
         }
     }

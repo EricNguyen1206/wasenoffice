@@ -8,6 +8,21 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-13 · T-A36: A5 slice 3 — Floating Contextual Toolbar (Zen Minimalist / Zinc minimal)
+
+- **Nhiệm vụ:** Xây dựng thanh công cụ định dạng nổi khi có selection (Bold/Italic/Underline) cắm thẳng vào hit-test của DocumentSurface; bổ sung lệnh mutation `Format` trong Rust.
+- **Thay đổi:**
+  - `src-tauri/src/editor/mutations.rs`: Thêm hàm `apply_format(blocks, caret, sel, bold, italic, underline)` xử lý chia cắt runs theo ranh giới selection (`collapse_range`/`ordered_carets`), chuyển đổi trạng thái `run.bold`/`run.italic`/`run.underline`, bảo toàn images và cấu trúc block; bổ sung unit test `test_apply_format_toggle_bold_split_run`.
+  - `src-tauri/src/editor/mod.rs`: Mở rộng enum `EditCmd` với variant `Format`; `EditorSession::apply` giữ nguyên `sel` sau định dạng (không sụp đổ selection) và lưu snapshot undo để phím tắt `Cmd-Z` hoàn tác định dạng mượt mà.
+  - `editor.html`: Thêm DOM `#format-toolbar` nổi bên trong `<main id="canvas-box" class="relative">` với các nút `#fmt-bold`, `#fmt-italic`, `#fmt-underline` dùng theme Graphite/Zinc minimal.
+  - `src/editor.ts`: Thêm helper `updateFormatToolbar()` tự động tính toán toạ độ vị trí nổi phía trên selection focus (`caretXY`), tự ẩn khi selection sụp đổ; gắn sự kiện click và phím tắt bàn phím `Cmd-B`, `Cmd-I`, `Cmd-U`.
+- **Bằng chứng:**
+  - Cargo test 73 passed (8 suites, 0 failed).
+  - Gate 15 smoke Nano Light: first-draw 45.0 ms, save 2.8 ms, positive PASSED + negative proofs.
+  - `./harness/scripts/verify.sh` FULL exit 0 cả 20 gates.
+
+---
+
 ## 2026-10-11 · T-A35: A5 slice 2 — Quick View chrome sang own-UI layout + theme Graphite
 
 - **Nhiệm vụ:** Bổ sung thanh header chrome cho Quick View (`viewer.html`, `src/viewer.ts`) đồng bộ layout container và theme Graphite với Nano Light.

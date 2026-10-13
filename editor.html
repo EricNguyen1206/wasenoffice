@@ -22,7 +22,12 @@
         Save
       </button>
     </header>
-    <main class="flex-1 overflow-auto">
+    <main id="canvas-box" class="flex-1 overflow-auto relative">
+      <div id="format-toolbar" class="hidden absolute z-20 flex items-center gap-1 rounded-panel border border-edge bg-panel px-1.5 py-1 shadow-md text-fg text-xs select-none">
+        <button id="fmt-bold" type="button" class="cursor-pointer rounded px-2 py-0.5 font-bold hover:bg-panel-active active:bg-panel-active" title="Bold (Cmd-B)">B</button>
+        <button id="fmt-italic" type="button" class="cursor-pointer rounded px-2 py-0.5 italic hover:bg-panel-active active:bg-panel-active" title="Italic (Cmd-I)">I</button>
+        <button id="fmt-underline" type="button" class="cursor-pointer rounded px-2 py-0.5 underline hover:bg-panel-active active:bg-panel-active" title="Underline (Cmd-U)">U</button>
+      </div>
       <canvas id="cv" class="block"></canvas>
     </main>
     <script type="module" src="/src/editor.ts"></script>

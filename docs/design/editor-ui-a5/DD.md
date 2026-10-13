@@ -81,24 +81,25 @@ Theo phân tích `docs/techstack-analysis.md`, hướng thiết kế chốt là 
    - `#doc-name`: Hiển thị tên file từ payload `NanoLightDoc.name`.
    - `#dirty-dot`: Chấm tròn accent, hiển thị khi `dirty = true` (khi `doc != saved`).
    - `#save-btn`: Nút bấm lưu file gọi lệnh `nano_light_save` (hoặc phím tắt `Cmd-S`).
-2. **Tương tác với `DocumentSurface`:**
-   - Viewport canvas nằm bên trong `<main id="canvas-box" class="flex-1 overflow-auto">`.
+2. **Floating Contextual Toolbar (Zen Minimalist — T-A36):**
+   - Thanh công cụ nổi (`#format-toolbar`) chỉ xuất hiện khi có vùng chọn văn bản (`sel !== null` và `anchor != focus`).
+   - Neo tọa độ tự động ngay phía trên selection focus (`caretXY`), tự ẩn khi selection sụp đổ hoặc khi tiếp tục gõ chữ.
+   - Các nút định dạng: In đậm (**B**), In nghiêng (*I*), Gạch chân (<u>U</u>) kèm phím tắt `Cmd-B`, `Cmd-I`, `Cmd-U`.
+   - Tương tác backend qua lệnh mutation `Format`, tự động tách run và cập nhật thuộc tính định dạng vào `nanooffice_ooxml::Run` (bảo toàn undo/redo và save fidelity).
+3. **Tương tác với `DocumentSurface`:**
+   - Viewport canvas nằm bên trong `<main id="canvas-box" class="flex-1 overflow-auto relative">`.
    - `DocumentSurface` (từ `src/viewer/surface.ts`) tự động đo đạc kích thước vùng hiển thị (`vw`/`vh`) theo container này.
-   - Thao tác gõ chữ, điều hướng caret, selection tiếp tục diễn ra trên canvas mà không bị cản trở bởi header.
+   - Thao tác gõ chữ, điều hướng caret, selection tiếp tục diễn ra trên canvas mà không bị cản trở bởi header hay toolbar nổi.
 
 ---
 
 ## 5. Lộ trình Slices (Milestone A5)
 
-- **Slice 0 (Task T-A33 hiện tại):** 
-  - Hoàn thiện chrome tối thiểu cho Nano Light trong `editor.html` / `src/editor.ts`.
-  - Nút Save gọi lệnh Rust `nano_light_save` thật.
-  - Cập nhật bộ theme tokens Graphite trong `src/styles.css`.
-  - Đảm bảo Gate 15 (`smoke-nano-light.sh`) tiếp tục đạt PASSED.
-- **Slice 1 (Seed):** Chuyển đổi start page sang layout và theme Graphite.
-- **Slice 2 (Seed):** Thêm thanh chrome mỏng cho Quick View (`viewer.html`).
-- **Slice 3 (Seed):** Tab bar quản lý đa tài liệu (tích hợp Preact).
-
+- **Slice 0 (T-A33 ✅):** Nano Light chrome header + theme Graphite + nút Save thật.
+- **Slice 1 (T-A34 ✅):** Start page migration sang own-UI layout + theme Graphite neutral-minimal.
+- **Slice 2 (T-A35 ✅):** Quick View chrome sang own-UI layout + theme Graphite.
+- **Slice 3 (Task T-A36 hiện tại):** Floating Contextual Toolbar (Zen Minimalist / Zinc minimal) cho Nano Light: Bold/Italic/Underline, phím tắt Cmd-B/Cmd-I, neo vị trí theo caret selection, mutation verb Format trong Rust.
+- **Slice 4 (Seed):** Tab bar quản lý đa tài liệu (tích hợp Preact).
 ---
 
 ## 6. Kế hoạch Kiểm thử & An toàn

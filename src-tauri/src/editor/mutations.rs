@@ -154,11 +154,7 @@ pub(super) fn apply_delete_range(
 ) -> Result<Caret, String> {
     // document-order key (para, run, offset) — a total order over top-level
     // carets (cell carets are refused upstream, DD L01 §5.3a)
-    let (start, end) = if (a.para, a.run, a.offset) <= (b.para, b.run, b.offset) {
-        (a, b)
-    } else {
-        (b, a)
-    };
+    let (start, end) = ordered_carets(a, b);
     if start.para >= blocks.len() || end.para >= blocks.len() {
         return Err(format!(
             "nano light: range endpoints {}..{} outside the block list ({} blocks)",
@@ -468,4 +464,181 @@ pub(super) fn apply_enter(blocks: &mut Vec<Block>, caret: Caret) -> Result<Caret
         offset: 0,
         ..caret
     })
+}
+
+/// Order two carets by document position (para, run, offset).
+pub(super) fn ordered_carets(a: Caret, b: Caret) -> (Caret, Caret) {
+    if (a.para, a.run, a.offset) <= (b.para, b.run, b.offset) {
+        (a, b)
+    } else {
+        (b, a)
+    }
+}
+
+pub(super) fn apply_format(
+    blocks: &mut [Block],
+    caret: Caret,
+    sel: SelRange,
+    bold: Option<bool>,
+    italic: Option<bool>,
+    underline: Option<bool>,
+) -> Result<Caret, String> {
+    let (start, end) = ordered_carets(sel.anchor, sel.focus);
+    if start == end {
+        return Ok(caret);
+    }
+
+    for p_idx in start.para..=end.para {
+        let p = match paragraph_at(blocks, p_idx) {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
+
+        let mut new_runs = Vec::new();
+        for (ri, run) in p.runs.drain(..).enumerate() {
+            let r_len = run.text.encode_utf16().count();
+            let r_start = if p_idx == start.para && ri == start.run {
+                start.offset
+            } else if p_idx > start.para || ri > start.run {
+                0
+            } else {
+                r_len
+            };
+            let r_end = if p_idx == end.para && ri == end.run {
+                end.offset
+            } else if p_idx < end.para || ri < end.run {
+                r_len
+            } else {
+                0
+            };
+
+            if r_start >= r_end || r_start >= r_len || r_end == 0 {
+                new_runs.push(run);
+                continue;
+            }
+
+            let b_start = utf16_to_byte(&run.text, r_start)?;
+            let b_end = utf16_to_byte(&run.text, r_end)?;
+
+            if b_start > 0 {
+                let mut pre = run.clone();
+                pre.text = run.text[..b_start].to_string();
+                pre.images.clear();
+                new_runs.push(pre);
+            }
+
+            let mut mid = run.clone();
+            mid.text = run.text[b_start..b_end].to_string();
+            if b_end < run.text.len() {
+                mid.images.clear();
+            }
+            if bold.is_some() {
+                mid.bold = match mid.bold {
+                    Some(true) => Some(false),
+                    _ => Some(true),
+                };
+            }
+            if italic.is_some() {
+                mid.italic = match mid.italic {
+                    Some(true) => Some(false),
+                    _ => Some(true),
+                };
+            }
+            if underline.is_some() {
+                mid.underline = if mid.underline.is_some() {
+                    None
+                } else {
+                    Some("single".into())
+                };
+            }
+            new_runs.push(mid);
+
+            if b_end < run.text.len() {
+                let mut post = run.clone();
+                post.text = run.text[b_end..].to_string();
+                new_runs.push(post);
+            }
+        }
+        p.runs = new_runs;
+    }
+
+    Ok(caret)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_apply_format_toggle_bold_split_run() {
+        let mut blocks = vec![Block::Paragraph(Paragraph {
+            runs: vec![Run {
+                text: "Hello world of formatting".into(),
+                ..Default::default()
+            }],
+            ..Default::default()
+        })];
+
+        let caret = Caret {
+            para: 0,
+            run: 0,
+            offset: 6,
+            cell: None,
+            cell_para: None,
+        };
+        let sel = SelRange {
+            anchor: Caret {
+                para: 0,
+                run: 0,
+                offset: 6,
+                cell: None,
+                cell_para: None,
+            },
+            focus: Caret {
+                para: 0,
+                run: 0,
+                offset: 11,
+                cell: None,
+                cell_para: None,
+            },
+        };
+
+        let res = apply_format(&mut blocks, caret, sel, Some(true), None, None).unwrap();
+        assert_eq!(res.offset, 6);
+
+        if let Block::Paragraph(p) = &blocks[0] {
+            assert_eq!(p.runs.len(), 3, "run should be split into 3");
+            assert_eq!(p.runs[0].text, "Hello ");
+            assert_eq!(p.runs[0].bold, None);
+
+            assert_eq!(p.runs[1].text, "world");
+            assert_eq!(p.runs[1].bold, Some(true));
+
+            assert_eq!(p.runs[2].text, " of formatting");
+            assert_eq!(p.runs[2].bold, None);
+        } else {
+            panic!("expected paragraph");
+        }
+
+        let sel2 = SelRange {
+            anchor: Caret {
+                para: 0,
+                run: 1,
+                offset: 0,
+                cell: None,
+                cell_para: None,
+            },
+            focus: Caret {
+                para: 0,
+                run: 1,
+                offset: 5,
+                cell: None,
+                cell_para: None,
+            },
+        };
+        let _ = apply_format(&mut blocks, caret, sel2, Some(true), None, None).unwrap();
+        if let Block::Paragraph(p) = &blocks[0] {
+            assert_eq!(p.runs[1].bold, Some(false));
+        }
+    }
 }

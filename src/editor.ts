@@ -100,6 +100,7 @@ type EditCmd =
   | { kind: 'backspace'; caret: Caret; sel: SelRange | null }
   | { kind: 'delete'; caret: Caret; sel: SelRange | null }
   | { kind: 'enter'; caret: Caret; sel: SelRange | null }
+  | { kind: 'format'; bold?: boolean; italic?: boolean; underline?: boolean; caret: Caret; sel: SelRange }
   | { kind: 'undo' }
   | { kind: 'redo' };
 
@@ -111,6 +112,10 @@ async function main(): Promise<void> {
   const nameEl = document.getElementById('doc-name')!;
   const dotEl = document.getElementById('dirty-dot')!;
   const saveBtn = document.querySelector<HTMLButtonElement>('#save-btn')!;
+  const formatBar = document.getElementById('format-toolbar') as HTMLElement | null;
+  const fmtBold = document.getElementById('fmt-bold') as HTMLButtonElement | null;
+  const fmtItalic = document.getElementById('fmt-italic') as HTMLButtonElement | null;
+  const fmtUnderline = document.getElementById('fmt-underline') as HTMLButtonElement | null;
 
   try {
     surface = new DocumentSurface('cv');
@@ -329,12 +334,14 @@ async function main(): Promise<void> {
       }
       caret = next;
       render();
+      updateFormatToolbar();
     };
 
     /** `nano light selection:` — ADDITIVE gate-15 evidence (frozen constant
      * SMOKE_RE_NL_SEL in harness/scripts/smoke-lib.sh — change in the SAME
      * commit). span = char distance between the ORDERED endpoints (same paragraph or cell; cross-paragraph = -1). */
     const emitSel = (): void => {
+      updateFormatToolbar();
       const cur = sel;
       const pair = ordered();
       if (!cur || !pair) return;
@@ -422,6 +429,7 @@ async function main(): Promise<void> {
         goalX = null;
         updateStatus();
         render();
+        updateFormatToolbar();
         logLayoutEvidence();
       } catch (e) {
         await invoke('frontend_log', { level: 'error', message: `nano light failed: edit ${e}` });
@@ -436,6 +444,35 @@ async function main(): Promise<void> {
       } catch (e) {
         await invoke('frontend_log', { level: 'error', message: `nano light failed: save ${e}` });
       }
+    };
+
+    const updateFormatToolbar = (): void => {
+      if (!formatBar) return;
+      if (sel && (sel.anchor.para !== sel.focus.para || sel.anchor.run !== sel.focus.run || sel.anchor.offset !== sel.focus.offset)) {
+        if (!model) return;
+        const at = caretXY(model, measure, sel.focus) || caretXY(model, measure, sel.anchor);
+        if (at) {
+          const top = Math.max(8, at.y - at.lh - 38);
+          const left = Math.min(surface!.container.clientWidth - 110, Math.max(12, at.x - 30));
+          formatBar.style.top = `${top}px`;
+          formatBar.style.left = `${left}px`;
+          formatBar.classList.remove('hidden');
+          return;
+        }
+      }
+      formatBar.classList.add('hidden');
+    };
+
+    const applyFormat = async (opts: { bold?: boolean; italic?: boolean; underline?: boolean }): Promise<void> => {
+      if (!sel) return;
+      await edit({
+        kind: 'format',
+        bold: opts.bold,
+        italic: opts.italic,
+        underline: opts.underline,
+        caret,
+        sel,
+      });
     };
 
     // ── IME composition (DD §5.4a) + plain-text clipboard + Cmd-A (§5.4b); the probe drives the SAME fns. ──
@@ -645,6 +682,18 @@ async function main(): Promise<void> {
     surface.cv.addEventListener('mousemove', (ev: MouseEvent) => mouseMoveAt(ev.offsetX, ev.offsetY));
     window.addEventListener('mouseup', () => mouseUp());
     saveBtn.addEventListener('click', () => void save());
+    fmtBold?.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      void applyFormat({ bold: true });
+    });
+    fmtItalic?.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      void applyFormat({ italic: true });
+    });
+    fmtUnderline?.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      void applyFormat({ underline: true });
+    });
     window.addEventListener('keydown', (ev) => {
       if (composing || ev.isComposing) return; // the IME owns the keys while composing (DD §5.4a)
       const meta = ev.metaKey || ev.ctrlKey;
@@ -656,6 +705,21 @@ async function main(): Promise<void> {
       if (meta && ev.key.toLowerCase() === 's') {
         ev.preventDefault();
         void save();
+        return;
+      }
+      if (meta && ev.key.toLowerCase() === 'b') {
+        ev.preventDefault();
+        void applyFormat({ bold: true });
+        return;
+      }
+      if (meta && ev.key.toLowerCase() === 'i') {
+        ev.preventDefault();
+        void applyFormat({ italic: true });
+        return;
+      }
+      if (meta && ev.key.toLowerCase() === 'u') {
+        ev.preventDefault();
+        void applyFormat({ underline: true });
         return;
       }
       if (meta && ev.key.toLowerCase() === 'a') {

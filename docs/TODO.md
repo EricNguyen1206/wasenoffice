@@ -15,14 +15,14 @@ type: queue
 
 ## Tình hình nhanh
 
-▶ Kế tiếp: **Milestone A5 — Slice 3** (Tab bar đa tài liệu / Toolbar định dạng) / **T-A35 ĐÓNG 11.10** (A5 slice 2: quick view chrome graphite) / **PH-1 hoàn thành 11/12**
+▶ Kế tiếp: **Milestone A5 — Slice 4** (Tab bar đa tài liệu / Preact hydration) / **T-A36 ĐÓNG 13.10** (A5 slice 3: floating formatting toolbar) / **PH-1 hoàn thành 11/12**
 
 | Phase | Tổng | ✅ | 🟨 | ⏸ | ⬜ |
 |---|---|---|---|---|---|
 | PH-0 — ĐÃ ĐÓNG 27.09  |  6  | 6  | 0  | 0  | 0  |
 | PH-1  |  12 | 11 | 0  | 0  | 1  |
 | PH-4  |  4  | 0  | 0  | 0  | 4  |
-| Track A (QĐ9) |  30 | 30 | 0  | 0  | 0  |
+| Track A (QĐ9) |  31 | 31 | 0  | 0  | 0  |
 | META  | 16  | 12 | 0  | 0  | 4  |
 
 ## PH-0 — Spike editor + render DOCX (go/no-go) — ĐÃ ĐÓNG 27.09 · verdict GO WITH CAVEAT
@@ -75,6 +75,7 @@ type: queue
 - [x] ✅ T-A33 · A5 mở màn — UI riêng (DD U01 design-first: RATIFY framework + theme values graphite + kiến trúc chrome; slice 0 = Nano Light chrome): DD U01 (8b3aa2b) chốt Vanilla+Tailwind cho Slice 0, Preact trigger cho Slice 1+; theme graphite zinc/slate tokens trong styles.css; chrome header trong editor.html/editor.ts bọc DocumentSurface; gate 15 positive PASSED (19 ms first-draw, 2.9 ms save) + negatives exit 1; verify FULL exit 0, 20 ▸ steps · 11.10 · diagnostics 11.10 (T-A33)
 - [x] ✅ T-A34 · A5 slice 1 — Start page migration sang own-UI layout + theme Graphite neutral-minimal (loại bỏ nhãn PH-0 spike, chuẩn hóa token controls, bảo toàn Gate 13): `src/main.ts` header + `CONTROL_SKIN` tokens, `index.html` container; Gate 13 (first-draw 15 ms) + Gate 9 (engine mount) PASSED; verify FULL exit 0, 20 ▸ steps · 11.10 · diagnostics 11.10 (T-A34)
 - [x] ✅ T-A35 · A5 slice 2 — Quick View chrome sang own-UI layout + theme Graphite (header đồng bộ Nano Light, DocumentSurface container, bảo toàn Gate 12 & 13): `QuickView.name` Rust-side, `viewer.html` header chrome + container `<main class="flex-1 overflow-auto">`, `#doc-name` wiring; Gate 12 (first-draw 25 ms, layout lines 15, RSS 124 MB) + Gate 13 PASSED; verify FULL exit 0, 20 ▸ steps · 11.10 · diagnostics 11.10 (T-A35)
+- [x] ✅ T-A36 · A5 slice 3 — Floating formatting toolbar (Zen Minimalist / Zinc minimal): DOM `#format-toolbar` nổi định dạng (Bold / Italic / Underline) neo toạ độ selection (`caretXY`), phím tắt Cmd-B/Cmd-I/Cmd-U; Rust backend `EditCmd::Format` + `apply_format` chia tách runs và toggle thuộc tính `Run`, giữ selection và hỗ trợ undo snapshot; cargo test 73 passed; Gate 15 PASSED; verify FULL exit 0, 20 ▸ steps · 13.10 · diagnostics 13.10 (T-A36)
 
 - [x] ✅ T-A20 · A2 mở màn DESIGN-FIRST (ponytail ULTRA): probe 2 phương án bằng số liệu — **P1** (Editor.bin): 1962 B docx → 1586 B Editor.bin **deterministic**, payload 926 B không nén, TLV `[u8 tag][u32 len]` 2 chuỗi lồng verify byte-exact (+5/mức), style resolve trong binary, preamble 42 B chưa decode, delta records = format thứ 2 (T-010) → ước lượng **tháng** + dead code sau A4 · **P2** (OOXML core): 100% spec ECMA-376, fixture 21 element types (5 parts, 2.5 KB), docx cơ bản ~85 element types → ước lượng **tuần** → **CHỐT P2** (không 50/50: P1 chỉ rút 113 MB x2t trong khi sdkjs 313 MB vẫn ship; P2 = nền bắt buộc A3/A4, ship mọi rung) · crate slice `src-tauri/crates/nanooffice-ooxml` (parse docx → model tối giản + CLI JSON; 3 test; deps quick-xml/zip qua license gate; workspace member + verify.sh cargo `--workspace`) · DD mã **K01** `docs/design/converter-a2/DD.md` · verify.sh 16 gates exit 0 · 02.10 · 0cc770a · diagnostics 02.10 + reference.map § Editor.bin
 - [x] ✅ T-A21 · A2 **S1 — docx read đầy đủ** (ponytail ULTRA chuỗi A2): crate `nanooffice-ooxml` từ model tối giản lên read đầy đủ — **OPC đúng chuẩn** (Content_Types + rels, part chính tra cứu `_rels/.rels` không hardcode, refuse content-type sai) + recursive-descent parser 1 hàm/construct + **table** (`w:tbl` §17.4.38/tr/tc, cell lồng) + **list** (`w:numPr` raw + `numbering.xml` resolve numId→abstractNum→lvl: numFmt/lvlText) + **image relationship-only** (`a:blip r:embed` → part, refuse rel sai loại/external, `wp:extent` EMU) + **styles.xml resolve** basedOn chain (con thắng cha, cycle/dangling → Err) + **headers/footers** (rel type, root check w:hdr/w:ftr, rels riêng từng part); refuse-unknown thay parse-sai; corpus mới `make_docx_full.py` (10 parts: style chain + run override + table 2×2 + 3 list + PNG 1×1 r:embed + hdr/ftr + tiếng Việt); fuzz 500 vòng seed 42 (LCG tự viết, XML+zip mutation) 0 panic; spec-ref verify từng số qua bảng Remarks open-xml-docs (mirror ISO/IEC 29500-1 1st ed) — sửa 2 comment cũ sai (w:i §17.3.2.16, w:t §17.3.3.31); CLI JSON xuất đủ model mới · cargo test --workspace 23 shell + 5 crate exit 0 · verify.sh FULL exit 0 · 02.10 · diagnostics 02.10
