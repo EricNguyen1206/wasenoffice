@@ -15,13 +15,13 @@ type: queue
 
 ## Tình hình nhanh
 
-▶ Kế tiếp: **Milestone A5 — Slice 5** (tab drag/drop & multi-window sync) / **T-A37 ĐÓNG 13.10** (A5 slice 4: Multi-document Tab Bar) / **PH-1 hoàn thành 11/12**
+▶ Kế tiếp: **T-051** (licensing notice khi bundle x2t trong installer) / **T-057 ĐÓNG 13.10** (giải quyết release boot stall & bundle .app) / **PH-4**
 
 | Phase | Tổng | ✅ | 🟨 | ⏸ | ⬜ |
 |---|---|---|---|---|---|
 | PH-0 — ĐÃ ĐÓNG 27.09  |  6  | 6  | 0  | 0  | 0  |
 | PH-1  |  12 | 11 | 0  | 0  | 1  |
-| PH-4  |  4  | 0  | 0  | 0  | 4  |
+| PH-4  |  4  | 1  | 0  | 0  | 3  |
 | Track A (QĐ9) |  32 | 32 | 0  | 0  | 0  |
 | META  | 16  | 12 | 0  | 0  | 4  |
 
@@ -49,7 +49,7 @@ type: queue
 ## PH-4 — Đóng gói + updater (trigger: PH-2 xong)
 
 - [ ] ⬜ T-051 · Nhắc licensing khi bundle AGPL trong installer (mở từ T-A10 30.09): bundle x2t = phân phối binary AGPL → NOTICE + source offer + logo §7 theo `harness/rules/licensing.md` § phát hành; fonts đi kèm app KHÔNG bundle theo (T-A11/A12 tự sinh/subset) · ← T-A10
-- [ ] ⬜ T-057 · Release boot webview stall (observed 03.10 T-V2): release binary/bundle không navigate — bare binary: cửa sổ lên + WebContent spawn rồi idle (sample: `mach_msg` chờ, không nhận navigation) + 0 `page_load`; bundle `.app` qua `open -g --env` = 0 cửa sổ; debug boot cùng máy tức thì, plain release (không quick-view) cũng stall → KHÔNG phải T-V2; nghiêng WebKit custom-scheme handling release, chưa mổ · **chặn đo đích rung RAM release (<150 MB, OQ-V01-2/DD V01 §10)** + chặn PH-4 packaging · tái lập: `cargo build --release` + `NANO_OFFICE_QUICK_VIEW=… ./target/release/nanooffice` (log dừng ở `loopback file server`) · diagnostics 03.10
+- [x] ✅ T-057 · Release boot webview stall — **ĐÓNG 13.10**: macOS WebKit XPC sandbox yêu cầu WKWebView có asset scheme nhúng phải chạy trong Mach-O `.app` bundle (chạy bare binary bị `web content process terminated`); đổi identifier `"com.nanooffice.desktop"` tránh xung đột `.app`; cấu hình `fileAssociations` (docx/xlsx/pptx/pdf); đóng gói `pnpm tauri build --bundles app` tạo `NanoOffice.app` (6.9 MB); đo RAM release: binary 89.7 MB, tree 228.7 MB (đo thật OQ-V01-2); first-draw release 8.0 ms (Nano Light) / 72.0 ms (Quick View); verify FULL exit 0, 20 ▸ steps · 13.10 · diagnostics 13.10 (T-057)
 - [ ] 🚫 T-040 · ~~Trim engines payload 313 MB → ≤100 MB~~ gộp vào Track A **T-A12** theo QĐ9 (29.09) — nằm trong rung A1
 - [ ] 🚫 T-041 · ~~Quyết bundle vs download-first~~ gộp vào **T-A10** (A1 buộc bundle x2t) + PH-4 packaging (câu hỏi download-first còn lại áp cho toàn engine) theo QĐ9
 

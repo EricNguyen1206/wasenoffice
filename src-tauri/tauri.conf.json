@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "NanoOffice",
   "version": "0.1.0",
-  "identifier": "com.nanooffice.app",
+  "identifier": "com.nanooffice.desktop",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -24,6 +24,32 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
+    ],
+    "fileAssociations": [
+      {
+        "ext": ["docx"],
+        "name": "Microsoft Word Document",
+        "description": "Microsoft Word Document",
+        "role": "Editor"
+      },
+      {
+        "ext": ["xlsx"],
+        "name": "Microsoft Excel Spreadsheet",
+        "description": "Microsoft Excel Spreadsheet",
+        "role": "Editor"
+      },
+      {
+        "ext": ["pptx"],
+        "name": "Microsoft PowerPoint Presentation",
+        "description": "Microsoft PowerPoint Presentation",
+        "role": "Editor"
+      },
+      {
+        "ext": ["pdf"],
+        "name": "Portable Document Format",
+        "description": "Portable Document Format",
+        "role": "Viewer"
+      }
     ]
   }
 }

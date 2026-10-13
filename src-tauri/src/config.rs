@@ -23,6 +23,7 @@ pub struct AppConfig {
     /// Startup document path (`NANO_OFFICE_OPEN`), consumed once on load.
     startup_document: std::sync::Mutex<Option<String>>,
     /// Devtools toggle in debug builds (`NANO_OFFICE_DEVTOOLS=1`).
+    #[allow(dead_code)]
     pub devtools: bool,
     /// Boot mode and entry window flavor.
     pub boot_mode: BootMode,

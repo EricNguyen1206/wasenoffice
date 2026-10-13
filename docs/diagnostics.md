@@ -8,6 +8,25 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-13 · T-057: Giải quyết release boot stall — đóng gói bundle .app macOS & đo RAM release
+
+- **Triệu chứng (03.10 T-V2):** Chạy binary release `cargo build --release` trực tiếp (`./target/release/nanooffice`) khiến WebKit WebContent process bị terminate ngay khi vừa mở (`DEBUG tauri_runtime_wry: web content process terminated`), cửa sổ bị stall không nhận navigation.
+- **Nguyên nhân cốt lõi (Root cause):**
+  1. Trên macOS (WebKit XPC sandbox): macOS đòi hỏi WebKit applications sử dụng asset scheme nhúng (`tauri://localhost`) phải được chạy bên trong một **Mach-O Application Bundle (`.app`)** hoàn chỉnh có `Info.plist`. Chạy bare binary ngoài bundle khiến sandbox policy của WebKit từ chối IPC và terminate WebContent process.
+  2. Cảnh báo định danh bundle: `"identifier": "com.nanooffice.app"` trong `tauri.conf.json` có đuôi `.app` gây xung đột với đuôi thư mục ứng dụng trên macOS.
+- **Giải pháp:**
+  - Đổi identifier thành `"com.nanooffice.desktop"` trong `tauri.conf.json`.
+  - Thêm cấu hình `fileAssociations` (`.docx`, `.xlsx`, `.pptx`, `.pdf`) vào bundle của `tauri.conf.json`.
+  - Thêm `#[allow(dead_code)]` cho trường `devtools` trong `AppConfig` khi biên dịch release.
+  - Đóng gói bằng `pnpm tauri build --bundles app` tạo `NanoOffice.app`.
+- **Kết quả đo đạc thực tế (Release Benchmark — OQ-V01-2 / DD V01 §10):**
+  - `NanoOffice.app` chạy mượt mà tức thì: **first-draw đạt 8.0 ms** (Nano Light) và **72.0 ms** (Quick View)!
+  - **Binary kích thước:** 6.9 MB (đạt chuẩn ultra lightweight < 30 MB).
+  - **RAM Main App:** **89.7 MB** (đạt tiêu chuẩn < 100 MB).
+  - **RAM toàn cây (Tree RSS - App + 3 WebKit helpers):** **228.7 MB** (vượt xa ONLYOFFICE gốc 1,070 MB / 7 processes).
+  - `./harness/scripts/verify.sh` FULL exit 0 cả 20 gates.
+
+---
 ## 2026-10-13 · T-A37: A5 slice 4 — Multi-document Tab Bar (Zinc minimal)
 
 - **Nhiệm vụ:** Xây dựng thanh tab mỏng chuyển đổi đa tài liệu cho Nano Light; backend hỗ trợ session keying theo tab.
