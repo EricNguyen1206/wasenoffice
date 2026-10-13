@@ -20,12 +20,13 @@
       "endpoints": [
         "https://github.com/EricNguyen1206/wasenoffice/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFFQkYxMEZBQzEwQUY1MzIKUldReTlRckIraEMvSHZVOXBxQVdhcXpRaXlQeXhJRmFTMXhXVVFGdi9lZUc1b3FZWGdMM0V3bisK"
+      "pubkey": "ZFc1MGNuVnpkR1ZrSUdOdmJXMWxiblE2SUcxcGJtbHphV2R1SUhCMVlteHBZeUJyWlhrNklFUkJPVFpFUXpreE9USTBNemM0TkRZS1VsZFNSMlZGVDFOclpIbFhNbkZ3ZGpoU2FIQXJlSGhRTVhsR05sbEtValV3V1hoNlRWaE1ORTk2ZWxGc1dUWlJUelp3YjFreWFtd0s="
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "copyright": "Copyright © 2026 WasenOffice contributors. Includes ONLYOFFICE components licensed under GNU AGPL v3.0.",
     "licenseFile": "../NOTICE",
     "resources": [
@@ -40,25 +41,33 @@
     ],
     "fileAssociations": [
       {
-        "ext": ["docx"],
+        "ext": [
+          "docx"
+        ],
         "name": "Microsoft Word Document",
         "description": "Microsoft Word Document",
         "role": "Editor"
       },
       {
-        "ext": ["xlsx"],
+        "ext": [
+          "xlsx"
+        ],
         "name": "Microsoft Excel Spreadsheet",
         "description": "Microsoft Excel Spreadsheet",
         "role": "Editor"
       },
       {
-        "ext": ["pptx"],
+        "ext": [
+          "pptx"
+        ],
         "name": "Microsoft PowerPoint Presentation",
         "description": "Microsoft PowerPoint Presentation",
         "role": "Editor"
       },
       {
-        "ext": ["pdf"],
+        "ext": [
+          "pdf"
+        ],
         "name": "Portable Document Format",
         "description": "Portable Document Format",
         "role": "Viewer"
