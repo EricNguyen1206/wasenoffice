@@ -18,6 +18,11 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "copyright": "Copyright © 2026 NanoOffice contributors. Includes ONLYOFFICE components licensed under GNU AGPL v3.0.",
+    "licenseFile": "../NOTICE",
+    "resources": [
+      "../NOTICE"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

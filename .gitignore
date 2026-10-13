@@ -19,3 +19,4 @@ engines/*
 /docs/media/
 # pycache từ fixture generators (import docxgen_common khi gate chạy)
 __pycache__/
+/.mimosa/

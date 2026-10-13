@@ -8,6 +8,25 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-13 · T-051: Nhắc licensing & third-party notices khi bundle AGPL trong installer (PH-4)
+
+- **Nhiệm vụ:** Đảm bảo tuân thủ đầy đủ GNU AGPL v3.0 và Section 7 khi phân phối installer / application bundle có nhúng x2t sidecar (theo `harness/rules/licensing.md` và `docs/vision.md` QĐ1).
+- **Thay đổi:**
+  - Tạo file `NOTICE` tại repo root ghi nhận rõ ràng:
+    * Bản quyền MIT cho toàn bộ code NanoOffice tự viết.
+    * Điều khoản GNU AGPL v3.0 và link cung cấp mã nguồn tương ứng cho x2t converter (`https://github.com/ONLYOFFICE/core`) và editing engines (`sdkjs`/`web-apps`).
+    * Bản quyền và giấy phép SIL Open Font License / GPL cho các bundled fonts (Carlito, Symbol).
+  - Cập nhật `src-tauri/tauri.conf.json`:
+    * Khai báo trường `copyright`, `licenseFile: "../NOTICE"`, và nhúng `NOTICE` vào `resources`.
+    * Kích hoạt bundle target `dmg`.
+  - Đóng gói thành công file cài đặt DMG chính thức: `NanoOffice_0.1.0_aarch64.dmg` kích thước **6.4 MB** (thấp hơn nhiều so với trần 30 MB của QĐ2).
+- **Bằng chứng:**
+  - Bundle DMG tại `src-tauri/target/release/bundle/dmg/NanoOffice_0.1.0_aarch64.dmg`.
+  - License gate (`check-licenses.mjs`) 446 packages cargo + 7 node_modules đều GREEN.
+  - `./harness/scripts/verify.sh` FULL exit 0 cả 20 gates.
+
+---
+
 ## 2026-10-13 · T-057: Giải quyết release boot stall — đóng gói bundle .app macOS & đo RAM release
 
 - **Triệu chứng (03.10 T-V2):** Chạy binary release `cargo build --release` trực tiếp (`./target/release/nanooffice`) khiến WebKit WebContent process bị terminate ngay khi vừa mở (`DEBUG tauri_runtime_wry: web content process terminated`), cửa sổ bị stall không nhận navigation.

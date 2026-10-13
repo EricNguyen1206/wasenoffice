@@ -1,0 +1,36 @@
+# NanoOffice — Third-Party Notices & Licensing Information
+
+NanoOffice combines first-party software licensed under the MIT License with
+third-party open-source components.
+
+## 1. First-Party Code (NanoOffice)
+All first-party code authored for NanoOffice (located in `src-tauri/`, `src/`,
+`harness/`, `docs/`) is licensed under the MIT License:
+
+Copyright (c) 2026 NanoOffice contributors.
+Licensed under the MIT License. See `LICENSE` for details.
+
+---
+
+## 2. ONLYOFFICE Components (GNU AGPL v3.0)
+NanoOffice bundles or interfaces with components developed by Ascensio System SIA / ONLYOFFICE:
+
+- **x2t Document Converter (`core`)**
+  - License: GNU Affero General Public License version 3 (AGPL-3.0) with Section 7 additional terms.
+  - Source Code Offer: In compliance with GNU AGPL-3.0 Section 6 and Section 7, the corresponding source code for the bundled `x2t` converter binary is publicly available at:
+    https://github.com/ONLYOFFICE/core
+  - Original Copyright: Copyright (c) Ascensio System SIA 2026. All rights reserved.
+
+- **Document Editing Engines (`sdkjs` & `web-apps`)**
+  - License: GNU Affero General Public License version 3 (AGPL-3.0) with Section 7 additional terms.
+  - Source Code:
+    https://github.com/ONLYOFFICE/sdkjs
+    https://github.com/ONLYOFFICE/web-apps
+  - Original Copyright: Copyright (c) Ascensio System SIA 2026. All rights reserved.
+
+---
+
+## 3. Bundled Fonts
+Fonts distributed or bundled with NanoOffice are licensed under their respective open-source licenses:
+- **Carlito (crosextra)**: SIL Open Font License, Version 1.1 (OFL-1.1).
+- **Symbol / Liberation Fonts**: SIL Open Font License, Version 1.1 or GNU GPL v2 with Font Exception.
