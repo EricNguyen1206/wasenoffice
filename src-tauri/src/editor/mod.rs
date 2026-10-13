@@ -218,21 +218,26 @@ impl EditorSession {
 pub struct EditorSessions(Mutex<HashMap<String, EditorSession>>);
 
 impl EditorSessions {
-    /// Drop the session of a closed window (called from the same
-    /// `WindowEvent::Destroyed` hook that unregisters registry files).
+    /// Generate a lookup key for the window and optional tab index.
+    pub fn session_key(window_label: &str, tab_id: Option<u32>) -> String {
+        match tab_id {
+            Some(0) | None => window_label.to_string(),
+            Some(id) => format!("{window_label}:{id}"),
+        }
+    }
+
+    /// Drop all sessions associated with a closed window (including all tabs).
     pub fn remove_owner(&self, owner: &str) -> usize {
         let mut map = self.0.lock().expect("editor sessions poisoned");
         let before = map.len();
-        map.retain(|k, _| k != owner);
+        map.retain(|k, _| k != owner && !k.starts_with(&format!("{owner}:")));
         before - map.len()
     }
 
-    /// Run `f` on the calling window's session (T-060 C2/C5-mini): the
-    /// poison + no-session error strings have ONE home here — the commands
-    /// stopped repeating the lock/get/error mold.
+    /// Run `f` on the target session key.
     pub fn with_session<T>(
         &self,
-        label: &str,
+        key: &str,
         f: impl FnOnce(&mut EditorSession) -> Result<T, String>,
     ) -> Result<T, String> {
         let mut map = self
@@ -240,8 +245,8 @@ impl EditorSessions {
             .lock()
             .map_err(|_| "nano light: sessions poisoned".to_string())?;
         let session = map
-            .get_mut(label)
-            .ok_or_else(|| format!("nano light: no session for window {label}"))?;
+            .get_mut(key)
+            .ok_or_else(|| format!("nano light: no session for {key}"))?;
         f(session)
     }
 }
@@ -331,17 +336,22 @@ pub fn nano_light_open(
     handoff: State<'_, Arc<SurfaceHandoff>>,
     sessions: State<'_, Arc<EditorSessions>>,
     window: tauri::WebviewWindow,
+    tab_id: Option<u32>,
+    doc_path: Option<String>,
 ) -> Result<NanoLightDoc, String> {
-    // UI path stashes the path and the window consumes it; the env stays as
-    // the dev/gate-15 trigger (pattern V5).
-    let path = handoff
-        .take(window.label())
-        .or_else(|| {
-            std::env::var("NANO_OFFICE_NANO_LIGHT")
-                .ok()
-                .filter(|p| !p.is_empty())
-        })
-        .ok_or_else(|| "nano light: no source (UI action or NANO_OFFICE_NANO_LIGHT)".to_string())?;
+    let path = match doc_path {
+        Some(p) if !p.is_empty() => p,
+        _ => handoff
+            .take(window.label())
+            .or_else(|| {
+                std::env::var("NANO_OFFICE_NANO_LIGHT")
+                    .ok()
+                    .filter(|p| !p.is_empty())
+            })
+            .ok_or_else(|| {
+                "nano light: no source (UI action or NANO_OFFICE_NANO_LIGHT)".to_string()
+            })?,
+    };
     let p = render_payload(
         registry.inner().as_ref(),
         window.label(),
@@ -379,7 +389,7 @@ pub fn nano_light_open(
         .0
         .lock()
         .map_err(|_| "nano light: sessions poisoned".to_string())?
-        .insert(window.label().to_string(), session);
+        .insert(EditorSessions::session_key(window.label(), tab_id), session);
     log::info!(
         "nano light: opened {path} in {:.1} ms (window {})",
         p.parse_ms,
@@ -496,9 +506,11 @@ pub fn nano_light_edit(
     sessions: State<'_, Arc<EditorSessions>>,
     window: tauri::WebviewWindow,
     cmd: EditCmd,
+    tab_id: Option<u32>,
 ) -> Result<EditOutcome, String> {
+    let key = EditorSessions::session_key(window.label(), tab_id);
     let label = cmd.label();
-    let (caret, dirty, undo_len, sel, render) = sessions.with_session(window.label(), |s| {
+    let (caret, dirty, undo_len, sel, render) = sessions.with_session(&key, |s| {
         let caret = s.apply(cmd)?;
         Ok((
             caret,
@@ -530,8 +542,25 @@ pub fn nano_light_edit(
 pub fn nano_light_save(
     sessions: State<'_, Arc<EditorSessions>>,
     window: tauri::WebviewWindow,
+    tab_id: Option<u32>,
 ) -> Result<(), String> {
-    sessions.with_session(window.label(), save_session)
+    let key = EditorSessions::session_key(window.label(), tab_id);
+    sessions.with_session(&key, save_session)
+}
+
+#[tauri::command]
+pub fn nano_light_close_tab(
+    sessions: State<'_, Arc<EditorSessions>>,
+    window: tauri::WebviewWindow,
+    tab_id: u32,
+) -> Result<(), String> {
+    let key = EditorSessions::session_key(window.label(), Some(tab_id));
+    let mut map = sessions
+        .0
+        .lock()
+        .map_err(|_| "nano light: sessions poisoned".to_string())?;
+    map.remove(&key);
+    Ok(())
 }
 
 fn save_session(session: &mut EditorSession) -> Result<(), String> {
@@ -602,6 +631,38 @@ mod tests {
             sel: None,
             path: std::env::temp_dir().join("nanooffice-test-nl-unused.docx"),
         }
+    }
+
+    #[test]
+    fn test_editor_sessions_multi_tab_keying_and_cleanup() {
+        let sessions = EditorSessions::default();
+        let key0 = EditorSessions::session_key("nanolight-1", None);
+        let key1 = EditorSessions::session_key("nanolight-1", Some(1));
+        let key2 = EditorSessions::session_key("nanolight-1", Some(2));
+        assert_eq!(key0, "nanolight-1");
+        assert_eq!(key1, "nanolight-1:1");
+        assert_eq!(key2, "nanolight-1:2");
+
+        let s0 = session(doc_one_para());
+        let s1 = session(doc_one_para());
+        sessions.0.lock().unwrap().insert(key0, s0);
+        sessions.0.lock().unwrap().insert(key1, s1);
+
+        assert!(sessions
+            .with_session("nanolight-1", |s| Ok(s.path.clone()))
+            .is_ok());
+        assert!(sessions
+            .with_session("nanolight-1:1", |s| Ok(s.path.clone()))
+            .is_ok());
+
+        let dropped = sessions.remove_owner("nanolight-1");
+        assert_eq!(dropped, 2);
+        assert!(sessions
+            .with_session("nanolight-1", |s| Ok(s.path.clone()))
+            .is_err());
+        assert!(sessions
+            .with_session("nanolight-1:1", |s| Ok(s.path.clone()))
+            .is_err());
     }
 
     /// The full round-1 verb set over the model: insert → backspace (incl.

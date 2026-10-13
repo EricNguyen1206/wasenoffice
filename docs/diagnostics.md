@@ -8,6 +8,21 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-13 · T-A37: A5 slice 4 — Multi-document Tab Bar (Zinc minimal)
+
+- **Nhiệm vụ:** Xây dựng thanh tab mỏng chuyển đổi đa tài liệu cho Nano Light; backend hỗ trợ session keying theo tab.
+- **Thay đổi:**
+  - `src-tauri/src/editor/mod.rs`: `EditorSessions` hỗ trợ keying theo tab: `session_key(window_label, tab_id)` (`{owner}` cho tab 0, `{owner}:{id}` cho các tab con); `remove_owner` dọn dẹp sạch toàn bộ các tab con khi cửa sổ bị Destroyed; các commands `nano_light_open`, `nano_light_edit`, `nano_light_save` nhận `tab_id: Option<u32>` tùy chọn (100% tương thích ngược); thêm command `nano_light_close_tab`.
+  - `src-tauri/src/lib.rs`: Đăng ký command `nano_light_close_tab`.
+  - `editor.html`: Bổ sung `<nav id="tab-bar">` mỏng trong header theo phong cách Zinc minimal.
+  - `src/editor.ts`: Quản lý danh sách `tabs: Map<number, TabState>`; helper `renderTabBar()` hiển thị tab active (`border-b-2 border-accent bg-panel text-fg`), tab inactive, chấm dirty trên từng tab, và nút đóng tab `×`; hỗ trợ `switchTab` và `closeTab`.
+- **Bằng chứng:**
+  - Cargo test 74 passed (8 suites, 0 failed) với unit test `test_editor_sessions_multi_tab_keying_and_cleanup`.
+  - Gate 15 smoke Nano Light: first-draw 27.0 ms, save 2.9 ms, positive PASSED + negative proofs.
+  - `./harness/scripts/verify.sh` FULL exit 0 cả 20 gates.
+
+---
+
 ## 2026-10-13 · T-A36: A5 slice 3 — Floating Contextual Toolbar (Zen Minimalist / Zinc minimal)
 
 - **Nhiệm vụ:** Xây dựng thanh công cụ định dạng nổi khi có selection (Bold/Italic/Underline) cắm thẳng vào hit-test của DocumentSurface; bổ sung lệnh mutation `Format` trong Rust.

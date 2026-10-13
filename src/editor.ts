@@ -103,6 +103,18 @@ type EditCmd =
   | { kind: 'format'; bold?: boolean; italic?: boolean; underline?: boolean; caret: Caret; sel: SelRange }
   | { kind: 'undo' }
   | { kind: 'redo' };
+interface TabState {
+  tabId: number;
+  name: string;
+  body: Block[];
+  caret: Caret;
+  sel: SelRange | null;
+  dirty: boolean;
+  fonts: FontMetrics;
+  page: { w: number | null; h: number | null; orient: string | null } | null;
+  mar: { top: number | null; right: number | null; bottom: number | null; left: number | null } | null;
+  bitmaps: Map<string, ImageBitmap>;
+}
 
 const { invoke } = (window as unknown as { __TAURI__: { core: { invoke: <T>(cmd: string, args?: unknown) => Promise<T> } } }).__TAURI__.core;
 
@@ -116,6 +128,8 @@ async function main(): Promise<void> {
   const fmtBold = document.getElementById('fmt-bold') as HTMLButtonElement | null;
   const fmtItalic = document.getElementById('fmt-italic') as HTMLButtonElement | null;
   const fmtUnderline = document.getElementById('fmt-underline') as HTMLButtonElement | null;
+  const tabs = new Map<number, TabState>();
+  let activeTabId = 0;
 
   try {
     surface = new DocumentSurface('cv');
@@ -139,10 +153,103 @@ async function main(): Promise<void> {
     const bitmaps = new Map<string, ImageBitmap>();
     if (nl.mediaBase) await loadMedia(body, nl.mediaBase, bitmaps, 'nano light', invoke);
     const measure = surface.measure;
-    const updateStatus = (): void => {
-      dotEl.classList.toggle('hidden', !dirty);
+    tabs.set(0, {
+      tabId: 0,
+      name: nl.name,
+      body: nl.doc.body,
+      caret: nl.caret,
+      sel: null,
+      dirty: false,
+      fonts: nl.fonts,
+      page: nl.page,
+      mar: nl.mar,
+      bitmaps,
+    });
+
+    const renderTabBar = (): void => {
+      const tabBar = document.getElementById('tab-bar');
+      if (!tabBar) return;
+      tabBar.innerHTML = '';
+
+      for (const tab of tabs.values()) {
+        const isActive = tab.tabId === activeTabId;
+        const tabEl = document.createElement('div');
+        tabEl.className = `flex items-center gap-1.5 px-3 py-1 rounded-t-panel cursor-pointer text-xs border-b-2 transition-colors ${
+          isActive
+            ? 'border-accent bg-panel font-semibold text-fg shadow-xs'
+            : 'border-transparent text-fg/60 hover:bg-panel-active hover:text-fg'
+        }`;
+
+        const label = document.createElement('span');
+        label.className = 'truncate max-w-[140px]';
+        label.textContent = tab.name;
+        tabEl.appendChild(label);
+
+        if (tab.dirty) {
+          const dot = document.createElement('span');
+          dot.className = 'h-1.5 w-1.5 rounded-full bg-accent shrink-0';
+          tabEl.appendChild(dot);
+        }
+
+        if (tabs.size > 1) {
+          const closeBtn = document.createElement('button');
+          closeBtn.className = 'hover:bg-panel-active rounded p-0.5 text-fg/50 hover:text-fg text-[11px] leading-none';
+          closeBtn.textContent = '×';
+          closeBtn.onclick = (e) => {
+            e.stopPropagation();
+            void closeTab(tab.tabId);
+          };
+          tabEl.appendChild(closeBtn);
+        }
+
+        tabEl.onclick = () => switchTab(tab.tabId);
+        tabBar.appendChild(tabEl);
+      }
     };
 
+    const switchTab = (tabId: number): void => {
+      if (tabId === activeTabId) return;
+      const cur = tabs.get(activeTabId);
+      if (cur) {
+        cur.body = body;
+        cur.caret = caret;
+        cur.sel = sel;
+        cur.dirty = dirty;
+      }
+      const next = tabs.get(tabId);
+      if (!next) return;
+      activeTabId = tabId;
+      body = next.body;
+      caret = next.caret;
+      sel = next.sel;
+      dirty = next.dirty;
+      nameEl.textContent = next.name;
+      updateStatus();
+      render();
+      updateFormatToolbar();
+    };
+
+    const closeTab = async (tabId: number): Promise<void> => {
+      if (tabs.size <= 1) return;
+      tabs.delete(tabId);
+      void invoke('nano_light_close_tab', { tabId }).catch(() => {});
+      if (activeTabId === tabId) {
+        const first = tabs.keys().next().value;
+        if (first !== undefined) {
+          switchTab(first);
+          return;
+        }
+      }
+      renderTabBar();
+    };
+
+    const updateStatus = (): void => {
+      const cur = tabs.get(activeTabId);
+      if (cur) cur.dirty = dirty;
+      dotEl.classList.toggle('hidden', !dirty);
+      renderTabBar();
+    };
+    updateStatus();
     /** Caret blink (§5.5f): 500 ms toggle, repaint from the cached model, solid while composing. */
     let caretOn = true;
     let blinkTimer = 0;
@@ -421,7 +528,7 @@ async function main(): Promise<void> {
             message: `nano light cell: op=${cmd.kind} row=${cmd.caret.cell[0]} col=${cmd.caret.cell[1]} para=${cmd.caret.cellPara}`,
           });
         }
-        const out = await invoke<EditOutcome>('nano_light_edit', { cmd });
+        const out = await invoke<EditOutcome>('nano_light_edit', { cmd, tabId: activeTabId });
         body = out.doc.body;
         caret = out.caret;
         dirty = out.dirty;
@@ -438,7 +545,7 @@ async function main(): Promise<void> {
 
     const save = async (): Promise<void> => {
       try {
-        await invoke('nano_light_save');
+        await invoke('nano_light_save', { tabId: activeTabId });
         dirty = false;
         updateStatus();
       } catch (e) {

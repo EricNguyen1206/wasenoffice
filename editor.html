@@ -10,17 +10,22 @@
     <!-- L01 round-1 chrome: name + dirty dot + Save (Cmd-S). Canvas keeps the
          UA-default typography the viewer was pixel-baselined on (T-058 trap:
          canvas fillText follows document font smoothing). -->
-    <header class="flex shrink-0 items-center gap-3 border-b border-edge bg-panel px-4 py-2">
-      <img src="/src/assets/logo.png" alt="NanoOffice" class="h-5 w-5 rounded object-contain" />
-      <span id="doc-name" class="truncate text-[0.9em] font-medium text-fg"></span>
-      <span id="dirty-dot" class="hidden h-2 w-2 shrink-0 rounded-full bg-accent"></span>
-      <span class="flex-1"></span>
-      <button
-        id="save-btn"
-        class="cursor-pointer rounded-panel border border-edge bg-panel px-[1.2em] py-[0.4em] text-[0.85em] font-medium text-fg shadow-sm outline-none hover:bg-panel-active active:bg-panel-active disabled:opacity-50"
-      >
-        Save
-      </button>
+    <header class="flex shrink-0 flex-col border-b border-edge bg-panel">
+      <!-- Multi-document Tab Bar (T-A37) -->
+      <nav id="tab-bar" class="flex items-center gap-1 overflow-x-auto border-b border-edge/50 px-2 pt-1 text-xs select-none"></nav>
+      <!-- Document metadata & Save button -->
+      <div class="flex items-center gap-3 px-4 py-1.5">
+        <img src="/src/assets/logo.png" alt="NanoOffice" class="h-4 w-4 rounded object-contain" />
+        <span id="doc-name" class="truncate text-[0.85em] font-medium text-fg"></span>
+        <span id="dirty-dot" class="hidden h-2 w-2 shrink-0 rounded-full bg-accent"></span>
+        <span class="flex-1"></span>
+        <button
+          id="save-btn"
+          class="cursor-pointer rounded-panel border border-edge bg-panel px-[1.1em] py-[0.35em] text-[0.8em] font-medium text-fg shadow-sm outline-none hover:bg-panel-active active:bg-panel-active disabled:opacity-50"
+        >
+          Save
+        </button>
+      </div>
     </header>
     <main id="canvas-box" class="flex-1 overflow-auto relative">
       <div id="format-toolbar" class="hidden absolute z-20 flex items-center gap-1 rounded-panel border border-edge bg-panel px-1.5 py-1 shadow-md text-fg text-xs select-none">

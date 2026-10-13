@@ -86,10 +86,16 @@ Theo phân tích `docs/techstack-analysis.md`, hướng thiết kế chốt là 
    - Neo tọa độ tự động ngay phía trên selection focus (`caretXY`), tự ẩn khi selection sụp đổ hoặc khi tiếp tục gõ chữ.
    - Các nút định dạng: In đậm (**B**), In nghiêng (*I*), Gạch chân (<u>U</u>) kèm phím tắt `Cmd-B`, `Cmd-I`, `Cmd-U`.
    - Tương tác backend qua lệnh mutation `Format`, tự động tách run và cập nhật thuộc tính định dạng vào `nanooffice_ooxml::Run` (bảo toàn undo/redo và save fidelity).
-3. **Tương tác với `DocumentSurface`:**
+3. **Multi-document Tab Bar (T-A37):**
+   - Thanh tab mỏng (`#tab-bar`) nằm ngay trên header hoặc tích hợp gọn gàng trong header.
+   - Hiển thị danh sách các tài liệu đang mở: tab active mang viền `border-b-2 border-accent font-semibold`, tab inactive mang `hover:bg-panel-active text-fg/70`.
+   - Mỗi tab hiển thị tên file, chấm dirty nhỏ khi có thay đổi chưa lưu, và nút đóng tab (`×`).
+   - Nút `+` mở thêm tài liệu mới trong tab riêng mà không cần mở cửa sổ mới.
+   - Backend hỗ trợ key session theo `window_label:tab_id` đảm bảo cô lập dữ liệu và undo/redo hoàn toàn độc lập giữa các tab.
+4. **Tương tác với `DocumentSurface`:**
    - Viewport canvas nằm bên trong `<main id="canvas-box" class="flex-1 overflow-auto relative">`.
    - `DocumentSurface` (từ `src/viewer/surface.ts`) tự động đo đạc kích thước vùng hiển thị (`vw`/`vh`) theo container này.
-   - Thao tác gõ chữ, điều hướng caret, selection tiếp tục diễn ra trên canvas mà không bị cản trở bởi header hay toolbar nổi.
+   - Thao tác gõ chữ, điều hướng caret, selection tiếp tục diễn ra trên canvas mà không bị cản trở bởi header hay tab bar.
 
 ---
 
@@ -98,8 +104,9 @@ Theo phân tích `docs/techstack-analysis.md`, hướng thiết kế chốt là 
 - **Slice 0 (T-A33 ✅):** Nano Light chrome header + theme Graphite + nút Save thật.
 - **Slice 1 (T-A34 ✅):** Start page migration sang own-UI layout + theme Graphite neutral-minimal.
 - **Slice 2 (T-A35 ✅):** Quick View chrome sang own-UI layout + theme Graphite.
-- **Slice 3 (Task T-A36 hiện tại):** Floating Contextual Toolbar (Zen Minimalist / Zinc minimal) cho Nano Light: Bold/Italic/Underline, phím tắt Cmd-B/Cmd-I, neo vị trí theo caret selection, mutation verb Format trong Rust.
-- **Slice 4 (Seed):** Tab bar quản lý đa tài liệu (tích hợp Preact).
+- **Slice 3 (T-A36 ✅):** Floating Contextual Toolbar (Zen Minimalist / Zinc minimal) cho Nano Light: Bold/Italic/Underline, phím tắt Cmd-B/Cmd-I, neo vị trí theo caret selection, mutation verb Format trong Rust.
+- **Slice 4 (Task T-A37 hiện tại):** Multi-document Tab Bar (Zinc minimal) cho Nano Light: thanh tab chuyển đổi tài liệu, mở/đóng tab, session keying theo tab.
+- **Slice 5 (Seed):** Tab bar mở rộng đa cửa sổ & kéo thả tabs.
 ---
 
 ## 6. Kế hoạch Kiểm thử & An toàn

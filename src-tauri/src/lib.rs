@@ -300,7 +300,8 @@ pub fn run() {
             editor::nano_light_reopen,
             editor::nano_light_open,
             editor::nano_light_edit,
-            editor::nano_light_save
+            editor::nano_light_save,
+            editor::nano_light_close_tab
         ])
         .setup(|app| {
             // Engine-facing document URLs must be loopback HTTP (see filesrv docs).
