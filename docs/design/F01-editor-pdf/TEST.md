@@ -22,7 +22,7 @@ type: test
 
 - Fixture: `harness/fixtures/make_pdf.py` (stdlib, ISO 32000 viết tay; 1 trang;
   tiếng Việt ở Title metadata UTF-16BE — lý do ở DD §10/OQ-F01-2).
-- Lệnh gate: `harness/scripts/smoke-render.sh /tmp/nanooffice-smoke-fixture.pdf`
+- Lệnh gate: `harness/scripts/smoke-render.sh /tmp/wasenoffice-smoke-fixture.pdf`
   (verify.sh chạy tự động — T-048).
 
 ## 3. Test cases

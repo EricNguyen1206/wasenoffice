@@ -1,7 +1,7 @@
 #!/bin/bash
-# NanoOffice smoke gate 13 — quick-view UX wiring E2E (T-V5, Track A rung A3):
-# boots the app NORMALLY (NO NANO_OFFICE_QUICK_VIEW) with the start-page probe
-# driver NANO_OFFICE_UX_PROBE=<docx> (pattern NANO_OFFICE_SAVE_PROBE: fills the
+# WasenOffice smoke gate 13 — quick-view UX wiring E2E (T-V5, Track A rung A3):
+# boots the app NORMALLY (NO WASEN_OFFICE_QUICK_VIEW) with the start-page probe
+# driver WASEN_OFFICE_UX_PROBE=<docx> (pattern WASEN_OFFICE_SAVE_PROBE: fills the
 # path input and clicks the REAL Quick view button — no synthetic keystrokes,
 # no focus taken, rule 6b) and asserts the full UI chain on the log:
 #   `viewer view:`  ← viewer_view command (the UI wiring itself)
@@ -29,8 +29,8 @@ cd "$ROOT"
 
 TIMEOUT="${SMOKE_QUICK_VIEW_TIMEOUT:-240}"
 MAX_MS="${QUICK_VIEW_MAX_MS:-500}"
-FIXTURE=/tmp/nanooffice-quickview-ui.docx
-LOG="$(mktemp /tmp/nanooffice-smoke-quickview-ui-XXXXXX)"
+FIXTURE=/tmp/wasenoffice-quickview-ui.docx
+LOG="$(mktemp /tmp/wasenoffice-smoke-quickview-ui-XXXXXX)"
 
 if [ "${QUICK_VIEW_UI_NEGATIVE:-0}" = "1" ]; then
   printf 'not a docx package' > "$FIXTURE"
@@ -44,7 +44,7 @@ fi
 smoke_init "$FIXTURE"
 echo "smoke: fixture=$FIXTURE log=$LOG timeout=${TIMEOUT}s budget=${MAX_MS}ms (UI probe driver)"
 
-smoke_boot "NANO_OFFICE_UX_PROBE=$FIXTURE" "NANO_OFFICE_DEVTOOLS=0" "RUST_LOG=info" "$LOG"
+smoke_boot "WASEN_OFFICE_UX_PROBE=$FIXTURE" "WASEN_OFFICE_DEVTOOLS=0" "RUST_LOG=info" "$LOG"
 
 quick_view_ui_signals() {
   if grep -q "$SMOKE_RE_QV_FAILED" "$LOG" 2>/dev/null; then

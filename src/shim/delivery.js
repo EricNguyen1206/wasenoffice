@@ -12,17 +12,17 @@
  *   2. vite side-effect import on the start page (src/main.ts — imported AFTER
  *      desktopEditor.js)
  * Both orders are load-bearing: this file consumes the shared plumbing that
- * desktopEditor.js publishes as `window.__nanooffice_shim` (tauriInvoke +
+ * desktopEditor.js publishes as `window.__wasenoffice_shim` (tauriInvoke +
  * forwardLog). Nothing else crosses the file boundary — desktopEditor.js only
- * calls `window.__nanooffice_delivery.deliverDocument()`.
+ * calls `window.__wasenoffice_delivery.deliverDocument()`.
  *
  * ── PROBE GATE (mechanism — T-045) ────────────────────────────────────────
  * Every diagnostics probe below (font-oracle, canvas probes ×2, DocInfo,
  * cc-wrapper, probe decode) sits behind the single predicate `probesEnabled()`.
- * It reads `window.__NANO_OFFICE_PROBE__`, a boolean set by a one-line Rust
+ * It reads `window.__WASEN_OFFICE_PROBE__`, a boolean set by a one-line Rust
  * initialization script (src-tauri/src/lib.rs) built from the env var
- * NANO_OFFICE_PROBE: default ON in debug builds (dev evidence depends on it),
- * OFF in release; `NANO_OFFICE_PROBE=0` forces OFF, `=1` forces ON.
+ * WASEN_OFFICE_PROBE: default ON in debug builds (dev evidence depends on it),
+ * OFF in release; `WASEN_OFFICE_PROBE=0` forces OFF, `=1` forces ON.
  * New diagnostics MUST go behind the same predicate — no ungated probe logs.
  *
  * ── LOG CONTRACT — FROZEN (gate 9) ────────────────────────────────────────
@@ -42,7 +42,7 @@
  * The same DOWN lane also carries the save result: Rust converts Editor.bin +
  * changes0.json back to the original file (x2t, params XML per the desktop
  * save contract in docs/reference.map.md) and evals
- * `window.__nanooffice_delivery.saveEnd({ok, path, code})` in the MAIN frame;
+ * `window.__wasenoffice_delivery.saveEnd({ok, path, code})` in the MAIN frame;
  * this module forwards it DOWN and the ENGINE frame answers the contract:
  * LocalFileSetSaved(ok) → LocalFileSetSourcePath(path) →
  * window.DesktopOfflineAppDocumentEndSave(code) (0 ok / 2 convert error). The
@@ -55,15 +55,15 @@
 (function (window) {
   'use strict';
 
-  if (window.__nanooffice_delivery_installed) return;
-  window.__nanooffice_delivery_installed = true;
+  if (window.__wasenoffice_delivery_installed) return;
+  window.__wasenoffice_delivery_installed = true;
 
-  var core = window.__nanooffice_shim;
+  var core = window.__wasenoffice_shim;
   if (!core || typeof core.forwardLog !== 'function') {
     // Load-order contract violated — fail loudly instead of silently dropping
     // document delivery (desktopEditor.js runs first in every frame and
-    // publishes window.__nanooffice_shim).
-    console.error('[nanooffice-delivery] window.__nanooffice_shim missing — desktopEditor.js must be installed first');
+    // publishes window.__wasenoffice_shim).
+    console.error('[wasenoffice-delivery] window.__wasenoffice_shim missing — desktopEditor.js must be installed first');
     return;
   }
   var forwardLog = core.forwardLog;
@@ -82,7 +82,7 @@
   var PROBE_MAX_TICKS = 60;
   var renderProbeTimer = null;  // T-050 repeating render-probe interval (engine frame)
 
-  var DOWN_TYPE = '__nanooffice_down'; // main frame → engine frame (document delivery)
+  var DOWN_TYPE = '__wasenoffice_down'; // main frame → engine frame (document delivery)
 
   /**
    * Single gate for every diagnostics probe in this module (mechanism + env
@@ -90,7 +90,7 @@
    * through here.
    */
   function probesEnabled() {
-    return window.__NANO_OFFICE_PROBE__ === true;
+    return window.__WASEN_OFFICE_PROBE__ === true;
   }
 
   /**
@@ -192,13 +192,13 @@
    *  engine frame (which asked for it via LocalStartOpen). Called by
    *  desktopEditor.js when the LocalStartOpen relay arrives. T-059: states
    *  WHICH document — the fileId its window got from open_document (stamped
-   *  by main.ts into window.__nanooffice_file_id__) — instead of letting
+   *  by main.ts into window.__wasenoffice_file_id__) — instead of letting
    *  Rust resolve an implicit "latest" registration (wrong-open race against
    *  quick-view windows). */
   function deliverDocument() {
     var invoke = tauriInvoke();
     if (!invoke) return;
-    invoke('get_document_for_delivery', { fileId: window.__nanooffice_file_id__ }).then(function (doc) {
+    invoke('get_document_for_delivery', { fileId: window.__wasenoffice_file_id__ }).then(function (doc) {
       // The real shell delivers well after LocalStartOpen (it converts first);
       // give the engine's post-LocalStartOpen init a beat to settle.
       setTimeout(function () {
@@ -317,8 +317,8 @@
         // Observe the api event stream directly (asc_onError reaching the UI
         // layer without touching our attachEvent hooks still passes through
         // the api's internal sendEvent).
-        if (ed2 && ed2.cc && !ed2.__nanooffice_cc_wrapped) {
-          ed2.__nanooffice_cc_wrapped = true;
+        if (ed2 && ed2.cc && !ed2.__wasenoffice_cc_wrapped) {
+          ed2.__wasenoffice_cc_wrapped = true;
           var origCc = ed2.cc;
           ed2.cc = function (ev) {
             var s = String(ev);
@@ -362,14 +362,14 @@
 
   /**
    * Probe-flag-gated save proof (T-010 test automation, NO keystrokes — the
-   * T-003 lesson). Rust injects `window.__NANO_OFFICE_SAVE_PROBE_TEXT__` from
-   * env NANO_OFFICE_SAVE_PROBE; when it is set (and probes are enabled), the
+   * T-003 lesson). Rust injects `window.__WASEN_OFFICE_SAVE_PROBE_TEXT__` from
+   * env WASEN_OFFICE_SAVE_PROBE; when it is set (and probes are enabled), the
    * engine frame inserts the text via the public api (asc_AddText — the same
    * method used in the CDP oracle; asc_enterText is NOT in the word export
    * table) and calls asc_Save() — the exact user-equivalent chain.
    */
   function scheduleSaveProbe(ed) {
-    var probeText = window.__NANO_OFFICE_SAVE_PROBE_TEXT__;
+    var probeText = window.__WASEN_OFFICE_SAVE_PROBE_TEXT__;
     if (!probesEnabled() || !probeText) return;
     setTimeout(function () {
       try {
@@ -448,7 +448,7 @@
 
   // Public surface consumed by desktopEditor.js — kept minimal (T-045); T-010
   // adds saveEnd (Rust evals it in the MAIN frame after the x2t save).
-  window.__nanooffice_delivery = {
+  window.__wasenoffice_delivery = {
     deliverDocument: deliverDocument,
     saveEnd: function (info) { postDown({ type: DOWN_TYPE, saveEnd: info }); },
   };

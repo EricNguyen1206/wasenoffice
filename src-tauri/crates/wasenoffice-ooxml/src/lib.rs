@@ -1,4 +1,4 @@
-//! NanoOffice OOXML core — Track A rung A2 (T-A21, slice S1), spec-first docx read.
+//! WasenOffice OOXML core — Track A rung A2 (T-A21, slice S1), spec-first docx read.
 //!
 //! Clean-room per `harness/rules/clean-room.md`: the only inputs are the open
 //! spec (`spec-ref: ECMA-376 Part 1 WordprocessingML §17 + DrawingML §20,

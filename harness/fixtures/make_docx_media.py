@@ -9,7 +9,7 @@ branch (review #3 C5 coverage hole). Spec-derived from ECMA-376, no upstream
 code involved.
 
 Usage: make_docx_media.py [output.docx]
-  (default: src-tauri/crates/nanooffice-ooxml/tests/fixtures/nanooffice-media-fixture.docx —
+  (default: src-tauri/crates/wasenoffice-ooxml/tests/fixtures/wasenoffice-media-fixture.docx —
    the crate tests/fixtures dir is globbed into the parity corpus by parity-a2.sh)
 """
 import sys
@@ -95,7 +95,7 @@ HEADER1 = (
 
 def main():
     out = sys.argv[1] if len(sys.argv) > 1 else (
-        "src-tauri/crates/nanooffice-ooxml/tests/fixtures/nanooffice-media-fixture.docx"
+        "src-tauri/crates/wasenoffice-ooxml/tests/fixtures/wasenoffice-media-fixture.docx"
     )
     parts = {
         "[Content_Types].xml": CONTENT_TYPES,

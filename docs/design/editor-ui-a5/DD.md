@@ -13,7 +13,7 @@ type: design
 ## 1. Bối cảnh & mục tiêu
 
 Milestone A5 (QĐ9 `docs/vision.md`): **UI editor riêng** thay thế `web-apps` cho các
-surface của NanoOffice (start page, quick view chrome, Nano Light chrome).
+surface của WasenOffice (start page, quick view chrome, Nano Light chrome).
 Engine ONLYOFFICE giữ vai trò "chế độ nâng cao" (D1 — không hard-cut tới A6);
 khi mở chế độ nâng cao, web-apps vẫn được nạp.
 
@@ -80,12 +80,12 @@ Theo phân tích `docs/techstack-analysis.md`, hướng thiết kế chốt là 
    - Nằm phía trên viewport canvas, không co giãn (`shrink-0`).
    - `#doc-name`: Hiển thị tên file từ payload `NanoLightDoc.name`.
    - `#dirty-dot`: Chấm tròn accent, hiển thị khi `dirty = true` (khi `doc != saved`).
-   - `#save-btn`: Nút bấm lưu file gọi lệnh `nano_light_save` (hoặc phím tắt `Cmd-S`).
+   - `#save-btn`: Nút bấm lưu file gọi lệnh `wasen_light_save` (hoặc phím tắt `Cmd-S`).
 2. **Floating Contextual Toolbar (Zen Minimalist — T-A36):**
    - Thanh công cụ nổi (`#format-toolbar`) chỉ xuất hiện khi có vùng chọn văn bản (`sel !== null` và `anchor != focus`).
    - Neo tọa độ tự động ngay phía trên selection focus (`caretXY`), tự ẩn khi selection sụp đổ hoặc khi tiếp tục gõ chữ.
    - Các nút định dạng: In đậm (**B**), In nghiêng (*I*), Gạch chân (<u>U</u>) kèm phím tắt `Cmd-B`, `Cmd-I`, `Cmd-U`.
-   - Tương tác backend qua lệnh mutation `Format`, tự động tách run và cập nhật thuộc tính định dạng vào `nanooffice_ooxml::Run` (bảo toàn undo/redo và save fidelity).
+   - Tương tác backend qua lệnh mutation `Format`, tự động tách run và cập nhật thuộc tính định dạng vào `wasenoffice_ooxml::Run` (bảo toàn undo/redo và save fidelity).
 3. **Multi-document Tab Bar (T-A37):**
    - Thanh tab mỏng (`#tab-bar`) nằm ngay trên header hoặc tích hợp gọn gàng trong header.
    - Hiển thị danh sách các tài liệu đang mở: tab active mang viền `border-b-2 border-accent font-semibold`, tab inactive mang `hover:bg-panel-active text-fg/70`.
@@ -112,7 +112,7 @@ Theo phân tích `docs/techstack-analysis.md`, hướng thiết kế chốt là 
 ## 6. Kế hoạch Kiểm thử & An toàn
 
 1. **Gate 15 (Smoke Nano Light):**
-   - Probe `NANO_OFFICE_NL_PROBE` tự động gõ chữ $\to$ dirty dot hiện $\to$ bấm Save $\to$ disk thay đổi $\to$ reopen trong cửa sổ thứ hai.
+   - Probe `WASEN_OFFICE_NL_PROBE` tự động gõ chữ $\to$ dirty dot hiện $\to$ bấm Save $\to$ disk thay đổi $\to$ reopen trong cửa sổ thứ hai.
    - Selector `#save-btn` và `#dirty-dot` phải được probe tìm thấy chính xác.
 2. **Gate 14 (Layout core unit tests):**
    - Tuyệt đối không đụng vào `layout.ts` $\implies$ 114 checks giữ nguyên.

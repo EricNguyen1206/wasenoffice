@@ -1,7 +1,7 @@
 ---
 type: research
 ---
-# docs/techstack-analysis.md — Bun vs Golang vs Rust cho lớp shell NanoOffice
+# docs/techstack-analysis.md — Bun vs Golang vs Rust cho lớp shell WasenOffice
 
 > Phân tích độc lập theo handoff 22.09 (đã dọn theo vòng đời `docs/handoff/README.md` — bản gốc
 > trong git history). Ngày: 22.09.2026.
@@ -29,7 +29,7 @@ Theo handoff, phân tích chỉ chấm ứng viên cho đúng lớp tương ứn
 
 | Lớp | Nội dung | Ứng viên có ý nghĩa? |
 |---|---|---|
-| **A — Shell/WebView host** | cửa sổ, tab, `nanooffice-file://` (Range), file dialog, print, updater | Rust+Tauri / Go+Wails / (Bun: **không có path production** — xem §4.4) |
+| **A — Shell/WebView host** | cửa sổ, tab, `wasenoffice-file://` (Range), file dialog, print, updater | Rust+Tauri / Go+Wails / (Bun: **không có path production** — xem §4.4) |
 | **B — Sidecar/process layer** | spawn x2t (timeout, queue, stderr-as-evidence), sau này AI runtime local | cả 3 đều làm được; process mgmt + IPC là vấn đề đã giải ở mọi ngôn ngữ |
 | **C — Dev tooling/runtime** | pnpm/vite scripts, harness scripts | Bun thay Node được **bất kể** shell là gì — không được lẫn vào kết luận lớp A |
 
@@ -203,7 +203,7 @@ Chi phí **hôm nay thấp nhất nó từng có** — và sẽ chỉ tăng sau 
 git ls-files 'src-tauri/src/*.rs' 'src-tauri/src/**/*.rs' | xargs wc -l   # = 1141
 
 # Rust release (app thật)
-cd src-tauri && cargo build --release          # binary: target/release/nanooffice = 5.0 MB
+cd src-tauri && cargo build --release          # binary: target/release/wasenoffice = 5.0 MB
 # Go/Wails (trong /tmp)
 go install github.com/wailsapp/wails/v2/cmd/wails@latest
 wails init -n wailsspike -t vanilla && cd wailsspike && wails build   # .app = 7.9 MB
@@ -243,7 +243,7 @@ Số liệu đo đầy đủ: §4.2 + §4.5. Script đo nằm ở `/tmp/techstac
 
 ## Phụ lục D — Điều tra frontend sang WASM/Bun (29.09.2026, research — không commit)
 
-**Câu hỏi:** phần frontend NanoOffice chuyển sang WebAssembly hoặc Bun được không, giữ multi-platform? Dư địa tối ưu tới đâu?
+**Câu hỏi:** phần frontend WasenOffice chuyển sang WebAssembly hoặc Bun được không, giữ multi-platform? Dư địa tối ưu tới đâu?
 
 **Phân rã "frontend" (đo thật 29.09):** source 1.211 dòng (index.html 14 + main.ts 135 + styles 174 + shim/delivery ~890) · **built = 24 KB** (16 KB JS + 1.9 KB CSS trong `dist/`) · so với engines/ 313 MB payload + ~370 MB RAM WebContent khi mở doc · tỷ lệ frontend ≈ **0.008%** khối lượng shipped.
 

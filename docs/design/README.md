@@ -39,7 +39,7 @@ type: registry
 | P01 | Cửa sổ soạn thảo bài trình bày (editor PPTX) | — | 🟨 in-development | PH-1 | [DD](P01-editor-pptx/DD.md) | [TEST](P01-editor-pptx/TEST.md) | `src/main.ts` (FILE_FORMATS), `src/shim/` |
 | F01 | Cửa sổ xem/soạn PDF (editor PDF) | — | 🟨 in-development | PH-1 | [DD](F01-editor-pdf/DD.md) | [TEST](F01-editor-pdf/TEST.md) | `src/main.ts` (FILE_FORMATS), `src/shim/` |
 | X01 | Cài đặt (settings) | — | ⬜ planned | chưa có QĐ | [stub](X01-settings/DD.md) | — | — |
-| K01 | Converter core A2 — Rust thay x2t (Track A) | — | 🟦 draft | Track A (A2) | [DD](converter-a2/DD.md) | — (parity plan trong DD §7) | `src-tauri/crates/nanooffice-ooxml` |
+| K01 | Converter core A2 — Rust thay x2t (Track A) | — | 🟦 draft | Track A (A2) | [DD](converter-a2/DD.md) | — (parity plan trong DD §7) | `src-tauri/crates/wasenoffice-ooxml` |
 | V01 | Viewer Rust đọc-only "quick view" A3 (Track A) | — | 🟦 draft | Track A (A3) | [DD](viewer-a3/DD.md) | — (kiểm thử trong DD §7) | `src-tauri/src/viewer.rs`, `src/viewer.html`, `src/viewer.ts` |
 | L01 | Editor core A4 "Nano Light" (Track A) | — | 🟦 draft | Track A (A4) | [DD](editor-a4/DD.md) | — (kiểm thử trong DD §7) | `src-tauri/src/editor.rs`, `editor.html`, `src/editor.ts` |
 | U01 | UI editor riêng A5 — chrome + framework (Track A) | — | 🟦 draft | Track A (A5) | [DD](editor-ui-a5/DD.md) | — (kiểm thử trong DD §7) | `src/editor.html`, `src/editor.ts`, `src/viewer/surface.ts` |

@@ -17,7 +17,7 @@
 //!   answers `LocalFileSetSaved` → `LocalFileSetSourcePath` →
 //!   `DesktopOfflineAppDocumentEndSave(0 ok | 2 error)`.
 //!
-//! Disk safety: x2t writes to `<dir>/<name>.nanooffice-save.<ext>` NEXT TO the
+//! Disk safety: x2t writes to `<dir>/<name>.wasenoffice-save.<ext>` NEXT TO the
 //! original (same volume) and the file is renamed over the original only after
 //! a complete, non-empty conversion — a partial write can never corrupt the
 //! user's file. Semantic failures still reach the engine as EndSave(2)
@@ -232,7 +232,7 @@ fn finish(app: &tauri::AppHandle, path: Option<&Path>, ok: bool, code: i64, note
     match window {
         Some(win) => {
             let js = format!(
-                "window.__nanooffice_delivery && window.__nanooffice_delivery.saveEnd({info});"
+                "window.__wasenoffice_delivery && window.__wasenoffice_delivery.saveEnd({info});"
             );
             if let Err(e) = win.eval(&js) {
                 log::error!("save-end eval failed: {e}");
@@ -298,7 +298,7 @@ pub fn save_document(app: &tauri::AppHandle, registry: &FileRegistry, payload: &
     let from_changes = changes.metadata().map(|m| m.len() > 0).unwrap_or(false);
 
     // Atomic write (T-062): x2t renders to temporary sibling, then atomic swap.
-    let tmp_out = crate::storage::sibling_tmp_path(&disk, "nanooffice-save");
+    let tmp_out = crate::storage::sibling_tmp_path(&disk, "wasenoffice-save");
     let _ = std::fs::remove_file(&tmp_out);
 
     let allfonts = crate::protocol::allfonts::ensure_written();
@@ -358,7 +358,7 @@ mod tests {
     #[test]
     fn save_flows_key_by_the_file_id_they_carry() {
         use crate::formats::DocWorkdir;
-        let dir = std::env::temp_dir().join("nanooffice-test-save-keyed");
+        let dir = std::env::temp_dir().join("wasenoffice-test-save-keyed");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let a = dir.join("a.docx");
@@ -402,7 +402,7 @@ mod tests {
 
     #[test]
     fn truncate_keeps_exact_entry_count() {
-        let dir = std::env::temp_dir().join("nanooffice-test-save");
+        let dir = std::env::temp_dir().join("wasenoffice-test-save");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("changes0.json");
@@ -477,7 +477,7 @@ mod tests {
     }
 
     fn multiformat_dir(tag: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("nanooffice-test-multiformat-{tag}"));
+        let dir = std::env::temp_dir().join(format!("wasenoffice-test-multiformat-{tag}"));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -489,7 +489,7 @@ mod tests {
         let x2t = crate::sidecar::x2t_path();
         assert!(
             Path::new(&x2t).is_file(),
-            "x2t not resolvable ({x2t:?}) — bundle it or set NANO_OFFICE_X2T"
+            "x2t not resolvable ({x2t:?}) — bundle it or set WASEN_OFFICE_X2T"
         );
         let dir = multiformat_dir("rt");
         // production save params carry the generated font cache
@@ -546,7 +546,7 @@ mod tests {
         let x2t = crate::sidecar::x2t_path();
         assert!(
             Path::new(&x2t).is_file(),
-            "x2t not resolvable ({x2t:?}) — bundle it or set NANO_OFFICE_X2T"
+            "x2t not resolvable ({x2t:?}) — bundle it or set WASEN_OFFICE_X2T"
         );
         let dir = multiformat_dir("neg");
         let bin = dir.join("Editor.bin");
@@ -568,7 +568,7 @@ mod tests {
 
     #[test]
     fn append_matches_shell_byte_format() {
-        let dir = std::env::temp_dir().join("nanooffice-test-append");
+        let dir = std::env::temp_dir().join("wasenoffice-test-append");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("changes")).unwrap();
         // layout pinned by formats::DocWorkdir tests

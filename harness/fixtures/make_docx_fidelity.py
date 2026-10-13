@@ -57,7 +57,7 @@ DOCUMENT = (
 
 
 def main():
-    out = sys.argv[1] if len(sys.argv) > 1 else "/tmp/nanooffice-fidelity.docx"
+    out = sys.argv[1] if len(sys.argv) > 1 else "/tmp/wasenoffice-fidelity.docx"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("[Content_Types].xml", CONTENT_TYPES)
         z.writestr("_rels/.rels", ROOT_RELS)

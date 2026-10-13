@@ -84,9 +84,9 @@ async function main(): Promise<void> {
     }
     // T-V7 gate-12 probe: round-trip every text line through hitTest (mid →
     // inside the line; left/right edges → its boundary offsets). Env-driven
-    // (NANO_OFFICE_QV_HITTEST → init script in lib.rs) — the compute is gate
+    // (WASEN_OFFICE_QV_HITTEST → init script in lib.rs) — the compute is gate
     // food, not production work.
-    if ((window as unknown as { __NANO_OFFICE_QV_HITTEST__?: boolean }).__NANO_OFFICE_QV_HITTEST__) {
+    if ((window as unknown as { __WASEN_OFFICE_QV_HITTEST__?: boolean }).__WASEN_OFFICE_QV_HITTEST__) {
       const inLine = (line: LineModel['lines'][number], k: number, h: ReturnType<typeof hitTest>): boolean =>
         !!h &&
         h.line === k &&

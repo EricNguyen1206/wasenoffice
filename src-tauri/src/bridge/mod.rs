@@ -53,7 +53,7 @@ impl BridgeCmd {
             "IsLocalFile" => Ok(Value::Bool(true)),
             "getEngineVersion" => Ok(Value::String(env!("CARGO_PKG_VERSION").into())),
             "GetEncryptedHeader" => Ok(Value::String("ENCRYPTED;".into())),
-            "CheckUserId" => Ok(Value::String("nanooffice-ph0".into())),
+            "CheckUserId" => Ok(Value::String("wasenoffice-ph0".into())),
             "GetInstallPlugins" => Ok(Value::String(
                 r#"[{"url":"","pluginsData":[]},{"url":"","pluginsData":[]}]"#.into(),
             )),

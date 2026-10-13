@@ -31,13 +31,13 @@
 #   gate 13 · viewer view (T-V5 — UI wiring quick-view; consumer
 #            harness/scripts/smoke-quick-view-ui.sh)
 #            ← src-tauri/src/viewer.rs viewer_view (start page Quick view
-#            button → invoke → command; driver NANO_OFFICE_UX_PROBE)
+#            button → invoke → command; driver WASEN_OFFICE_UX_PROBE)
 #   gate 15 · nano light view/opened/edit/saved + first-draw/layout/evidence
 #            (T-A27 — Nano Light editor vòng 1; consumer
 #            harness/scripts/smoke-nano-light.sh)
 #            ← src-tauri/src/editor.rs (view/opened/edit/saved) +
 #            src/editor.ts (first-draw/layout/evidence/media); driver
-#            NANO_OFFICE_NANO_LIGHT + NANO_OFFICE_NL_PROBE
+#            WASEN_OFFICE_NANO_LIGHT + WASEN_OFFICE_NL_PROBE
 #            T-A28 thêm `nano light selection:` (ADDITIVE — evidence
 #            selection anchor/focus/span, cùng consumer gate 15)
 #            T-A29 thêm `nano light composition:` + `nano light clipboard:`
@@ -45,7 +45,7 @@
 #            T-A30 thêm `nano light cell:` (ADDITIVE — evidence edit trong
 #            cell, cùng consumer). T-A31 thêm `nano light warn:` (ADDITIVE —
 #            refuse-warn mất-khi-save, emit src-tauri/src/editor.rs
-#            nano_light_open, cùng consumer)
+#            wasen_light_open, cùng consumer)
 set -u
 
 SMOKE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -123,10 +123,10 @@ smoke_boot() {
   local -a envs=()
   while [ $# -gt 1 ]; do envs+=("$1"); shift; done
   # Rule 6b (AGENTS.md): mỗi boot gate chạy NỀN — Accessory activation policy
-  # (lib.rs đọc NANO_OFFICE_BACKGROUND): process không bao giờ activate, không
+  # (lib.rs đọc WASEN_OFFICE_BACKGROUND): process không bao giờ activate, không
   # cướp Space/menu bar; window vẫn visible cho engine probes. Đặt ĐẦU mảng —
   # env trùng tên phía sau ghi đè (env giữ phép gán CUỐI).
-  envs=("NANO_OFFICE_BACKGROUND=1" "${envs[@]}")
+  envs=("WASEN_OFFICE_BACKGROUND=1" "${envs[@]}")
   # Job control: background job có process group riêng để trap EXIT giết cả
   # cây (pnpm → tauri-cli → cargo → app) mà không đụng process lạ.
   set -m

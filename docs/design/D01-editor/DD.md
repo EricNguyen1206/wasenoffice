@@ -18,7 +18,7 @@ type: design
 
 ## 1. Tổng quan
 
-Cửa sổ chính của NanoOffice: một WKWebView (Tauri) hosting `web-apps` **documenteditor** +
+Cửa sổ chính của WasenOffice: một WKWebView (Tauri) hosting `web-apps` **documenteditor** +
 `sdkjs` engine — UI người dùng thấy là UI upstream nguyên bản. Shell Rust đứng sau cung cấp
 3 dịch vụ: (1) filesrv loopback phân phát engine + fonts + document, (2) bridge hai chiều
 `window.AscDesktopEditor` (JS→Native) và `on_native_message` (Native→JS), (3) convert x2t
@@ -94,7 +94,7 @@ loading do engine tự hiển thị. Phím tắt: kế thừa engine; PH-2 mới
 | Tình huống | Hành vi mong đợi | Bằng chứng / bẫy đã gặp |
 |---|---|---|
 | Response body bị nhân đôi NUL | unit test hồi quy chặn | diagnostics 22.09 (bẫy 1) |
-| Document URL scheme lạ | engine allowlist `https?\|ftps?\|file\|tessa\|joplin\|smb` — `nanooffice-file://` bị Invalid → mọi thứ cùng origin loopback | `editorscommon.js:2939` (reference.map § Ràng buộc URL) |
+| Document URL scheme lạ | engine allowlist `https?\|ftps?\|file\|tessa\|joplin\|smb` — `wasenoffice-file://` bị Invalid → mọi thứ cùng origin loopback | `editorscommon.js:2939` (reference.map § Ràng buộc URL) |
 | WASM resolve sai thư mục | `locateFile` + redirect của filesrv | RuntimeError Aborted **im lặng** — diagnostics 22.09 (bổ sung) |
 | Mixed-content | engine + document cùng origin `127.0.0.1:14321` | custom-scheme page fetch `http://` bị chặn |
 | `include_str!` đổi file JS không rebuild | `touch`/build tay khi sửa payload nhúng | diagnostics 22.09 (bẫy 4) |
@@ -118,7 +118,7 @@ câu hỏi mở mức thấp, xử lý PH-2.
 |---|---|---|
 | Shell CEF (như upstream) | sdkjs/web-apps không có dependency CEF; WKWebView boot đầy đủ | reference.map § CEF-independence (grep 0 match + runtime) |
 | Native graphics cho render | app thật cũng render bằng canvas trong webview | CDP oracle: `window.native` undefined, canvas 2654×1312 (diagnostics 22.09 bổ sung) |
-| `nanooffice-file://` làm document URL | engine đánh Invalid theo allowlist scheme | reference.map § Ràng buộc URL |
+| `wasenoffice-file://` làm document URL | engine đánh Invalid theo allowlist scheme | reference.map § Ràng buộc URL |
 | Dựng `DocsCoApi`/docsco cho word | word build không chứa DocsCoApi — socket polling đến từ web-apps (Gs) | diagnostics 22.09 (bổ sung) |
 
 ## 10. Câu hỏi mở
@@ -131,7 +131,7 @@ câu hỏi mở mức thấp, xử lý PH-2.
   không chặn render. Backlog PH-1.
 - [x] `editor:config` answer từ app-layer KHÔNG phải đồng phạm (open qua vạch mà chưa trả lời
   lời nào) — giữ làm fidelity work PH-1/PH-2.
-- [ ] Dài hạn (PH-1): giữ loopback `127.0.0.1:14321` hay chuyển hẳn `nanooffice-engine://`
+- [ ] Dài hạn (PH-1): giữ loopback `127.0.0.1:14321` hay chuyển hẳn `wasenoffice-engine://`
   sau khi có sidecar — deviation kiến trúc cần chốt.
 
 ## 11. Changelog

@@ -2,7 +2,7 @@
 //! read-only "quick view" plugs in HERE, parallel to delivery: parse-only via
 //! the A2 crate, no x2t, no Editor.bin, no shim. Two triggers (V5, DD §4):
 //! the start page's Quick View action opens a window via `viewer_view`, and
-//! the env `NANO_OFFICE_QUICK_VIEW` stays as the dev/gate-12 trigger. The
+//! the env `WASEN_OFFICE_QUICK_VIEW` stays as the dev/gate-12 trigger. The
 //! disk path stays Rust-side, like every other document surface.
 
 use std::collections::BTreeMap;
@@ -12,7 +12,7 @@ use std::sync::Arc;
 use serde::Serialize;
 use tauri::State;
 
-use nanooffice_ooxml::{Document, Page, PageMar, RBlock, RenderDoc};
+use wasenoffice_ooxml::{Document, Page, PageMar, RBlock, RenderDoc};
 
 use crate::protocol::FileRegistry;
 
@@ -43,7 +43,7 @@ pub fn viewer_view(
         &app,
         &label,
         "viewer.html",
-        format!("NanoOffice — Quick View: {name}"),
+        format!("WasenOffice — Quick View: {name}"),
         "viewer",
     )?;
     log::info!("viewer view: {path} (window {label})");
@@ -85,8 +85,8 @@ pub(crate) fn render_payload(
     let started = std::time::Instant::now();
     let bytes = std::fs::read(path).map_err(|e| format!("{tag}: read {path}: {e}"))?;
     let doc =
-        nanooffice_ooxml::parse_docx(&bytes).map_err(|e| format!("{tag}: parse {path}: {e}"))?;
-    let render = nanooffice_ooxml::resolve(&doc);
+        wasenoffice_ooxml::parse_docx(&bytes).map_err(|e| format!("{tag}: parse {path}: {e}"))?;
+    let render = wasenoffice_ooxml::resolve(&doc);
     let fonts: BTreeMap<String, [i16; 3]> = families(&render)
         .into_iter()
         .filter_map(|fam| crate::protocol::allfonts::line_metrics(&fam).map(|m| (fam, m)))
@@ -130,12 +130,12 @@ pub fn viewer_open(
     let path = quick
         .take(window.label())
         .or_else(|| {
-            std::env::var("NANO_OFFICE_QUICK_VIEW")
+            std::env::var("WASEN_OFFICE_QUICK_VIEW")
                 .ok()
                 .filter(|p| !p.is_empty())
         })
         .ok_or_else(|| {
-            "viewer: no quick-view source (UI action or NANO_OFFICE_QUICK_VIEW)".to_string()
+            "viewer: no quick-view source (UI action or WASEN_OFFICE_QUICK_VIEW)".to_string()
         })?;
     let p = render_payload(registry.inner().as_ref(), window.label(), &path, "viewer")?;
     log::info!(

@@ -2,7 +2,7 @@
 """Generate the full-corpus DOCX fixture (stdlib only) for T-A21 (A2/S1).
 
 Usage: make_docx_full.py [output.docx]
-  (default: src-tauri/crates/nanooffice-ooxml/tests/fixtures/nanooffice-full-fixture.docx)
+  (default: src-tauri/crates/wasenoffice-ooxml/tests/fixtures/wasenoffice-full-fixture.docx)
 
 Covers every S1 construct, spec-derived from ECMA-376 / ISO 29500 (no upstream
 code involved): paragraph props (pStyle/jc/numPr), run props (b/i/u/sz),
@@ -109,7 +109,7 @@ def drawing() -> str:
 def document_xml() -> str:
     body = [
         '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>'
-        '<w:r><w:t xml:space="preserve">Giới thiệu NanoOffice</w:t></w:r></w:p>',
+        '<w:r><w:t xml:space="preserve">Giới thiệu WasenOffice</w:t></w:r></w:p>',
         # run-level bold=false overrides the Heading1 style chain
         '<w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr>'
         '<w:r><w:rPr><w:b w:val="false"/></w:rPr>'
@@ -156,7 +156,7 @@ def document_xml() -> str:
 
 
 HEADER1 = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:hdr {W}><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:t>NanoOffice — văn bản mẫu</w:t></w:r></w:p></w:hdr>
+<w:hdr {W}><w:p><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:t>WasenOffice — văn bản mẫu</w:t></w:r></w:p></w:hdr>
 """
 
 FOOTER1 = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -166,7 +166,7 @@ FOOTER1 = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 
 def main():
     out = sys.argv[1] if len(sys.argv) > 1 else (
-        "src-tauri/crates/nanooffice-ooxml/tests/fixtures/nanooffice-full-fixture.docx"
+        "src-tauri/crates/wasenoffice-ooxml/tests/fixtures/wasenoffice-full-fixture.docx"
     )
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("[Content_Types].xml", CONTENT_TYPES)

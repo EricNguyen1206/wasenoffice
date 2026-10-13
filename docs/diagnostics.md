@@ -13,15 +13,15 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 - **Nhiệm vụ:** Đảm bảo tuân thủ đầy đủ GNU AGPL v3.0 và Section 7 khi phân phối installer / application bundle có nhúng x2t sidecar (theo `harness/rules/licensing.md` và `docs/vision.md` QĐ1).
 - **Thay đổi:**
   - Tạo file `NOTICE` tại repo root ghi nhận rõ ràng:
-    * Bản quyền MIT cho toàn bộ code NanoOffice tự viết.
+    * Bản quyền MIT cho toàn bộ code WasenOffice tự viết.
     * Điều khoản GNU AGPL v3.0 và link cung cấp mã nguồn tương ứng cho x2t converter (`https://github.com/ONLYOFFICE/core`) và editing engines (`sdkjs`/`web-apps`).
     * Bản quyền và giấy phép SIL Open Font License / GPL cho các bundled fonts (Carlito, Symbol).
   - Cập nhật `src-tauri/tauri.conf.json`:
     * Khai báo trường `copyright`, `licenseFile: "../NOTICE"`, và nhúng `NOTICE` vào `resources`.
     * Kích hoạt bundle target `dmg`.
-  - Đóng gói thành công file cài đặt DMG chính thức: `NanoOffice_0.1.0_aarch64.dmg` kích thước **6.4 MB** (thấp hơn nhiều so với trần 30 MB của QĐ2).
+  - Đóng gói thành công file cài đặt DMG chính thức: `WasenOffice_0.1.0_aarch64.dmg` kích thước **6.4 MB** (thấp hơn nhiều so với trần 30 MB của QĐ2).
 - **Bằng chứng:**
-  - Bundle DMG tại `src-tauri/target/release/bundle/dmg/NanoOffice_0.1.0_aarch64.dmg`.
+  - Bundle DMG tại `src-tauri/target/release/bundle/dmg/WasenOffice_0.1.0_aarch64.dmg`.
   - License gate (`check-licenses.mjs`) 446 packages cargo + 7 node_modules đều GREEN.
   - `./harness/scripts/verify.sh` FULL exit 0 cả 20 gates.
 
@@ -29,17 +29,17 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ## 2026-10-13 · T-057: Giải quyết release boot stall — đóng gói bundle .app macOS & đo RAM release
 
-- **Triệu chứng (03.10 T-V2):** Chạy binary release `cargo build --release` trực tiếp (`./target/release/nanooffice`) khiến WebKit WebContent process bị terminate ngay khi vừa mở (`DEBUG tauri_runtime_wry: web content process terminated`), cửa sổ bị stall không nhận navigation.
+- **Triệu chứng (03.10 T-V2):** Chạy binary release `cargo build --release` trực tiếp (`./target/release/wasenoffice`) khiến WebKit WebContent process bị terminate ngay khi vừa mở (`DEBUG tauri_runtime_wry: web content process terminated`), cửa sổ bị stall không nhận navigation.
 - **Nguyên nhân cốt lõi (Root cause):**
   1. Trên macOS (WebKit XPC sandbox): macOS đòi hỏi WebKit applications sử dụng asset scheme nhúng (`tauri://localhost`) phải được chạy bên trong một **Mach-O Application Bundle (`.app`)** hoàn chỉnh có `Info.plist`. Chạy bare binary ngoài bundle khiến sandbox policy của WebKit từ chối IPC và terminate WebContent process.
-  2. Cảnh báo định danh bundle: `"identifier": "com.nanooffice.app"` trong `tauri.conf.json` có đuôi `.app` gây xung đột với đuôi thư mục ứng dụng trên macOS.
+  2. Cảnh báo định danh bundle: `"identifier": "com.wasenoffice.app"` trong `tauri.conf.json` có đuôi `.app` gây xung đột với đuôi thư mục ứng dụng trên macOS.
 - **Giải pháp:**
-  - Đổi identifier thành `"com.nanooffice.desktop"` trong `tauri.conf.json`.
+  - Đổi identifier thành `"com.wasenoffice.desktop"` trong `tauri.conf.json`.
   - Thêm cấu hình `fileAssociations` (`.docx`, `.xlsx`, `.pptx`, `.pdf`) vào bundle của `tauri.conf.json`.
   - Thêm `#[allow(dead_code)]` cho trường `devtools` trong `AppConfig` khi biên dịch release.
-  - Đóng gói bằng `pnpm tauri build --bundles app` tạo `NanoOffice.app`.
+  - Đóng gói bằng `pnpm tauri build --bundles app` tạo `WasenOffice.app`.
 - **Kết quả đo đạc thực tế (Release Benchmark — OQ-V01-2 / DD V01 §10):**
-  - `NanoOffice.app` chạy mượt mà tức thì: **first-draw đạt 8.0 ms** (Nano Light) và **72.0 ms** (Quick View)!
+  - `WasenOffice.app` chạy mượt mà tức thì: **first-draw đạt 8.0 ms** (Nano Light) và **72.0 ms** (Quick View)!
   - **Binary kích thước:** 6.9 MB (đạt chuẩn ultra lightweight < 30 MB).
   - **RAM Main App:** **89.7 MB** (đạt tiêu chuẩn < 100 MB).
   - **RAM toàn cây (Tree RSS - App + 3 WebKit helpers):** **228.7 MB** (vượt xa ONLYOFFICE gốc 1,070 MB / 7 processes).
@@ -50,8 +50,8 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 - **Nhiệm vụ:** Xây dựng thanh tab mỏng chuyển đổi đa tài liệu cho Nano Light; backend hỗ trợ session keying theo tab.
 - **Thay đổi:**
-  - `src-tauri/src/editor/mod.rs`: `EditorSessions` hỗ trợ keying theo tab: `session_key(window_label, tab_id)` (`{owner}` cho tab 0, `{owner}:{id}` cho các tab con); `remove_owner` dọn dẹp sạch toàn bộ các tab con khi cửa sổ bị Destroyed; các commands `nano_light_open`, `nano_light_edit`, `nano_light_save` nhận `tab_id: Option<u32>` tùy chọn (100% tương thích ngược); thêm command `nano_light_close_tab`.
-  - `src-tauri/src/lib.rs`: Đăng ký command `nano_light_close_tab`.
+  - `src-tauri/src/editor/mod.rs`: `EditorSessions` hỗ trợ keying theo tab: `session_key(window_label, tab_id)` (`{owner}` cho tab 0, `{owner}:{id}` cho các tab con); `remove_owner` dọn dẹp sạch toàn bộ các tab con khi cửa sổ bị Destroyed; các commands `wasen_light_open`, `wasen_light_edit`, `wasen_light_save` nhận `tab_id: Option<u32>` tùy chọn (100% tương thích ngược); thêm command `wasen_light_close_tab`.
+  - `src-tauri/src/lib.rs`: Đăng ký command `wasen_light_close_tab`.
   - `editor.html`: Bổ sung `<nav id="tab-bar">` mỏng trong header theo phong cách Zinc minimal.
   - `src/editor.ts`: Quản lý danh sách `tabs: Map<number, TabState>`; helper `renderTabBar()` hiển thị tab active (`border-b-2 border-accent bg-panel text-fg`), tab inactive, chấm dirty trên từng tab, và nút đóng tab `×`; hỗ trợ `switchTab` và `closeTab`.
 - **Bằng chứng:**
@@ -95,7 +95,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 - **Nhiệm vụ:** Chuyển đổi start page (`index.html`, `src/main.ts`) sang layout và theme tokens Graphite neutral-minimal; loại bỏ nhãn "PH-0 spike" cũ.
 - **Thay đổi:**
-  - `src/main.ts`: Thay nhãn "PH-0 spike" bằng tiêu đề thương hiệu sạch `NanoOffice`; chuẩn hóa `CONTROL_SKIN` sử dụng tokens `rounded-panel border border-edge bg-panel text-fg hover:bg-panel-active`; thanh header thêm padding và border-edge; log element `#ph0-log` đồng bộ nền `bg-panel` và border-edge.
+  - `src/main.ts`: Thay nhãn "PH-0 spike" bằng tiêu đề thương hiệu sạch `WasenOffice`; chuẩn hóa `CONTROL_SKIN` sử dụng tokens `rounded-panel border border-edge bg-panel text-fg hover:bg-panel-active`; thanh header thêm padding và border-edge; log element `#ph0-log` đồng bộ nền `bg-panel` và border-edge.
   - `index.html`: Chuyển sang container `bg-bg text-fg`, loại bỏ `justify-center text-center` cũ để header neo tự nhiên ở đỉnh và `main#editor-root` chiếm toàn bộ không gian còn lại (`flex-1 bg-paper`).
   - Bảo toàn 100% các ID (`#app`, `#open-form`, `#doc-path`, `#quick-view-btn`, `#nano-light-btn`, `#ph0-log`, `#editor-root`).
 - **Bằng chứng:**
@@ -143,7 +143,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 - **Quyết định (DD U01):**
   - Framework RATIFY: Slice 0 chạy Vanilla TypeScript + Tailwind v4 (0 runtime dep, 0KB overhead); trigger kích hoạt Preact (~4.5KB) khi bước vào component stateful phức tạp (Tab bar đa tài liệu hoặc Toolbar định dạng văn bản) vượt ngưỡng 100 dòng manual DOM sync. Loại Svelte 5 vì agent-fluency thấp hơn JSX.
   - Theme values: Chốt bảng màu Graphite neutral-minimal (zinc/slate tones: `--color-bg: #f4f4f5`, `--color-fg: #18181b`, `--color-panel: #ffffff`, `--color-panel-active: #e4e4e7`, `--color-edge: #d4d4d8`, `--color-accent: #2563eb`, radius `6px`). Dark mode tự động theo prefers-color-scheme.
-  - Kiến trúc chrome: Header chrome bọc ngoài viewport canvas (`editor.html`), hiển thị `#doc-name`, `#dirty-dot`, `#save-btn` gọi `nano_light_save` thật.
+  - Kiến trúc chrome: Header chrome bọc ngoài viewport canvas (`editor.html`), hiển thị `#doc-name`, `#dirty-dot`, `#save-btn` gọi `wasen_light_save` thật.
 - **Bằng chứng:**
   - DD U01 commit trước code (`8b3aa2b`); check-docs 33 files GREEN.
   - Gate 15 smoke Nano Light: first-draw 19.0 ms, save 2.9 ms, positive PASSED + negative garbage/doctor exit 1.
@@ -177,10 +177,10 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   về 1 nhà và chuẩn hóa seam dựng cửa sổ (Candidate 1 trong Architecture Review #7;
   đóng nốt task code cuối cùng của phase PH-1).
 - **Thiết kế sâu:**
-  - `src-tauri/src/config.rs`: Struct `AppConfig` gom 10 biến (`NANO_OFFICE_BACKGROUND`,
-    `NANO_OFFICE_OPEN`, `NANO_OFFICE_DEVTOOLS`, `NANO_OFFICE_QUICK_VIEW`, `NANO_OFFICE_NANO_LIGHT`,
-    `NANO_OFFICE_PROBE`, `NANO_OFFICE_SAVE_PROBE`, `NANO_OFFICE_UX_PROBE`, `NANO_OFFICE_NL_PROBE`,
-    `NANO_OFFICE_QV_HITTEST`). Hàm pure `from_lookup` cho phép unit test độc lập không race env.
+  - `src-tauri/src/config.rs`: Struct `AppConfig` gom 10 biến (`WASEN_OFFICE_BACKGROUND`,
+    `WASEN_OFFICE_OPEN`, `WASEN_OFFICE_DEVTOOLS`, `WASEN_OFFICE_QUICK_VIEW`, `WASEN_OFFICE_NANO_LIGHT`,
+    `WASEN_OFFICE_PROBE`, `WASEN_OFFICE_SAVE_PROBE`, `WASEN_OFFICE_UX_PROBE`, `WASEN_OFFICE_NL_PROBE`,
+    `WASEN_OFFICE_QV_HITTEST`). Hàm pure `from_lookup` cho phép unit test độc lập không race env.
     `startup_document` chuyển sang `Mutex<Option<String>>` với `take_startup_document()`,
     xóa bỏ `std::env::remove_var` bẩn.
   - `src-tauri/src/window.rs`: Seam `create_boot_window` và `open_surface_window` (dùng chung cho
@@ -210,7 +210,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   `showerror` (Main.js:259) loại (chỉ ComboSeriesError). Mọi raise-site
   `ConvertationOpenError` khác loại cho flow offline (bảng loại trừ ở reference.map).
 - **Không tái hiện được tự nhiên:** 0/15 boot gate 10-11.10, 0 dòng lỗi trong
-  /tmp/nanooffice-smoke-* (trừ `probe decode failed` — do MÌNH catch sẵn). Trigger cụ thể
+  /tmp/wasenoffice-smoke-* (trừ `probe decode failed` — do MÌNH catch sẵn). Trigger cụ thể
   (lỗi lạc nào) chưa định danh — tái hiện cưỡng bức cần env riêng → phải đụng lib.rs
   (ngoài scope T-047 theo GUARD) → seed.
 - **Instrument đã land (shim của mình, ADDITIVE):** `desktopEditor.js`
@@ -294,8 +294,8 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   xử lý sau) là MUỘN, vẫn steal (đo được: app giữ front ~6 s). Đường đúng:
   `Builder::build()` → `App::set_activation_policy(&mut)` khi runtime còn `Some` →
   ghi thẳng aux-state delegate → `launched()` áp Accessory TRƯỚC activate
-  (`lib.rs::run`, env `NANO_OFFICE_BACKGROUND=1`).
-- **Wire 1 nhà:** `smoke-lib.sh::smoke_boot` prepend `NANO_OFFICE_BACKGROUND=1`
+  (`lib.rs::run`, env `WASEN_OFFICE_BACKGROUND=1`).
+- **Wire 1 nhà:** `smoke-lib.sh::smoke_boot` prepend `WASEN_OFFICE_BACKGROUND=1`
   (đầu mảng envs — env trùng tên sau đó vẫn ghi đè) → mọi gate boot tự nền.
 - **Bằng chứng:** `lsappinfo list` app `type="UIElement"` (Accessory applied);
   System Events `frontmost` 27/27 mẫu (300 ms) = Terminal xuyên boot + mở window;
@@ -353,7 +353,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   toàn model mỗi edit — chủ đích DD L01 §2, theo dõi khi document lớn. (4) comment
   single-slot race sai phạm vi — ĐÃ sửa trong C8.
 - **Gotchas:** (1) `cargo fmt --check` của verify dùng `--all` (workspace) — chạy fmt
-  thủ công KHÔNG `--all` bỏ lỡ member `nanooffice-ooxml` (2 lần verify exit 1 từ
+  thủ công KHÔNG `--all` bỏ lỡ member `wasenoffice-ooxml` (2 lần verify exit 1 từ
   blank-line thừa ở lib.rs sau xoá helpers — bài học: fmt luôn `--all` bằng đúng lệnh
   của gate). (2) Edit tool khớp fuzzy theo text — chép old_string TỪ file thật, không
   gõ lại từ nhớ (2 lần: render.ts columnWidth displaced, opc.rs attr body typo).
@@ -670,7 +670,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   caretXY vào layout.ts + round-trip assert gate 14 — click cell hiện trả para chỉ block SAU table, invariant chỉ
   nằm comment 2 phía; caretXY pure nhưng 0 test vì kẹt editor.ts import __TAURI__) · C1 render.ts (editor.ts copy
   ~37% viewer.ts verbatim — slice selection sẽ mọc bản sao render thứ 3; gộp C6: evidence emit ×2 + parse python
-  inline ×3, 0 schema) · C2 Rust shared (`render_payload`/`open_surface_window`/`atomic_replace` — nano_light_*
+  inline ×3, 0 schema) · C2 Rust shared (`render_payload`/`open_surface_window`/`atomic_replace` — wasen_light_*
   clone viewer_* 4 tầng: request-slot + window body + open pipeline dòng-cho-dòng + tmp/rename; kèm C5-mini
   `EditorSessions::session_mut`).
 - **Defer có trigger:** C4 lib.rs surface-table (5 chỗ sửa/surface + thang probe 5 biến) — chờ surface thứ 4
@@ -687,14 +687,14 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   design-first commit 8b5356e TRƯỚC code 6e63399). Vòng 1: caret → gõ → xoá →
   enter → undo/redo → dirty → **save thẳng `write_docx`** — KHÔNG Editor.bin,
   KHÔNG x2t trên đường Nano Light; mặc định mở file vẫn engine (D1), Nano Light
-  vào qua nút start page + env `NANO_OFFICE_NANO_LIGHT` (pattern V5). Consume
+  vào qua nút start page + env `WASEN_OFFICE_NANO_LIGHT` (pattern V5). Consume
   `src/viewer/layout.ts` + `hitTest` NGUYÊN VẸN — **không đụng layout.ts/viewer.ts
   (0 diff)**: parity-view không cần chạy lại; vite tự gom layout thành chunk dùng
   chung viewer/editor (by-construction không fork được).
 - **Kiến trúc land:** `src-tauri/src/editor.rs` — `EditorSessions` map
   window-label → `EditorSession` (giữ `Document` CHƯA-resolve + bytes gốc
   `media_src` + undo/redo snapshot-clone kèm caret, cap 100 + `saved` clone cho
-  dirty = `doc != saved`); commands `nano_light_view/open/edit/save/reopen`
+  dirty = `doc != saved`); commands `wasen_light_view/open/edit/save/reopen`
   song song delivery (tiền lệ C3), session drop cùng hook `WindowEvent::Destroyed`
   của T-059. Toạ độ mutation = hệ hitTest T-V7 `{para, run, offset}` — **offset
   là utf-16 code units** (JS string indexing; surrogate pair = 2 units — utf16↔byte
@@ -703,7 +703,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   re-render sau mỗi edit từ RenderDoc re-resolve, caret forward-map thuần
   (walk item `ri`/`charStart` + measurer — mirror hitTest, KHÔNG sửa layout.ts).
 - **Gate 15** `smoke-nano-light.sh` (pattern smoke-lib, thường trụ verify.sh):
-  boot env + probe `NANO_OFFICE_NL_PROBE` chạy CÙNG `edit()` handler keydown dùng
+  boot env + probe `WASEN_OFFICE_NL_PROBE` chạy CÙNG `edit()` handler keydown dùng
   (không keystroke, rule 6b) → chuỗi insert/backspace×3/enter/undo/redo → save →
   **parse lại bằng crate CLI chứa marker** + **media part sha256 byte-exact** vs
   snapshot trước save + **reopen window 2 evidence chứa marker** ("mở lại render
@@ -750,7 +750,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   keying theo fileId tường minh: `get_document_for_delivery(file_id)` + `flow_file_id`
   (payload.fileId) cho `LocalFileSaveChanges`/`LocalFileSave` + match bridge cho
   SetOpenChangesCount. JS: `open_document` trả `fileId` → `main.ts` stamp
-  `window.__nanooffice_file_id__` trong `mountEditor` (choke point duy nhất) → relay
+  `window.__wasenoffice_file_id__` trong `mountEditor` (choke point duy nhất) → relay
   `mainFrameInvoke` đính `payload.fileId` + `delivery.js` truyền `{fileId}`. Thiếu/unknown
   id = lỗi TO (fail loudly). Test race ×2: 2 register + consume chéo đúng file (A < B —
   B là "latest" giả định) + deltas A land đúng workdir A; counterfactual missing/unknown.
@@ -759,7 +759,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   → delivery lỗi "no fileId". Fix = `#[serde(rename_all = "camelCase")]` trên
   `OpenedDocument`. Triệu chứng lần đầu: gate 9 timeout 240s với đúng 1 dòng ERROR
   `document delivery failed: delivery: no fileId` — mổ log app thật
-  (`/tmp/nanooffice-smoke-*`) thay vì log tail của smoke script.
+  (`/tmp/wasenoffice-smoke-*`) thay vì log tail của smoke script.
 - **T-V7 (review #4 C1, điều kiện mở T-A27) — CONFIRMED:** layout tách thành module thuần
   `src/viewer/layout.ts` (không DOM/canvas; measurer tiêm vào; `LineModel` + `hitTest`);
   wrap/tab/OS-2/media port VERBATIM (pi counting, row[0], +4 giữ nguyên); viewer.ts thành
@@ -771,7 +771,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   ký tự i → caret trước ký tự i (không half-char centering — ceiling ghi DD §5.7, A4 có
   thể lớp centering trên cùng model). 2 tầng test: **gate 14** `test-layout.sh` (tsc →
   node, 42 checks tọa độ tay, measurer fake 10px/char) + probe E2E gate 12
-  (`NANO_OFFICE_QV_HITTEST=1` → init script → round-trip mọi dòng → `viewer hit-test:
+  (`WASEN_OFFICE_QV_HITTEST=1` → init script → round-trip mọi dòng → `viewer hit-test:
   16/16 lines ok`; negative doctor `15/16` cắn exit 1). Resize re-layout: listener → rAF
   → render() lại (cùng đường code first-draw; không gate riêng).
 - **Bài học T-V7 (tsc 6.0):** truyền file trực tiếp cho `tsc` khi repo có tsconfig.json
@@ -780,7 +780,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 - **Trạng thái:** confirmed — verify.sh FULL exit 0 ×2 (T-059: 17 ▸ steps, gates
   9a–d/10/11/12/13 GREEN; T-V7: + gate 14, trên cây sắp commit). `viewer hit-test:` là
   log contract mới (khối đóng băng smoke-lib, emitting end viewer.ts — cùng commit).
-  ⚠ Ghi cho T-A27: gate 12 hiện boot kèm `NANO_OFFICE_QV_HITTEST=1` — probe là gate food,
+  ⚠ Ghi cho T-A27: gate 12 hiện boot kèm `WASEN_OFFICE_QV_HITTEST=1` — probe là gate food,
   không đụng product default.
 
 ---
@@ -847,7 +847,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   file tồn tại (lỗi trả về start page thay vì mở window chỉ để báo lỗi) → stash path vào
   state `QuickViewRequest` (Mutex, take-once) → mở window `quickview-<n>`
   (WebviewWindowBuilder, focused(false) rule 6b, KHÔNG inject shim/bridge/delivery);
-  `viewer_open` consume stash, fallback env `NANO_OFFICE_QUICK_VIEW` (dev + gate 12 giữ
+  `viewer_open` consume stash, fallback env `WASEN_OFFICE_QUICK_VIEW` (dev + gate 12 giữ
   nguyên). Disk path không vào URL — stash Rust-side (nguyên tắc filesrv). Đóng window =
   Cmd-W/close native — không thêm phím tắt riêng (ponytail: platform feature).
 - **Scroll cơ bản:** canvas = trang — cao bằng nội dung đã layout (min = viewport; cap
@@ -859,7 +859,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   body `overflow-auto` (viewer.html).
 - **Gate 13** `smoke-quick-view-ui.sh` (thường trụ verify.sh, consumer smoke-lib —
   `SMOKE_RE_QV_VIEW` vào khối đóng băng): boot app THƯỜNG (không env quick-view) với
-  driver **`NANO_OFFICE_UX_PROBE`** (pattern `NANO_OFFICE_SAVE_PROBE` — init JS điền
+  driver **`WASEN_OFFICE_UX_PROBE`** (pattern `WASEN_OFFICE_SAVE_PROBE` — init JS điền
   input + click nút THẬT `button.click()`, không keystroke, không focus) → assert chuỗi
   `viewer view:` (command layer = UI wiring) → `viewer first-draw` < QUICK_VIEW_MAX_MS →
   `viewer layout:`, cấm `viewer failed:`. Coordinate/media asserts không nhân bản — vẫn
@@ -1054,7 +1054,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   rồi idle hẳn (sample: run loop `mach_msg`, không nhận navigation) + 0 `page_load`; bundle
   `.app` qua `open -g --env` = 0 cửa sổ. Đã loại App Nap/caffeinate/đợi >90 s; debug boot
   cùng máy tức thì → nghiêng về WebKit custom-scheme handling trong release, chưa mổ. Nếu
-  muốn tái lập: `cargo build --release` + `NANO_OFFICE_QUICK_VIEW=… ./target/release/nanooffice`
+  muốn tái lập: `cargo build --release` + `WASEN_OFFICE_QUICK_VIEW=… ./target/release/wasenoffice`
   (log dừng ở `loopback file server`). → **T-057 (PH-4)** — chặn đường đo đích rung RAM release.
 - **Trạng thái:** T-V2 ✅ — gate 12 thường trụ; ▶ = T-V3 (media).
 
@@ -1062,7 +1062,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ## 2026-10-03 · T-V1: A3/V1 — model render-side mở (DD V01 §3.2) + resolve chuỗi style về Rust
 
-- **Bối cảnh:** slice V1 của viewer (A3) — crate `nanooffice-ooxml` mở model theo bảng
+- **Bối cảnh:** slice V1 của viewer (A3) — crate `wasenoffice-ooxml` mở model theo bảng
   construct C2 (DD V01 §3.2, spec-ref từng mục) và thay merge TS bằng resolve về Rust.
   Clean-room: chỉ spec-ref ECMA-376 + oracle (parity harness / smoke-render), không đọc
   upstream render code.
@@ -1102,7 +1102,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   - **Engine nhận XML writer mới:** crate round-trip của v1-fixture qua `smoke-render.sh`
     **PASSED exit 0** (contentReady + canvas + /fonts/) + adapter pre-normalize chạy trên đó
     (`rust-canonical → x2t, normalize 3.3 ms`).
-  - **Viewer render GREEN không thoái hóa:** boot nền (rule 6b) `NANO_OFFICE_QUICK_VIEW` —
+  - **Viewer render GREEN không thoái hóa:** boot nền (rule 6b) `WASEN_OFFICE_QUICK_VIEW` —
     v1-fixture: parse **2.5 ms** · first-draw **20.0 ms** · inked 27499; full-fixture: parse
     **4.8 ms** (V0 2.9 — thêm pgSz/tblGrid/sectPr + resolve) · first-draw **24.0 ms** ·
     inked 27547 (khớp V0); app RSS **~92–100 MB** (V0 117.8). Số liệu ghi DD V01 §5.2.
@@ -1129,7 +1129,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   platform; trigger mở lại (b) ghi rõ) · **C2** bảng construct render-side + spec-ref từng
   mục → task T-V1.
 - **Slice V0 (chạy thật, không layout):** `src-tauri/src/viewer.rs` — command
-  `viewer_open` đọc file từ env `NANO_OFFICE_QUICK_VIEW` → `nanooffice_ooxml::parse_docx`
+  `viewer_open` đọc file từ env `WASEN_OFFICE_QUICK_VIEW` → `wasenoffice_ooxml::parse_docx`
   (in-process, không CLI) → JSON model; `viewer.html` + `src/viewer.ts` — entry vite riêng
   (không shim, không engine iframe), canvas 2D vẽ 1 dòng/paragraph (align center/right,
   underline, style chain + run override, table = cell text theo cột); window quick-view mở
@@ -1137,7 +1137,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   `viewer: parsed … in N ms` + `[web] viewer first-draw … ms (…, inked N)` — log contract
   gates 9/10/11 không đụng.
 - **Số đo đầu tiên** (fixture `make_docx_full.py` 3794 B, debug build, ×2 run nhất quán;
-  lệnh: `NANO_OFFICE_QUICK_VIEW=/tmp/ta25-quickview.docx pnpm tauri dev`, poll log):
+  lệnh: `WASEN_OFFICE_QUICK_VIEW=/tmp/ta25-quickview.docx pnpm tauri dev`, poll log):
   - **parse 2.9 ms** (crate A2) · **invoke→first text pixel 14.0 ms** (run1 17.0 ms).
   - **Render evidence:** `inked 27547` — sample pixel tối trên canvas, text thật sự vẽ.
   - **RAM (method PH-0 diagnostics 27.09: `ps -o rss=` app + 3 WebKit XPC):** app process
@@ -1167,7 +1167,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   parity không đổi. Callers: adapter `rust_canonical` đọc src 1 lần → `parse_docx(&bytes)` →
   write với `Some(&bytes)`; CLI round-trip face tương tự.
 - **Bằng chứng:**
-  - fixture mới `nanooffice-media-fixture.docx` (generator `harness/fixtures/make_docx_media.py`,
+  - fixture mới `wasenoffice-media-fixture.docx` (generator `harness/fixtures/make_docx_media.py`,
     python stdlib): PNG 2×2 79 B (body) + PNG 3×1 74 B (header — phủ branch header-image
     write.rs:170-188, C5 coverage hole) — bytes ≠ placeholder 72 B; có `sectPr`/`headerReference`
     (header mồ côi KHÔNG sectPr bị x2t bỏ khi open — oracle-obs lần đầu, parity 42-line diff,
@@ -1182,9 +1182,9 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
     x2t renumber rel_id + **ĐỔI TÊN media part** (image1↔image2 swap theo rel mới — mapping
     rel→part tự-consistent, bytes nguyên vẹn: sha input image1 `4c8f04482971` = x2t-rt
     image2) — mở rộng lớp vô hại "rel_id renumber" của T-A23.
-  - E2E adapter ON: `smoke-render.sh nanooffice-media-fixture.docx` **exit 0** — log
+  - E2E adapter ON: `smoke-render.sh wasenoffice-media-fixture.docx` **exit 0** — log
     `converter: rust-canonical → x2t (…, normalize 2.48 ms)`; counterfactual
-    `NANO_OFFICE_NO_RUST_CONVERTER=1` **exit 0** — log `rust-canonical OFF … — x2t direct`.
+    `WASEN_OFFICE_NO_RUST_CONVERTER=1` **exit 0** — log `rust-canonical OFF … — x2t direct`.
   - `cargo test --workspace` 23 shell + 10 crate exit 0; `verify.sh` FULL **exit 0** (sau fmt —
     lần đầu fail duy nhất do `cargo fmt --check` trên test mới).
 - **Trạng thái:** T-A26 ✅ sink Track A — canonical KHÔNG còn lossy trên media; bytes gốc
@@ -1197,7 +1197,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 - **Phương pháp:** bộ đôi improve-codebase-architecture + ponytail-audit (codebase-design từ vựng),
   hot-spot `git 9b1dde5..HEAD` (T-A23 parity + T-A24 adapter, 8 commits) + bề mặt A2 nguyên vẹn;
   3 claim chịu lực kiểm chứng first-hand: (1) crate = in-process lib-dep của app
-  (`src-tauri/src/sidecar/mod.rs:248-251` gọi `nanooffice_ooxml::parse_docx_file` trực tiếp — viewer
+  (`src-tauri/src/sidecar/mod.rs:248-251` gọi `wasenoffice_ooxml::parse_docx_file` trực tiếp — viewer
   không cần CLI/JSON) · (2) `ImageRef` không mang bytes (`crates/.../src/lib.rs:95-108` — "S1 reads
   relationships only, image bytes are not touched") · (3) đường open duy nhất = delivery-base64
   (`src-tauri/src/lib.rs:131-198` `get_document_for_delivery`, đọc toàn file delivery.js). Explore
@@ -1235,8 +1235,8 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   `canonical.docx` trong workdir → x2t chuyển **canonical** ra Editor.bin. xlsx/pptx/pdf không
   đụng (scope crate = docx; S5 mới mở rộng). Crate parse/write lỗi (refuse-unknown) → WARN +
   x2t nhận **file gốc** — file crate từ chối vẫn mở đúng như trước, không bao giờ chặn open.
-- **Kill switch:** `NANO_OFFICE_NO_RUST_CONVERTER` set (≠"0") → đường cũ nguyên vẹn (mirror
-  semantics `NANO_OFFICE_NO_APP_FALLBACK` của T-A13); mặc định ON. Counterfactual = gate 9/10
+- **Kill switch:** `WASEN_OFFICE_NO_RUST_CONVERTER` set (≠"0") → đường cũ nguyên vẹn (mirror
+  semantics `WASEN_OFFICE_NO_APP_FALLBACK` của T-A13); mặc định ON. Counterfactual = gate 9/10
   chạy cả 2 chế độ.
 - **Log ADDITIVE (không đụng contract gates 9/10/11):** `converter: rust-canonical → x2t (…,
   normalize …)` (ON) · `converter: rust-canonical failed (…) — x2t takes the original file`
@@ -1248,10 +1248,10 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   còn lại là việc tự nhiên của A3 (viewer dùng model trực tiếp → image bytes trở thành bắt
   buộc). Gate 9/10 fixture nằm trọn trong model surface (invariant 7/7 T-A23).
 - **Bằng chứng:** verify.sh **FULL exit 0** chế độ ON (`/tmp/verify-ta24.log` — 6 smoke PASSED;
-  log app giữ tại `/tmp/nanooffice-smoke-ezoNVw` …): gate 9 `converter: rust-canonical → x2t
+  log app giữ tại `/tmp/wasenoffice-smoke-ezoNVw` …): gate 9 `converter: rust-canonical → x2t
   (…, normalize 2.08 ms)` → `x2t converted … Editor.bin (1495 bytes) in 114.6 ms`; gate 10
   save round-trip GREEN (marker ×1, 25562 B); gate 11 clean-machine GREEN. **Counterfactual
-  OFF** (`NANO_OFFICE_NO_RUST_CONVERTER=1`): gate 9 exit 0 — log `converter: rust-canonical
+  OFF** (`WASEN_OFFICE_NO_RUST_CONVERTER=1`): gate 9 exit 0 — log `converter: rust-canonical
   OFF (…) — x2t direct`, Editor.bin **1586 B = đường cũ** (vs 1495 B canonical — hai đường
   phân biệt được bằng kích thước binary); gate 10 exit 0 (marker ×1, 25570 B). Log contract
   gates 9/10/11 byte-identical (smoke-lib.sh hằng đóng băng không đụng). `parity-a2.sh` exit 0
@@ -1279,7 +1279,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 - **Corpus 7 file:** 2 fixture crate + 4 fixture mới `make_docx_edge.py` (multilevel-list 3
   mức, nested-table 1 cấp, style-override chain Quote→IntenseQuote + rStyle, image-multi 3
   drawing cùng rel) + **engine-save-t011.docx = file thật gate 10** (smoke-save, marker
-  `T011-10466-SAVED-BY-NANOOFFICE`, package do x2t save sinh — styleIds numeric "138"…).
+  `T011-10466-SAVED-BY-WASENOFFICE`, package do x2t save sinh — styleIds numeric "138"…).
   Expected-model note từng file: `harness/fixtures/corpus-a2/NOTES.md`.
 - **2 bug crate bắt được qua parity probing (fix + test hồi quy):** (1) `mc:AlternateContent` —
   x2t/Word bọc `w:drawing` trong `mc:Choice` + VML `mc:Fallback`; parser skip cả subtree → mất
@@ -1302,7 +1302,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   explicit `w:b w:val="false"` trên output — model 2-state invisible; hdr/ftr surface qua rels
   cả 2 phía). Blind-spot ghi DD: `rStyle` không nằm trong model — parity "mù" ở construct đó.
 - **Bằng chứng:** harness ×2 deterministic — 7/7 parse ok, invariant 7/7, parity-clean 4/7
-  (3 file diff = đúng 2 lớp vô hại trên), exit 0 (`/tmp/nanooffice-parity-a2-VNTEE6`);
+  (3 file diff = đúng 2 lớp vô hại trên), exit 0 (`/tmp/wasenoffice-parity-a2-VNTEE6`);
   crate tests 9 passed (6 parse + 3 write — thêm `alternate_content_choice_surfaces_image`
   mirror cấu trúc x2t: Choice + Fallback VML + `<a:blip></a:blip>` Start+End + round-trip
   bất biến); oracle-obs probe thủ công: x2t full-fixture 2970 B Editor.bin, params exit 0.
@@ -1355,7 +1355,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   part (hdr/ftr giữ blocks trực tiếp, main phải wrap — "no w:body in document" khi re-parse);
   (2) quên relationships cho styles.xml/numbering.xml (body khớp nhưng dict trống khi
   re-parse — reader tra accessory parts qua doc rels).
-- **Bằng chứng:** `cargo test -p nanooffice-ooxml` 8 passed (5 read + 3 write mới: corpus
+- **Bằng chứng:** `cargo test -p wasenoffice-ooxml` 8 passed (5 read + 3 write mới: corpus
   round-trip bất biến + edge XML escape/xml:space/webp-refuse + fuzz 500 vòng
   mutation-on-model — write không panic, reparse luôn Ok, model bằng từng vòng);
   `cargo test --workspace` 23 shell (+1 ignored) + 8 crate exit 0; oracle-obs x2t đọc file
@@ -1374,7 +1374,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 ## 2026-10-02 · T-A21: A2/S1 — docx READ đầy đủ (OPC chuẩn + table/list/image + styles resolve) — GREEN
 
 - **Phạm vi:** slice S1 của DD K01 (`docs/design/converter-a2/DD.md` §4) — crate
-  `nanooffice-ooxml` từ model tối giản lên read đầy đủ văn bản cơ bản: OPC đúng chuẩn
+  `wasenoffice-ooxml` từ model tối giản lên read đầy đủ văn bản cơ bản: OPC đúng chuẩn
   (Content_Types + rels — part chính tra cứu qua `_rels/.rels`, KHÔNG hardcode
   `word/document.xml`; refuse content-type sai), body blocks (paragraph + `w:tbl` 2×2,
   cell lồng được), paragraph props (pStyle/jc/numPr), run props (b/i/u/sz), image
@@ -1402,13 +1402,13 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   Empty cho self-closing, chỉ match Start là bỏ sót (bắt được qua test header part).
   Bug bắt được khi test: `<w:tc/>` Empty phải push cell rỗng trong parse_row.
 - **Corpus:** generator mới `harness/fixtures/make_docx_full.py` (stdlib, PNG 1×1 tự
-  encode struct+zlib) → `tests/fixtures/nanooffice-full-fixture.docx` 10 parts: style
+  encode struct+zlib) → `tests/fixtures/wasenoffice-full-fixture.docx` 10 parts: style
   chain Heading1→Normal + run override bold=false, 5 run props, table 2×2, list
   decimal/lowerLetter/bullet, image r:embed, header/footer, tiếng Việt — fixture cũ
   giữ nguyên (vẫn render GREEN trong engine, giờ đọc qua OPC lookup thay hardcode).
 - **Fuzz:** 500 vòng seed 42 (LCG tự viết, không dep): XML truncate/splice-junk/
   byte-flip + zip byte-flip + namespace-sai → mọi case Ok/Err, 0 panic.
-- **Bằng chứng:** `cargo test -p nanooffice-ooxml` **5 passed** (fixture cũ exact +
+- **Bằng chứng:** `cargo test -p wasenoffice-ooxml` **5 passed** (fixture cũ exact +
   corpus đầy đủ + 9 case malformed + semantics + fuzz); `cargo test --workspace`
   23 shell (+1 ignored) + 5 crate exit 0; CLI smoke JSON đủ model mới (10 blocks,
   3 styles — TableNormal skip đúng, numbering {1:[0,1], 2:[0]}, image part+EMU);
@@ -1423,7 +1423,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
-## 2026-10-02 · T-A20: mở màn A2 — design-first chốt P2 "OOXML core trước" + crate slice nanooffice-ooxml — GREEN
+## 2026-10-02 · T-A20: mở màn A2 — design-first chốt P2 "OOXML core trước" + crate slice wasenoffice-ooxml — GREEN
 
 - **Phạm vi:** design-first theo handoff `ta20.md` (ponytail ULTRA — user chỉ thị): probe 2
   phương án bằng số liệu → DD mã K01 (`docs/design/converter-a2/DD.md`) → crate slice tối
@@ -1452,7 +1452,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   vẫn ship (engine vẫn cần cho edit); P2 = nền bắt buộc A3 viewer + A4 editor + tiện ích
   ngay (metadata/text-extract cho AI QĐ3). P1 giữ làm phương án B, trigger: rút x2t trước
   A4 → khi đó chỉ cần writer OOXML→Editor.bin (DD K01 §2).
-- **Crate slice `src-tauri/crates/nanooffice-ooxml`** (lib: lib.rs model + opc.rs zip-part +
+- **Crate slice `src-tauri/crates/wasenoffice-ooxml`** (lib: lib.rs model + opc.rs zip-part +
   document.rs XML→model; main.rs CLI in JSON): model `Document/Paragraph{style,runs}/
   Run{text,bold,italic}`; root-check `xmlns:w` binding → refuse-unknown thay parse-sai;
   OnOff `w:val` semantics (false/0/off tắt); rPr của pPr không áp lên runs; mọi lỗi zip/
@@ -1462,14 +1462,14 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   XML/zip, tự viết vi phạm rule trust-boundary; `serde_json` đã có trong graph. Justification
   trong commit `a2(crate)`.
 - **Wiring (bẫy mới ghi lại):** manifest src-tauri giờ là package + workspace root
-  (`[workspace] members = ["crates/nanooffice-ooxml"]` — 1 member chỉ để gates phủ crate).
+  (`[workspace] members = ["crates/wasenoffice-ooxml"]` — 1 member chỉ để gates phủ crate).
   Cargo ở manifest kiểu này mặc định **package-mode** → verify.sh phải thêm `--workspace`
   (check/clippy) / `--all` (fmt) vào 3 lệnh cargo, không có flag = crate không được phủ
-  (im lặng!). `cargo test` vẫn chạy thủ công (`-p nanooffice-ooxml`) theo convention.
-- **Bằng chứng:** `cargo test -p nanooffice-ooxml` **3 passed**; tổng cargo test 23 shell
+  (im lặng!). `cargo test` vẫn chạy thủ công (`-p wasenoffice-ooxml`) theo convention.
+- **Bằng chứng:** `cargo test -p wasenoffice-ooxml` **3 passed**; tổng cargo test 23 shell
   (+1 ignored) + 3 crate; `cargo clippy --workspace -D warnings` exit 0 (bắt 2
   useless-conversion thật ngay lần đầu); `cargo fmt --check --all` clean; verify.sh FULL
-  exit 0 (`/tmp/verify-ta20.log`); CLI smoke: `target/debug/nanooffice-ooxml fixture.docx`
+  exit 0 (`/tmp/verify-ta20.log`); CLI smoke: `target/debug/wasenoffice-ooxml fixture.docx`
   in JSON đúng (tiếng Việt nguyên vẹn) exit 0.
 - **Trạng thái:** T-A20 ✅ sink Track A. Seed T-A21 (S1 read) → T-A22 (S2 write) → T-A23
   (S3 parity, x2t = DEV-ORACLE) → T-A24 (S4 adapter seam); ▶ = T-A21.
@@ -1496,7 +1496,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   **Bằng chứng:** render docx standalone PASSED exit 0 · save standalone
   PASSED exit 0 (1962→25569 B, marker ×1) · clean-machine standalone PASSED
   exit 0 · **negative** SMOKE_CLEAN_FORCE_APP_X2T=1 → exit 1 (app-path-hits=1,
-  fail-fast bắt đúng dòng override `[x2t] using NANO_OFFICE_X2T`) · verify.sh
+  fail-fast bắt đúng dòng override `[x2t] using WASEN_OFFICE_X2T`) · verify.sh
   FULL 15 gates exit 0 (`/tmp/verify-t053.log`).
 - **T-054 (c797293):** font-root bảng + CẢ HAI flavor AllFonts.js về 1 nhà
   `protocol/allfonts` (producer): DI CHUYỂN từ mod.rs — `FONT_URL_ROOTS` +
@@ -1570,7 +1570,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   pdf=CopyOriginal; `m_nCsvTxtEncoding=46`/`m_nCsvDelimiter=4`/`m_nDoctParams=1` về 1 nhà
   với provenance TBD (T-049) — value observed T-010. Struct `DocWorkdir` (editor_bin/
   changes_dir+changes_file/params_xml/delivered_name) thay 3 module tự biết layout —
-  folder string `nanooffice-doc-<id>` đóng băng (delivery.js consume, test pin). Save
+  folder string `wasenoffice-doc-<id>` đóng băng (delivery.js consume, test pin). Save
   gate đọc bảng (`wired_save_code`) — hôm nay vẫn CHỈ docx (xlsx/pptx từ chối y hệt
   trước). Đối chiếu main.ts FILE_FORMATS: **test Rust** đọc main.ts ở RUNTIME (không
   include_str! — bẫy stale-rebuild ngoài crate root; lý do "ít moving parts" hơn script
@@ -1616,12 +1616,12 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 - **Kết quả (confirmed) — 3 chiều bằng chứng:**
   (1) *Gate 11 positive:* `harness/scripts/smoke-clean-machine.sh` **exit 0** — boot app strict
   mode, save round-trip marker ×1 (1962→25570 B), `grep -cF "/Applications/ONLYOFFICE"` toàn
-  log = **0**, 0 dòng WARN fallback, strict mode không trip (`/tmp/nanooffice-smoke-clean-gFtBod`).
-  (2) *Negative proven:* `SMOKE_CLEAN_FORCE_APP_X2T=1` (point `NANO_OFFICE_X2T` vào
+  log = **0**, 0 dòng WARN fallback, strict mode không trip (`/tmp/wasenoffice-smoke-clean-gFtBod`).
+  (2) *Negative proven:* `SMOKE_CLEAN_FORCE_APP_X2T=1` (point `WASEN_OFFICE_X2T` vào
   `/Applications/ONLYOFFICE.app/…/converter/x2t`) → gate **FAIL exit 1**, `app-path-hits=1` —
-  dòng `[x2t] using NANO_OFFICE_X2T override: /Applications/ONLYOFFICE.app/…` (log line 76)
+  dòng `[x2t] using WASEN_OFFICE_X2T override: /Applications/ONLYOFFICE.app/…` (log line 76)
   bị grep bắt, fail-fast ngay khi override hiện mặt dù run "chạy được" — gate biết bắt vi phạm
-  (`/tmp/nanooffice-smoke-clean-XbynTY`).
+  (`/tmp/wasenoffice-smoke-clean-XbynTY`).
   (3) *Test tích thể (bằng chứng đóng rung):* `harness/scripts/clean-machine-proof.sh` —
   preconditions `pgrep -x ONLYOFFICE` trống → `mv /Applications/ONLYOFFICE.app
   /Applications/ONLYOFFICE.app.ta13-hidden` (same volume, atomic; KHÔNG rm; trap
@@ -1631,10 +1631,10 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   (25569 bytes) in 526ms`) → restore xong `ls` xác nhận `/Applications/ONLYOFFICE.app` nguyên
   trạng, 0 process sót.
 - **Code chạm:** `src-tauri/src/bridge/save.rs::x2t_path()` — env
-  `NANO_OFFICE_NO_APP_FALLBACK` (set ≠ "0"): nhánh 3 (fallback app cài sẵn) bị TẮT, thay WARN
+  `WASEN_OFFICE_NO_APP_FALLBACK` (set ≠ "0"): nhánh 3 (fallback app cài sẵn) bị TẮT, thay WARN
   bằng `log::error!` "clean-machine mode" + return rỗng → spawn fail rõ ràng (save →
   EndSave(2); open → lỗi delivery) thay vì lặng lẽ dùng app; nhánh 1 (override
-  `NANO_OFFICE_X2T`) giờ **log info path** (ADDITIVE — chính cơ chế giúp gate bắt override
+  `WASEN_OFFICE_X2T`) giờ **log info path** (ADDITIVE — chính cơ chế giúp gate bắt override
   trỏ nhầm vào app). Log contract gate 9/10 nguyên vẹn.
 - **Gate 11 (thường trụ verify.sh, sau gate 10):** assertions = save evidence như gate 10
   (log line + marker trong word/document.xml + fixture mutated) + `grep -cF
@@ -1660,7 +1660,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 - **Kết quả (confirmed):** verify.sh full **exit 0** (`/tmp/verify-ta12.log`) — 4 render gates +
   save gate chạy với root `app` = `engines/fonts/`. Log mới ADDITIVE `font serve: /fonts/app/…`
   chỉ rõ nguồn: xlsx + pptx fetch Carlito ×4 từ `…/engines/fonts/crosextra/Carlito-*.ttf`
-  (`/tmp/nanooffice-smoke-8wt8Hj`, `…-NvAmKK`); docx/pdf/save chỉ dùng root sys như trước.
+  (`/tmp/wasenoffice-smoke-8wt8Hj`, `…-NvAmKK`); docx/pdf/save chỉ dùng root sys như trước.
   0 dòng `font serve … ONLYOFFICE` trong mọi log. Save round-trip marker ×1
   (`…-save-0uOyXh`, 1962→25570 B); AllFonts.js ghi cho x2t: 355 path — **0 path
   ONLYOFFICE.app, 15 path engines/fonts** (2 consumer khớp by construction như T-A11).
@@ -1713,15 +1713,15 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 ## 2026-09-30 · T-A11: tự sinh AllFonts.js bằng Rust — clean-room ĐẦU TIÊN của Track A — GREEN (verify.sh exit 0 + counterfactual data-dir)
 
 - **Kết quả (confirmed):** verify.sh full **exit 0** (5 render gates + save gate) với AllFonts.js do
-  generator Rust sinh. Log save run (`/tmp/nanooffice-smoke-save-FCGB40`):
+  generator Rust sinh. Log save run (`/tmp/wasenoffice-smoke-save-FCGB40`):
   `[x2t] using bundled converter: …/engines/converter/aarch64-apple-darwin/x2t` +
-  `AllFonts: generated 356 files / 558 faces / 388 families / 4370 ranges → …/T/nanooffice-allfonts/AllFonts.js`;
-  params XML thực tế của x2t: `<m_sAllFontsPath>…/T/nanooffice-allfonts/AllFonts.js</m_sAllFontsPath>`
-  + `<m_sFontDir>…/nanooffice-allfonts</m_sFontDir>` (workdir `$TMPDIR/nanooffice-doc-1/params_to.xml`).
+  `AllFonts: generated 356 files / 558 faces / 388 families / 4370 ranges → …/T/wasenoffice-allfonts/AllFonts.js`;
+  params XML thực tế của x2t: `<m_sAllFontsPath>…/T/wasenoffice-allfonts/AllFonts.js</m_sAllFontsPath>`
+  + `<m_sFontDir>…/wasenoffice-allfonts</m_sFontDir>` (workdir `$TMPDIR/wasenoffice-doc-1/params_to.xml`).
   Save round-trip marker ×1 → changes áp dụng thật bằng file tự sinh.
 - **Counterfactual data-dir (confirmed):** `mv "$HOME/Library/Application Support/asc.onlyoffice.ONLYOFFICE/data/fonts"`
   → `.ta11-counterfactual` (AllFonts.js của app KHÔNG tồn tại) → `smoke-render.sh` **PASSED exit 0**
-  (`/tmp/nanooffice-smoke-ZDwkP8`) + `smoke-save.sh` **PASSED exit 0** marker ×1 (`…-XTYDQx`,
+  (`/tmp/wasenoffice-smoke-ZDwkP8`) + `smoke-save.sh` **PASSED exit 0** marker ×1 (`…-XTYDQx`,
   1962→25569 B) → khôi phục nguyên trạng. Runtime không còn đọc data-dir app cho font index.
 - **Khảo artifact (oracle-obs, trước khi code):** AllFonts.js của app = 5 global:
   `__all_fonts_js_version__=2` · `__fonts_files` (355 path) · `__fonts_infos` (387 dòng
@@ -1789,12 +1789,12 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 ## 2026-09-30 · T-A10: bundle x2t vào engines/converter/ — GREEN, 113 MB vượt budget 100 MB (ghi thẳng)
 
 - **Kết quả (confirmed):** mở + save DOCX chạy bằng x2t BUNDLED không cần env — gate 10
-  PASSED exit 0 (`/tmp/nanooffice-smoke-save-TnT1Ki`, marker `T011-30194`, 1962→25619 B,
+  PASSED exit 0 (`/tmp/wasenoffice-smoke-save-TnT1Ki`, marker `T011-30194`, 1962→25619 B,
   marker ×1), log `[x2t] using bundled converter: …/engines/converter/aarch64-apple-darwin/x2t`
-  ×2 (open convert + save). Counterfactual: `NANO_OFFICE_X2T=/nonexistent/bogus-x2t` →
+  ×2 (open convert + save). Counterfactual: `WASEN_OFFICE_X2T=/nonexistent/bogus-x2t` →
   WARN "points to a missing file — ignoring" → vẫn PASSED bằng bundled
   (`-Z1vBWr`). Nhánh fallback: dời `engines/converter` tạm → gate 9 docx vẫn GREEN với
-  WARN "falling back to the installed ONLYOFFICE.app" (`/tmp/nanooffice-smoke-11YLqW`).
+  WARN "falling back to the installed ONLYOFFICE.app" (`/tmp/wasenoffice-smoke-11YLqW`).
 - **Discovery framework (otool -L, 30.09):** x2t strong-link CẢ 17 framework
   (LC_LOAD_DYLIB, 0 weak); graph khép kín → không có on-demand ở mức dylib (phủ định
   hypothesis handoff). Subset bỏ được bằng chạy thật: `templates/` 207 MB + `empty/`
@@ -1821,7 +1821,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 - **Licensing:** bundle x2t = phân phối binary AGPL → khi phát hành (PH-4) theo
   `harness/rules/licensing.md` (NOTICE + source offer + logo §7); nhắc đã thêm vào TODO
   PH-4. Fonts đi kèm app KHÔNG được bundle theo (T-A11/A12 tự sinh/subset từ hệ thống).
-- **Bằng chứng subset temp-dir (bước 1 discovery):** copy subset ra `/tmp/nanooffice-ta10-subset`
+- **Bằng chứng subset temp-dir (bước 1 discovery):** copy subset ra `/tmp/wasenoffice-ta10-subset`
   (x2t + config + 17 fw, không templates/empty) → x2t trực tiếp convert fixture DOCX →
   Editor.bin exit 0 (1586 B) → save from-changes bằng params XML (copy format save.rs:
   `<m_nFormatTo>65` + fromChanges + AllFonts/font-dir từ font cache app) exit 0, output
@@ -1865,14 +1865,14 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   trong `src/shim/delivery.js`); interval bị throttle chỉ chậm lại, không bị drop như
   one-shot. Chuỗi log giữ nguyên verbatim (pattern grep gate 9 không đụng — thêm
   occurrence vô hại). Chứng minh: `smoke-render.sh` pptx **×3 liên tiếp PASSED exit 0**
-  (11:24–11:25 UTC, logs `/tmp/nanooffice-smoke-WD2VtQ`/`-vdIDVm`/`-tMKgxE`, canvas
+  (11:24–11:25 UTC, logs `/tmp/wasenoffice-smoke-WD2VtQ`/`-vdIDVm`/`-tMKgxE`, canvas
   490×1010) + docx regression PASSED (`-R8K1lL`, 2302×958).
 
 ---
 
 ## 2026-09-29 · T-048: mở XLSX/PPTX/PDF — shell wire multi-format + smoke gates 9b/9c/9d
 
-- **Kết quả (confirmed):** mở được cả 4 định dạng từ path input + `NANO_OFFICE_OPEN`.
+- **Kết quả (confirmed):** mở được cả 4 định dạng từ path input + `WASEN_OFFICE_OPEN`.
   Smoke gates mới trong verify.sh: xlsx/pptx/pdf đều exit 0 (3 tín hiệu gate 9 giữ
   nguyên); gate DOCX mặc định + gate 10 save round-trip vẫn GREEN sau refactor (smoke
   save 1962→25619 B, marker ×1). Negative test: fixture xlsx hỏng → `document delivery
@@ -1894,7 +1894,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   loader + glyph manager có tên khác nhau trong mỗi sdkjs build (word `sje.BSa`/`Wg.vue`,
   cell `mye.cZa`/`hj.RIe`, slide `K8d.VMa`/`mi.Zie` — bảng đầy đủ trong reference.map).
   Shim cũ hardcode tên word build → cell/slide sẽ treo font. Đã generalise:
-  `detectFontVariant()` chọn biến thể theo build (publish qua `__nanooffice_shim`);
+  `detectFontVariant()` chọn biến thể theo build (publish qua `__wasenoffice_shim`);
   `engineReadiness()` union 3 tên wasm; font-oracle probe build-aware. pdfeditor dùng
   build word nên kế thừa names word.
 - **Oracle format code cho save (quan sát cho T-049, không implement):**
@@ -1918,13 +1918,13 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   `harness/scripts/smoke-render.sh` (fixture param + generator theo extension) ·
   `harness/scripts/verify.sh` (3 gates mới).
 - **Bổ sung vòng review (code-review 2 trục):** (1) UNIMPL sweep — 0 UNIMPL trong cả 3
-  log boot mới (`/tmp/nanooffice-smoke-9BpaBf` xlsx · `-xkpaC4` pptx · `-NgB0ST` pdf):
+  log boot mới (`/tmp/wasenoffice-smoke-9BpaBf` xlsx · `-xkpaC4` pptx · `-NgB0ST` pdf):
   bridge surface cho cell/slide/pdf boot = các method DONE-PH0/PH1 có sẵn, không cần
   method mới (reference.map không đổi STUB→DONE). (2) Screenshot DoD: một lần chụp
   `screencapture -x` bắt NHẦM màn hình user đang dùng (bài học T-003 lặp lại) — file đã
   XOÁ ngay, bỏ yêu cầu screenshot, bằng chứng render = 3 tín hiệu log của gate
   (contentReady + canvas + fonts) — khuyến cáo phiên sau: KHÔNG chụp màn hình khi user
-  đang hoạt động. (3) Mở từ UI path input: form submit và `NANO_OFFICE_OPEN` đi chung
+  đang hoạt động. (3) Mở từ UI path input: form submit và `WASEN_OFFICE_OPEN` đi chung
   command `open_document` + `mountEditor` (code-identical, `src/main.ts`); form listener
   không đổi từ PH-0; không có cách tự động hoá gõ path không-keystroke (ràng buộc
   T-003) — chấp nhận bằng equivalence + negative test đã đi cùng đường open_document.
@@ -1966,12 +1966,12 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 - **Cái gì:** `harness/scripts/smoke-save.sh` (verify.sh gate 10, commit `7ba9150`) tự động hoá
   bằng chứng thủ công T-010 bên dưới thành gate hành vi: fixture COPY fresh trong `mktemp -d`
   (KHÔNG save đè file repo, KHÔNG reuse path — file bị mutate theo design) → boot app với
-  `NANO_OFFICE_SAVE_PROBE="T011-<random>-SAVED-BY-NANOOFFICE"` → chờ log round-trip trên stdout
+  `WASEN_OFFICE_SAVE_PROBE="T011-<random>-SAVED-BY-WASENOFFICE"` → chờ log round-trip trên stdout
   tích luỹ → assert TRÊN DISK: size+mtime đổi + `unzip -p … word/document.xml | grep -c` marker ≥ 1
   (grep trực tiếp đủ — không cần strip tag, khớp T-010, đã chạy thật). PASS in 3 bằng chứng (log
   line, byte delta, grep count); FAIL/timeout → log tail 40, exit 1; full log giữ ở mktemp như gate 9.
-- **Marker/override:** env `NANO_OFFICE_SAVE_PROBE` vốn CHÍNH LÀ text probe chèn (`lib.rs` inject
-  verbatim thành `__NANO_OFFICE_SAVE_PROBE_TEXT__`) — override có sẵn từ T-010, không đụng code;
+- **Marker/override:** env `WASEN_OFFICE_SAVE_PROBE` vốn CHÍNH LÀ text probe chèn (`lib.rs` inject
+  verbatim thành `__WASEN_OFFICE_SAVE_PROBE_TEXT__`) — override có sẵn từ T-010, không đụng code;
   gate random token theo run (`T011-$RANDOM-…`) nên các run độc lập. Knob `SMOKE_SAVE_NO_PROBE=1`
   = run counterfactual (probe tắt → gate PHẢI FAIL — negative test của chính gate).
 - **Log contract gate 10:** `save-end delivered to engine` (`delivery.js` consumeSaveEnd) +
@@ -1987,9 +1987,9 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 ## 2026-09-28 · T-010: SAVE DOCX hoạt động end-to-end (open → edit → save → disk)
 
 - **Kết quả (confirmed — counterfactual có thật, xem root cause):** mở fixture DOCX → probe
-  chèn text `asc_AddText("T010 SAVED-BY-NANOOFFICE")` + `asc_Save()` (không keystroke — bẫy
+  chèn text `asc_AddText("T010 SAVED-BY-WASENOFFICE")` + `asc_Save()` (không keystroke — bẫy
   T-003) → `save delivered: /private/tmp/t010-fixture.docx (25613 bytes)` (1962 B ban đầu) →
-  `unzip -p … word/document.xml | grep -c "T010 SAVED-BY-NANOOFFICE"` = **1** (grep trực tiếp
+  `unzip -p … word/document.xml | grep -c "T010 SAVED-BY-WASENOFFICE"` = **1** (grep trực tiếp
   chạy ngay, không cần strip tag) → mở LẠI file đã lưu: contentReady + `viewer=1151x479` +
   14 `GET /fonts/` (render GREEN). Full verify.sh **exit 0**. TC-D01-10: GREEN.
 - **Hợp đồng save (word desktop 9.4.0) — chi tiết + file:line ở `reference.map.md` § "Desktop
@@ -2019,7 +2019,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   `/tmp` — workdir x2t nằm ở đó; khi soi workdir phải dùng `$TMPDIR`.
 - **Code:** `src-tauri/src/bridge/save.rs` (append_changes + save_document + unit test byte
   format), `bridge/mod.rs` (dispatch mới + signature có AppHandle/registry), `lib.rs`
-  (`DeliverableDocument.src` = path gốc; env `NANO_OFFICE_SAVE_PROBE`), `src/shim/desktopEditor.js`
+  (`DeliverableDocument.src` = path gốc; env `WASEN_OFFICE_SAVE_PROBE`), `src/shim/desktopEditor.js`
   (KNOWN_METHODS + LOCAL_TRUTHS mới; relay FULL args — trước đây truncate 500 ký tự sẽ hỏng
   deltas; FIFO queue cho invoke Rust), `src/shim/delivery.js` (DOWN lane nhận `saveEnd`;
   probe save sau contentReady). Dọn thêm: unit test `rewrite_font_paths` trong protocol
@@ -2034,22 +2034,22 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 - **Module hoá (chưa đụng behavior):** chuỗi open-delivery tách thành `src/shim/delivery.js`
   (deliverDocument/consumeDeliveredDocument/postDown + DOWN-lane listener riêng; desktopEditor.js
-  giữ bridge/relay/font-patch, publish `window.__nanooffice_shim` = tauriInvoke+forwardLog cho
+  giữ bridge/relay/font-patch, publish `window.__wasenoffice_shim` = tauriInvoke+forwardLog cho
   delivery consume — surface 2 chiều tối thiểu). Constants đặt tên: DELIVERY_DELAY_MS=1500 ·
   RETRY_INTERVAL_MS=500 · RETRY_MAX=120 · HOP_GUARD=6; readiness predicate thành
   `engineReadiness()` (api + wasm `vue` + EndLoad fn). `src/main.ts`: engine path + `_offline_`
   về 1 nhà `ENGINE_BOOT`. lib.rs inject thêm DELIVERY_JS ngay sau BRIDGE_JS (init script + vite
   import đều giữ thứ tự bridge→delivery). x2t spawn KHÔNG đụng (T-043/T-010 sở hữu).
 - **Probe gate:** mọi probe (font-oracle, canvas ×2, DocInfo, cc-wrapper, probe decode) sau predicate
-  duy nhất `probesEnabled()` đọc `window.__NANO_OFFICE_PROBE__` — flag boolean do Rust init script
-  set từ env `NANO_OFFICE_PROBE` (default ON debug / OFF release; `=0` tắt, `=1` bật). Mechanism
+  duy nhất `probesEnabled()` đọc `window.__WASEN_OFFICE_PROBE__` — flag boolean do Rust init script
+  set từ env `WASEN_OFFICE_PROBE` (default ON debug / OFF release; `=0` tắt, `=1` bật). Mechanism
   ghi trong header delivery.js; open-signal hooks (asc_onError/contentReady) KHÔNG gate — là evidence
   của chính delivery.
 - **Log contract gate 9 nguyên vẹn verbatim** (`asc_onDocumentContentReady` · `viewer=WxH` ·
   `canvas probe` · `GET /fonts/`) + comment trỏ chéo 2 chiều shim↔smoke-render.sh (đổi 1 đầu phải
   đổi đầu kia cùng commit).
 - **Verify:** `./harness/scripts/verify.sh` exit 0 (gate 9 boot app thật, đủ 3 tín hiệu);
-  `smoke-render.sh` standalone exit 0; test thêm `NANO_OFFICE_PROBE=0`: 0 dòng probe, delivery
+  `smoke-render.sh` standalone exit 0; test thêm `WASEN_OFFICE_PROBE=0`: 0 dòng probe, delivery
   production vẫn chạy (contentReady + EndLoad executed); `git status` sạch file lạ. Commit `0d8f7a6`.
 
 ---
@@ -2070,7 +2070,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
     (không tạo dòng `asc_onError` trong log — đúng như T-047 đã ghi). Baseline tương tác =
     dòng 191 của `/tmp/t003-edit.log`; sau marker chỉ có probe định kỳ của shim
     (`canvas probe-2` 08:35:53, `viewer=1151x479`) — **0 dòng bridge mới**, tức phím probe
-    (PageDown+T) đã rơi vào foreground app của user, không phải NanoOffice. Log có
+    (PageDown+T) đã rơi vào foreground app của user, không phải WasenOffice. Log có
     `onDocumentModifiedChanged([false])` nhưng chỉ boot-time (không phải bằng chứng edit).
     Screenshot trước tương tác: app frontmost sau AXRaise, render đủ 5 đoạn fixture + dialog
     T-047 (`/tmp/t003-before3.png`, file /tmp không commit). Không crash, không error storm.
@@ -2079,12 +2079,12 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
     (backlog PH-1), canvas sống, không CEF.
 - **Baseline 27.09 (debug build, macOS arm64; RSS = `ps -o rss=` KB→MB/1024; "helper" = 3 WebKit
   XPC (WebContent/Networking/GPU) nhận diện theo PID kề app; node vite ~160 MB là dev-only
-  không ship; đo khi `pnpm dev` :1420 + `NANO_OFFICE_DEVTOOLS=0 RUST_LOG=info
-  ./src-tauri/target/debug/nanooffice` — idle: không `NANO_OFFICE_OPEN`; 1-doc: có):**
+  không ship; đo khi `pnpm dev` :1420 + `WASEN_OFFICE_DEVTOOLS=0 RUST_LOG=info
+  ./src-tauri/target/debug/wasenoffice` — idle: không `WASEN_OFFICE_OPEN`; 1-doc: có):**
 
-| Chỉ số | NanoOffice (debug) | ONLYOFFICE.app | Ghi chú |
+| Chỉ số | WasenOffice (debug) | ONLYOFFICE.app | Ghi chú |
 |---|---|---|---|
-| Shell binary | **29 MB** (`ls -lh src-tauri/target/debug/nanooffice`) | — | 22.09: 30 MB (khớp) |
+| Shell binary | **29 MB** (`ls -lh src-tauri/target/debug/wasenoffice`) | — | 22.09: 30 MB (khớp) |
 | engines/ payload | **313 MB** (`du -sh engines/`) | **1.1 GB** (`du -sh /Applications/ONLYOFFICE.app`) | budget ≤100 MB → T-040 (PH-4) |
 | RAM idle (start page) | app 114.4 + helper 88.4 (WC 35.8/Net 23.0/GPU 29.6) ≈ **203 MB** · 4 processes | **570 MB** · 5 processes (đo 27.09: `open -a ONLYOFFICE`, sleep 15s, chưa mở document) | 22.09: 133 MB — số cũ ĐO KHI DEVTOOLS MỞ, không so trực tiếp được |
 | RAM 1 doc (fixture 1.9 KB) | run1 ≈ **561 MB** (app 112.1 + WC 369.3/GPU 52.3/Net 26.9); run2 ≈ **579 MB** (app 114.8 + WC 375.1/GPU 53.3/Net 36.0) | 21.09: ~1.07 GB / 7 processes (số cũ, chỉ đối chiếu) | engine (WebContent) chiếm ~370 MB — mục trim chính cho T-040 |
@@ -2093,7 +2093,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 - Lệnh đo ONLYOFFICE: `ps aux | grep -i onlyoffice | grep -v grep | awk '{sum+=$6; n++} END
   {print n, sum/1024 " MB"}'` → `5 569.688 MB`; quit bằng `osascript 'quit app "ONLYOFFICE"'
-  (exit 0, không orphan). App NanoOffice sau mỗi run: kill trực tiếp + kiểm tra `ps`.
+  (exit 0, không orphan). App WasenOffice sau mỗi run: kill trực tiếp + kiểm tra `ps`.
 - **Trạng thái:** (a)(c)(d) reproduced; (b) candidate — chờ xác nhận thủ công 30s của user.
   PH-0 đóng với caveat này; baseline release đo ở PH-4 (T-021/T-040).
 
@@ -2114,11 +2114,11 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   (delay 1500ms `deliverDocument`, retry 120×500ms `consumeDeliveredDocument`, chữ ký
   `EndLoad` chỉ trong comment, `_offline_` magic, adapter font hai đầu Rust↔JS không chung
   constant); ~120 dòng probe diagnostics lẫn đường production sẽ mục ở PH-1. Fix: delivery
-  module có tên + probe sau `NANO_OFFICE_PROBE`. → **T-045**.
+  module có tên + probe sau `WASEN_OFFICE_PROBE`. → **T-045**.
 - **C4 Worth exploring — stub `sidecar/` + `window/` fail deletion test:** 0 dòng code trong
   khi conventions.md tuyên bố x2t thuộc sidecar (thực tế inline ở `lib.rs`
   `get_document_for_delivery`). Fix: xoá stub + sửa docs. → **T-043**.
-- **C5 Speculative — config env sprawl:** 4 biến `NANO_OFFICE_*` đọc tại điểm dùng, 2 quy tắc
+- **C5 Speculative — config env sprawl:** 4 biến `WASEN_OFFICE_*` đọc tại điểm dùng, 2 quy tắc
   khám phá artifact (engines/ vs x2t), `:14321` hardcode trong docs trong khi filesrv có thể
   rơi về `:0`. Fix: `env.rs` deep module — **chưa làm**, trigger PH-1. → **T-046**.
 - **Đang deep tốt (giữ nguyên):** `protocol/mod.rs`, `filesrv.rs`, `bridge/mod.rs` — interface
@@ -2134,14 +2134,14 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   verify.sh 8 gate toàn compile/lint — chuỗi render đắt nhất dự án (5 ngày debug) không có
   kiểm tra tự động; GREEN của TC-D01-06 chỉ tồn tại dạng khai báo tay.
 - **Gate mới (reproduced):** `harness/scripts/smoke-render.sh` (~60 dòng bash, 0 dependency)
-  boot app thật (`NANO_OFFICE_OPEN=<fixture> NANO_OFFICE_DEVTOOLS=0 pnpm tauri dev`; dọn dẹp
+  boot app thật (`WASEN_OFFICE_OPEN=<fixture> WASEN_OFFICE_DEVTOOLS=0 pnpm tauri dev`; dọn dẹp
   bằng process-group kill qua `set -m` + disown, đã kiểm tra không sót orphan) rồi poll log
   stdout chờ đúng **3 tín hiệu TC-D01-06**: ① `asc_onDocumentContentReady` ② `viewer=WxH` /
   canvas probe với height > 0 ③ `GET /fonts/` (filesrv log mức info). Đủ 3 trong timeout
   (default 240s, `SMOKE_TIMEOUT`) → exit 0; hết giờ/app chết sớm → exit 1 kèm log tail.
   Fixture tự sinh qua `harness/fixtures/make_docx.py` nếu thiếu; chặn sớm nếu port 1420 bận.
 - **Verify (đều chạy thật, 27.09):** positive **exit 0** (contentReady + canvas 2190×958 +
-  `GET /fonts/sys/Symbol.ttf`); **negative exit 1** (`NANO_OFFICE_X2T=/nonexistent` → delivery
+  `GET /fonts/sys/Symbol.ttf`); **negative exit 1** (`WASEN_OFFICE_X2T=/nonexistent` → delivery
   fail → timeout → FAILED) — gate biết cách fail; full `verify.sh` 9 gate **exit 0**.
 - **Giới hạn (ghi rõ):** gate phụ thuộc log contract của shim — đổi text các dòng evidence
   phải đổi gate cùng lúc (hai đầu đều có comment trỏ nhau). Window app bật/tắt ngắn khi chạy
@@ -2193,7 +2193,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   `Page.addScriptToEvaluateOnNewDocument`) để có frame-level observability. Ghi chú bẫy:
   init-script CDP KHÔNG lan qua OOPIF iframe — phải attach riêng target iframe.
 - **Devtools docked làm mép layout:** debug build tự mở devtools → viewport webview còn 185px
-  → `id_viewer` 0/10px gây误导. `lib.rs` thêm guard env `NANO_OFFICE_DEVTOOLS=0` để tắt khi
+  → `id_viewer` 0/10px gây误导. `lib.rs` thêm guard env `WASEN_OFFICE_DEVTOOLS=0` để tắt khi
   verify layout (mặc định vẫn mở).
 - **Trạng thái:** confirmed cho 3 root cause (fix → hết triệu chứng, lặp lại 3+ lần);
   candidate cho dialog còn lại. TC-D01-06: **GREEN** · TC-D01-09: GREEN (oracle khớp 15 fonts).
@@ -2361,7 +2361,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
   **2654×1312** (đang render), `window.native` = undefined, `NATIVE_EDITOR_ENJINE` = undefined
   → **app thật chạy cùng pipeline wasm+canvas, KHÔNG phải native graphics**; không thấy font
   fetch qua network trong frame (entries có thể không ghi với file:// scheme — chưa chốt).
-- **Vẫn chưa qua vạch render (candidate):** runtime NanoOffice sau các fix: parse + styles
+- **Vẫn chưa qua vạch render (candidate):** runtime WasenOffice sau các fix: parse + styles
   preload chạy sâu (56 `II(styleName)` ok — `I3.prototype.gCh` là styles manager, KHÔNG phải
   font loader như suy luận trước), `SetDocumentName` bắn, KHÔNG exception, KHÔNG
   asc_onError — nhưng `id_viewer` vẫn 0 height, không `asc_onDocumentContentReady`, font
@@ -2421,7 +2421,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 - **Bẫy đã gặp (đề phòng tái diễn):** (1) `read_to_end` vào buffer pre-fill `vec![0u8; len]`
   → response bị nhân đôi NUL (api.js SyntaxError) — có unit test hồi quy; (2) engine từ chối
   document URL scheme lạ (`getUrlType` → Invalid, allowlist `https?|ftps|file|tessa|joplin|smb`
-  — editorscommon.js:2939) → KHÔNG dùng được `nanooffice-file://` làm document URL của engine,
+  — editorscommon.js:2939) → KHÔNG dùng được `wasenoffice-file://` làm document URL của engine,
   phải qua loopback HTTP (deviation kiến trúc, xem reference.map); (3) custom-scheme page
   (secure context) fetch `http://` = mixed-content block → engine + document phải cùng origin
   loopback; (4) `include_str!` không kích hoạt rebuild khi file JS đổi — phải `touch`/build tay;
@@ -2579,7 +2579,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ## 2026-09-21 · Chốt định vị sản phẩm + mô hình license (phiên brainstorm)
 
-- **Quyết định user:** open source ngay từ đầu; code NanoOffice tự viết dùng **MIT**.
+- **Quyết định user:** open source ngay từ đầu; code WasenOffice tự viết dùng **MIT**.
 - **Làm rõ pháp lý đã ghi vào docs:** license gắn vào code gốc chứ không gắn vào build —
   rebuild/repackage engine không đổi được AGPL→MIT; full-MIT chỉ khả thi qua clean-room rewrite
   (ngoài scope hiện tại, giữ làm "ngôi sao phương nam", kiến trúc bridge/protocol giữ cửa này mở).
@@ -2593,7 +2593,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
-- **Vị trí mới:** `/Users/ericnguyen/DATA/Backend/rust/nanooffice` (user yêu cầu).
+- **Vị trí mới:** `/Users/ericnguyen/DATA/Backend/rust/wasenoffice` (user yêu cầu).
   Git history + submodules nguyên vẹn sau move; commit mới: `04d81a8`.
 - **Việc đã làm sau move:**
   - `cargo clean` + rebuild (target cache chứa đường dẫn cũ khiến tauri-build báo lỗi permissions) — cargo check ✓.
@@ -2604,16 +2604,16 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
     Hiện vẫn nằm trong working tree VÀ vẫn được track ở commit f5b6f69.
     Khi network/approval sẵn sàng: `git rm -r --cached scaffold-tmp && rm -rf scaffold-tmp && git commit`.
 - **Lưu ý cho agent phiên sau:** repo KHÔNG còn ở workspace mặc định. Làm việc với
-  `/Users/ericnguyen/DATA/Backend/rust/nanooffice` bằng đường dẫn tuyệt đối này.
+  `/Users/ericnguyen/DATA/Backend/rust/wasenoffice` bằng đường dẫn tuyệt đối này.
 
 ---
 
 ## 2026-09-21 · Bootstrap harness + Tauri scaffold
 
 - **Done (verified):**
-  - Repo `nanooffice` init: AGENTS.md + harness (3 rules, 3 skills, verify.sh) + docs (reference.map, conventions, diagnostics).
+  - Repo `wasenoffice` init: AGENTS.md + harness (3 rules, 3 skills, verify.sh) + docs (reference.map, conventions, diagnostics).
   - Submodules chỉ-đọc: `upstream/sdkjs` @ 72b0421c0b (128 MB), `upstream/web-apps` @ 9c0ca538c3 (798 MB) — khớp v9.4.0.
-  - Tauri 2 scaffold (vanilla-ts) đã rename thành `nanooffice`: `cargo check` ✓ · `pnpm build` ✓ ·
+  - Tauri 2 scaffold (vanilla-ts) đã rename thành `wasenoffice`: `cargo check` ✓ · `pnpm build` ✓ ·
     `./harness/scripts/verify.sh` → **ALL CHECKS PASSED**.
   - Bridge shim skeleton: `src/shim/desktopEditor.ts` (~60 method known + auto-forward method lạ)
     ↔ `src-tauri/src/bridge/mod.rs` (dispatch trả `UNIMPL:<method>`), Tauri command `asc_desktop_editor`.
@@ -2631,7 +2631,7 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ## 2026-09-21 · Khởi tạo dự án
 
-- **Sự kiện:** Tạo harness + repo NanoOffice (Tauri scaffold).
+- **Sự kiện:** Tạo harness + repo WasenOffice (Tauri scaffold).
 - **Số liệu nền (observed, đo trên máy này):**
   - ONLYOFFICE v9.4.0 arm64: ~1.07 GB RAM idle / 7 processes.
   - WPS Office: ~605 MB idle / 2 processes.

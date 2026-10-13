@@ -87,17 +87,17 @@ mod tests {
     #[test]
     fn test_sibling_tmp_path() {
         let target = Path::new("/var/docs/report.docx");
-        let tmp = sibling_tmp_path(target, "nanooffice-save");
-        assert_eq!(tmp, Path::new("/var/docs/report.nanooffice-save.docx"));
+        let tmp = sibling_tmp_path(target, "wasenoffice-save");
+        assert_eq!(tmp, Path::new("/var/docs/report.wasenoffice-save.docx"));
     }
 
     #[test]
     fn test_atomic_write_bytes_success() {
-        let dir = std::env::temp_dir().join("nanooffice-test-storage-1");
+        let dir = std::env::temp_dir().join("wasenoffice-test-storage-1");
         let _ = std::fs::create_dir_all(&dir);
         let target = dir.join("doc.docx");
 
-        let bytes = b"hello nanooffice storage";
+        let bytes = b"hello wasenoffice storage";
         let len = atomic_write_bytes(&target, bytes, "test-tmp").unwrap();
         assert_eq!(len, bytes.len() as u64);
 
@@ -113,7 +113,7 @@ mod tests {
 
     #[test]
     fn test_atomic_write_bytes_empty_refused() {
-        let dir = std::env::temp_dir().join("nanooffice-test-storage-2");
+        let dir = std::env::temp_dir().join("wasenoffice-test-storage-2");
         let _ = std::fs::create_dir_all(&dir);
         let target = dir.join("doc.docx");
 
@@ -126,7 +126,7 @@ mod tests {
 
     #[test]
     fn test_atomic_swap_success() {
-        let dir = std::env::temp_dir().join("nanooffice-test-storage-3");
+        let dir = std::env::temp_dir().join("wasenoffice-test-storage-3");
         let _ = std::fs::create_dir_all(&dir);
         let target = dir.join("final.docx");
         let tmp = sibling_tmp_path(&target, "tmp-test");
@@ -143,7 +143,7 @@ mod tests {
 
     #[test]
     fn test_atomic_swap_empty_cleans_up() {
-        let dir = std::env::temp_dir().join("nanooffice-test-storage-4");
+        let dir = std::env::temp_dir().join("wasenoffice-test-storage-4");
         let _ = std::fs::create_dir_all(&dir);
         let target = dir.join("final.docx");
         let tmp = sibling_tmp_path(&target, "tmp-test");

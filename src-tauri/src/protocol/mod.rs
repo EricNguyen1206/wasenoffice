@@ -1,9 +1,9 @@
 //! Custom protocols serving the engine and user documents to the WebView.
 //!
-//! - `nanooffice-engine://` — engine assets (`editors/…`), generated `AllFonts.js`
+//! - `wasenoffice-engine://` — engine assets (`editors/…`), generated `AllFonts.js`
 //!   and font files. The editor `index.html` gets a fonts `<script>` injected at
 //!   serve time (the desktop app does the equivalent natively via CEF).
-//! - `nanooffice-file://` — user documents: `file/<id>/<name>` URLs resolved
+//! - `wasenoffice-file://` — user documents: `file/<id>/<name>` URLs resolved
 //!   through [`FileRegistry`]; the JS side never sees disk paths.
 //!
 //! Both handlers support HTTP `Range` requests (embedded media in large files)
@@ -25,8 +25,8 @@ pub mod filesrv;
 
 pub(crate) mod allfonts;
 
-pub const ENGINE_SCHEME: &str = "nanooffice-engine";
-pub const FILE_SCHEME: &str = "nanooffice-file";
+pub const ENGINE_SCHEME: &str = "wasenoffice-engine";
+pub const FILE_SCHEME: &str = "wasenoffice-file";
 
 // T-054: the font-root table (`FONT_URL_ROOTS`/`font_root_disk`), engines
 // discovery (`engines_root`), URI-component encoding and BOTH AllFonts.js
@@ -303,7 +303,7 @@ pub fn handle_engine<R: tauri::Runtime>(
     request: Request<Vec<u8>>,
 ) -> tauri::http::Response<Vec<u8>> {
     let Some(engines) = allfonts::engines_root() else {
-        log::error!("engines/ root not found — set NANO_OFFICE_ENGINES or run from the repo");
+        log::error!("engines/ root not found — set WASEN_OFFICE_ENGINES or run from the repo");
         return empty(StatusCode::NOT_FOUND);
     };
     // WKWebView normalizes custom scheme URLs to <scheme>://localhost/<path>;
@@ -421,18 +421,18 @@ mod tests {
     fn serve_file_full_body_has_no_nul_padding() {
         // Regression: non-Range reads used a zero-filled buffer + read_to_end,
         // doubling the body with NUL padding (broke api.js with SyntaxError).
-        let path = std::env::temp_dir().join("nanooffice-test-nul.txt");
-        std::fs::write(&path, b"hello nanooffice").expect("write temp");
+        let path = std::env::temp_dir().join("wasenoffice-test-nul.txt");
+        std::fs::write(&path, b"hello wasenoffice").expect("write temp");
         let request = Request::builder().body(Vec::new()).expect("request");
         let response = serve_file(&path, &request, None);
         assert_eq!(response.status(), StatusCode::OK);
-        assert_eq!(response.body(), b"hello nanooffice");
+        assert_eq!(response.body(), b"hello wasenoffice");
         let _ = std::fs::remove_file(&path);
     }
 
     #[test]
     fn serve_file_honours_range() {
-        let path = std::env::temp_dir().join("nanooffice-test-range.txt");
+        let path = std::env::temp_dir().join("wasenoffice-test-range.txt");
         std::fs::write(&path, b"0123456789").expect("write temp");
         let request = Request::builder()
             .header(header::RANGE, "bytes=2-5")
@@ -449,7 +449,7 @@ mod tests {
     /// never shadow the older A (the old `latest()` failure mode).
     #[test]
     fn keyed_consume_crosses_registered_files_correctly() {
-        let dir = std::env::temp_dir().join("nanooffice-test-registry-keyed");
+        let dir = std::env::temp_dir().join("wasenoffice-test-registry-keyed");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let a = dir.join("a.docx");

@@ -1,5 +1,5 @@
 #!/bin/zsh
-# NanoOffice verification harness — run before claiming any phase complete.
+# WasenOffice verification harness — run before claiming any phase complete.
 set -u
 cd "$(dirname "$0")/../.."
 fail=0
@@ -10,7 +10,7 @@ fail=0
 . harness/scripts/gate-cmds.sh
 
 # --workspace: manifest src-tauri là package + workspace root — không có flag này
-# cargo mặc định chỉ chạy package gốc, crate A2 (crates/nanooffice-ooxml, T-A20) không được phủ.
+# cargo mặc định chỉ chạy package gốc, crate A2 (crates/wasenoffice-ooxml, T-A20) không được phủ.
 echo "▸ cargo check (src-tauri workspace)"
 eval "$GATE_CARGO_CHECK" || fail=1
 
@@ -39,13 +39,13 @@ echo "▸ smoke render behavioral (TC-D01-06: boot app, render fixture DOCX)"
 harness/scripts/smoke-render.sh || fail=1
 
 echo "▸ smoke render xlsx (TC-E01-01: boot app, render fixture XLSX — T-048)"
-harness/scripts/smoke-render.sh /tmp/nanooffice-smoke-fixture.xlsx || fail=1
+harness/scripts/smoke-render.sh /tmp/wasenoffice-smoke-fixture.xlsx || fail=1
 
 echo "▸ smoke render pptx (TC-P01-01: boot app, render fixture PPTX — T-048)"
-harness/scripts/smoke-render.sh /tmp/nanooffice-smoke-fixture.pptx || fail=1
+harness/scripts/smoke-render.sh /tmp/wasenoffice-smoke-fixture.pptx || fail=1
 
 echo "▸ smoke render pdf (TC-F01-01: boot app, render fixture PDF — T-048)"
-harness/scripts/smoke-render.sh /tmp/nanooffice-smoke-fixture.pdf || fail=1
+harness/scripts/smoke-render.sh /tmp/wasenoffice-smoke-fixture.pdf || fail=1
 
 echo "▸ smoke save round-trip behavioral (TC-D01-10: edit → save → disk)"
 harness/scripts/smoke-save.sh || fail=1

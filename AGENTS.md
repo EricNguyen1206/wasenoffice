@@ -5,9 +5,12 @@
 
 ## identity & mục tiêu
 
-- **Tên dự án:** WasenOffice (đổi thương hiệu từ "NanoOffice" 13.10; repo `github.com/EricNguyen1206/wasenoffice`).
-  Identifier nội bộ **GIỮ NGUYÊN**: crate `nanooffice-ooxml`, binary cargo `nanooffice`, env `NANO_OFFICE_*`,
-  lệnh `nano_light_*`, window stamp `__nanooffice_*` — đổi chúng là task riêng, phải chạy verify FULL.
+- **Tên dự án:** WasenOffice — rebrand trọn vẹn từ "NanoOffice" ngày 13.10 (hai mẻ cùng ngày: mặt
+  tiền rồi identifier nội bộ; repo `github.com/EricNguyen1206/wasenoffice`).
+  Identifier chuẩn hiện tại: crate `wasenoffice-ooxml`, binary cargo `wasenoffice`,
+  env `WASEN_OFFICE_*`, lệnh `wasen_light_*` (lệnh của tính năng **Nano Light** — tên hiển thị
+  tính năng giữ nguyên), scheme `wasenoffice-engine://` + `wasenoffice-file://`, window stamp
+  `__wasenoffice_*`. Đổi identifier là task riêng, phải chạy verify FULL (đã áp dụng lần rebrand 13.10).
 - **Mục tiêu:** app desktop office suite (DOCX/XLSX/PPTX/PDF) — shell Rust + Tauri,
   giữ engine editing JS gốc của ONLYOFFICE (sdkjs + web-apps), x2t chạy sidecar.
 - **Thay engine chỉ bằng clean-room, không port/translate** (QĐ9, 29.09.2026): cấm mang code
@@ -18,7 +21,7 @@
 ## Layout (nguồn chân lý về cấu trúc)
 
 ```
-nanooffice/
+wasenoffice/
 ├── AGENTS.md            ← file này — contract cho agent
 ├── docs/                ← kiến thức bằng chứng: reference.map, diagnostics, conventions
 │   ├── design/          ← DD + TEST theo màn hình (source of truth UI, public — QĐ6)
@@ -53,7 +56,7 @@ nanooffice/
 6b. **App boot nền.** Mọi lần agent khởi động app (dev/binary/smoke gates/verify) phải
    chạy background — không đưa cửa sổ lên frontmost, không cướp focus màn user, không
    đè lên màn hình làm việc (user chỉ thị 03.10, mở rộng 04.10; enforce:
-   `NANO_OFFICE_BACKGROUND=1` → `ActivationPolicy::Accessory` set TRƯỚC `run()` +
+   `WASEN_OFFICE_BACKGROUND=1` → `ActivationPolicy::Accessory` set TRƯỚC `run()` +
    offscreen sliver 8px góc dưới-phải (`bg_sliver_position` — giữ `occlusionState
    .visible` cho engine probes) — `smoke_boot` tự bắn cho mọi gate boot; kèm Tauri
    `focused:false`). Diagnostics 04.10: policy set trong `setup` là MUỘN — phải set
@@ -70,7 +73,7 @@ nanooffice/
 | Phase | Trạng thái | Ghi chú |
 |---|---|---|
 | PH-0 Spike (load editor + render DOCX trong WKWebView) | ✅ ĐÓNG 27.09 — verdict **GO WITH CAVEAT** | render GREEN tự động (verify.sh gate 9, TC-D01-06); baseline debug 27.09: RAM 1 doc ~561–579 MB vs ONLYOFFICE 570 MB (start page); caveat duy nhất: scroll/edit keyboard chờ user xác nhận thủ công ~30s — `docs/diagnostics.md` 27.09 T-003 |
-| Track A Milestone A0–A4 (QĐ9 — tự chủ shell + phân phối + converter + viewer + editor core) | ✅ A1 ĐÓNG 02.10 · A2 ĐÓNG 03.10 · A3 ĐÓNG 03.10 · **A4 ĐÓNG 04.10 (T-A27 L0 → T-A28 selection/arrows · T-A29 IME/clipboard · T-A30 dblclick/blink/bảng · T-A31 save-fidelity · T-A32 tblPr/tcPr warn)** | **A1 — phân phối độc lập**: chạy trọn open→edit→save KHÔNG cần ONLYOFFICE.app cài sẵn — x2t bundled (T-A10, 113 MB) + AllFonts tự sinh (T-A11) + fonts bundled có license (T-A12) + gate 11 "sạch ONLYOFFICE" thường trụ verify.sh (T-A13: strict clean-machine + negative proven + test tích thể mv app → verify FULL exit 0 khi app ẨN); **A2 — converter Rust**: T-A20 chốt P2 "OOXML core trước" bằng probe số liệu + crate slice `nanooffice-ooxml`; T-A21 S1 docx READ đầy đủ (OPC chuẩn + table/list/image + styles resolve, fuzz 0 panic); T-A22 S2 docx WRITE + round-trip model bất biến 100% + file ghi ra render GREEN; T-A23 S3 parity harness 15/15 construct + 0 diff không phân loại; T-A24 S4 adapter vào runtime — open-side pre-normalize (docx → canonical.docx qua crate → x2t) trong seam `sidecar::convert`, kill switch `NANO_OFFICE_NO_RUST_CONVERTER`, gates 9/10/11 GREEN cả ON lẫn OFF; **A3 — viewer Rust đọc-only ĐÓNG 03.10 (T-A25 design-first + T-V1→T-V5)**: DD V01 `docs/design/viewer-a3/DD.md` (R1 canvas 2D webview riêng không shim/engine; C3 command layer song song delivery; C4 OS/2 không hmtx); T-V1 model render-side + resolve về Rust (round-trip + parity-a2 bất biến); T-V2 layout pgSz + tab + OS/2 line metrics + **gate 12** số liệu (OQ-V01-2 chốt RAM = TREE, tripwire debug 300 MB); T-V3 media route `/media/<id>/<part>` + render ảnh EMU→px; **T-V4 parity render vs oracle CDP — 6/6 corpus ×2 deterministic + negative cắn, ε=2.0px (OQ-V01-1 chốt)**; T-V5 wire UX: nút Quick view trên start page (`viewer_view` — OQ-V01-3 chốt toggle) + scroll cơ bản (canvas cao bằng nội dung, 2-pass draw) + **gate 13 UI E2E**; mở <500 ms GREEN debug (18–89 ms); RAM tree debug 265 MB — **đích <150 MB = criterion RELEASE, T-057 (PH-4) chặn đo, ceiling ghi DD V01 §10**; ceiling parity → seed T-V6; **A4 — Nano Light T-A27 03.10** (chưa đóng rung — criterion đóng = parity matrix theo lớp, DD L01 §5.1): vòng edit đầu KHÔNG sdkjs/x2t — DocSession window-scoped + mutation commands hệ hitTest + caret canvas + undo snapshot + save `write_docx` atomic + gate 15, verify FULL 19 ▸ steps |
+| Track A Milestone A0–A4 (QĐ9 — tự chủ shell + phân phối + converter + viewer + editor core) | ✅ A1 ĐÓNG 02.10 · A2 ĐÓNG 03.10 · A3 ĐÓNG 03.10 · **A4 ĐÓNG 04.10 (T-A27 L0 → T-A28 selection/arrows · T-A29 IME/clipboard · T-A30 dblclick/blink/bảng · T-A31 save-fidelity · T-A32 tblPr/tcPr warn)** | **A1 — phân phối độc lập**: chạy trọn open→edit→save KHÔNG cần ONLYOFFICE.app cài sẵn — x2t bundled (T-A10, 113 MB) + AllFonts tự sinh (T-A11) + fonts bundled có license (T-A12) + gate 11 "sạch ONLYOFFICE" thường trụ verify.sh (T-A13: strict clean-machine + negative proven + test tích thể mv app → verify FULL exit 0 khi app ẨN); **A2 — converter Rust**: T-A20 chốt P2 "OOXML core trước" bằng probe số liệu + crate slice `wasenoffice-ooxml`; T-A21 S1 docx READ đầy đủ (OPC chuẩn + table/list/image + styles resolve, fuzz 0 panic); T-A22 S2 docx WRITE + round-trip model bất biến 100% + file ghi ra render GREEN; T-A23 S3 parity harness 15/15 construct + 0 diff không phân loại; T-A24 S4 adapter vào runtime — open-side pre-normalize (docx → canonical.docx qua crate → x2t) trong seam `sidecar::convert`, kill switch `WASEN_OFFICE_NO_RUST_CONVERTER`, gates 9/10/11 GREEN cả ON lẫn OFF; **A3 — viewer Rust đọc-only ĐÓNG 03.10 (T-A25 design-first + T-V1→T-V5)**: DD V01 `docs/design/viewer-a3/DD.md` (R1 canvas 2D webview riêng không shim/engine; C3 command layer song song delivery; C4 OS/2 không hmtx); T-V1 model render-side + resolve về Rust (round-trip + parity-a2 bất biến); T-V2 layout pgSz + tab + OS/2 line metrics + **gate 12** số liệu (OQ-V01-2 chốt RAM = TREE, tripwire debug 300 MB); T-V3 media route `/media/<id>/<part>` + render ảnh EMU→px; **T-V4 parity render vs oracle CDP — 6/6 corpus ×2 deterministic + negative cắn, ε=2.0px (OQ-V01-1 chốt)**; T-V5 wire UX: nút Quick view trên start page (`viewer_view` — OQ-V01-3 chốt toggle) + scroll cơ bản (canvas cao bằng nội dung, 2-pass draw) + **gate 13 UI E2E**; mở <500 ms GREEN debug (18–89 ms); RAM tree debug 265 MB — **đích <150 MB = criterion RELEASE, T-057 (PH-4) chặn đo, ceiling ghi DD V01 §10**; ceiling parity → seed T-V6; **A4 — Nano Light T-A27 03.10** (chưa đóng rung — criterion đóng = parity matrix theo lớp, DD L01 §5.1): vòng edit đầu KHÔNG sdkjs/x2t — DocSession window-scoped + mutation commands hệ hitTest + caret canvas + undo snapshot + save `write_docx` atomic + gate 15, verify FULL 19 ▸ steps |
 | PH-1 Vòng đời file (open/save/convert qua x2t sidecar) | ⬜ | |
 | PH-2 Trải nghiệm desktop (print/clipboard/fonts/tabs) | ⬜ | |
 | PH-3 Tùy chọn (crypto/signature/cloud) | ⬜ | có thể cắt vĩnh viễn |
@@ -94,7 +97,7 @@ dirty = `doc != saved`) + **mutation command layer** song song delivery (insert/
 delete/enter/undo/redo, toạ độ = hệ hitTest T-V7, offset utf-16; edit bảng refuse) +
 caret forward-map thuần `src/editor.ts` consume `layout.ts` **nguyên vẹn 0 diff**
 (parity-view không cần chạy lại) + entry `editor.html` ROOT + nút Nano Light start page +
-env `NANO_OFFICE_NANO_LIGHT` (**mặc định mở vẫn engine — D1**) + **save = `write_docx` +
+env `WASEN_OFFICE_NANO_LIGHT` (**mặc định mở vẫn engine — D1**) + **save = `write_docx` +
 tmp/rename atomic, KHÔNG Editor.bin/x2t** + **parity matrix ngoài-model trung thực**
 (DD §5.1: mất hyperlink-cả-text/sectPr giữa/pgMar/settings/theme/docProps — mỗi mục
 criterion nâng) + **gate 15** `smoke-nano-light.sh` thường trụ verify.sh (probe chạy cùng
@@ -107,7 +110,7 @@ bỏ `latest()` + layout module thuần/hit-test: parity 6/6 ×2 từng px, gate
 gate 12, serde camelCase). Trước đó: **RUNG A1 ĐÓNG 02.10 (T-A10→T-A13) — phân phối
 độc lập**: chạy trọn open→edit→save KHÔNG cần ONLYOFFICE.app cài sẵn — x2t bundled (113 MB) +
 AllFonts.js tự sinh + fonts bundled có license + **gate 11 "sạch ONLYOFFICE" thường trụ**
-trong verify.sh (strict clean-machine mode `NANO_OFFICE_NO_APP_FALLBACK`; positive exit 0 +
+trong verify.sh (strict clean-machine mode `WASEN_OFFICE_NO_APP_FALLBACK`; positive exit 0 +
 negative proven exit 1) — bằng chứng đóng rung: test tích thể mv app → verify.sh FULL exit 0
 khi app ẨN (`harness/scripts/clean-machine-proof.sh`, diagnostics 02.10). Runtime dependency
 bắt buộc lên app: **0** (fallback x2t = WARN dev-only, bị strict mode chặn; upstream submodule
@@ -115,10 +118,10 @@ bắt buộc lên app: **0** (fallback x2t = WARN dev-only, bị strict mode ch�
 Mới nhất 03.10 (**T-V5 — wire UX quick-view, ĐÓNG RUNG A3**): quick view ra khỏi dev-env
 thành UX thật — nút **Quick view** trên start page → command `viewer_view` (stash path
 Rust-side `QuickViewRequest`, window `quickview-<n>` focused(false) rule 6b không shim;
-env `NANO_OFFICE_QUICK_VIEW` giữ cho dev/gate 12) + **scroll cơ bản** (canvas cao bằng nội
+env `WASEN_OFFICE_QUICK_VIEW` giữ cho dev/gate 12) + **scroll cơ bản** (canvas cao bằng nội
 dung, 2-pass draw, cap 8192px logic — pagination post-A3); OQ-V01-3 CHỐT = toggle (chỉ thị
 user). **Gate 13** `smoke-quick-view-ui.sh` thường trụ verify.sh — driver
-`NANO_OFFICE_UX_PROBE` (pattern SAVE_PROBE: điền input + click nút thật, không keystroke)
+`WASEN_OFFICE_UX_PROBE` (pattern SAVE_PROBE: điền input + click nút thật, không keystroke)
 → positive exit 0 (view → first-draw 30 ms → layout 16 dòng) + negative exit 1 (.docx rác
 cắn). Bằng chứng đóng rung: parity-view (T-V4) 6/6 PASS không đổi + gate 12 không thoái hóa
 (265 MB tree debug ≤ 300 tripwire; first-draw 89 ms) + scroll E2E canvas 2232 px; đích mở
@@ -127,14 +130,14 @@ chặn đo release, ceiling ghi thẳng không fake số (DD V01 §10)**. Mới 
 T-V7 — 2 điều kiện trước A4, ĐÓNG**): **T-059** (4a12d00) xoá `FileRegistry::latest()` —
 keying tường minh theo fileId: `register(owner=window-label)` + `unregister_owner` khi
 window Destroyed; 4 consumer keying rõ (review #4 liệt kê 3 — consumer thứ 4
-`LocalFileSetOpenChangesCount` tự lộ khi mổ); shim stamp `window.__nanooffice_file_id__`
+`LocalFileSetOpenChangesCount` tự lộ khi mổ); shim stamp `window.__wasenoffice_file_id__`
 từ `open_document` → relay + delivery truyền `{fileId}`; thiếu/unknown = lỗi to; test
 race ×2 + gates 9/10/12/13 GREEN; bài học: serde không tự camelCase (gate 9 bắt
 `doc.fileId` undefined). **T-V7** tách layout viewer thành module thuần
 `src/viewer/layout.ts` (không DOM/canvas, measurer tiêm vào, `LineModel`) + **hit-test
 ngược** `hitTest(x,y) → {para,line,run,offset}` cho caret A4 — parity KHÔNG fork
 (parity-view 6/6 ×2 từng px); 2 tầng test: **gate 14** `test-layout.sh` (42 checks tọa độ
-tay) + probe E2E gate 12 (`NANO_OFFICE_QV_HITTEST` → `viewer hit-test: 16/16`, negative
+tay) + probe E2E gate 12 (`WASEN_OFFICE_QV_HITTEST` → `viewer hit-test: 16/16`, negative
 proven) + resize re-layout. Chi tiết DD V01 §5.7. Kế tiếp: **T-A27** mở màn A4 (editor
 core "Nano Light", design-first khi claim — nạp deps review #4).
 Trước đó cùng ngày (**T-055 #4 —
@@ -145,11 +148,11 @@ trước A4) + **T-V7** (layout core tách module + hit-test ngược — điề
 mutation commands + save = write_docx không qua Editor.bin). Kế tiếp khi đó: **T-059 + T-V7** rồi
 **T-A27** mở màn A4 (editor core "Nano Light", design-first khi claim).
 Trước đó 03.10 (**T-A24 — A2/S4 adapter, ĐÓNG RUNG A2**, ponytail ULTRA chuỗi A2 — verify FULL
-exit 0): crate `nanooffice-ooxml` vào đường runtime qua seam `sidecar::convert` — **open-side
+exit 0): crate `wasenoffice-ooxml` vào đường runtime qua seam `sidecar::convert` — **open-side
 pre-normalize**: open docx → crate parse+write `canonical.docx` trong workdir → x2t chuyển
 canonical ra Editor.bin (save-side KHÔNG thay được — x2t fromChanges làm việc trực tiếp trên
 Editor.bin, giữ x2t đến A4 theo DD K01 §2 P2). Crate refuse → WARN + x2t nhận file gốc (không
-bao giờ chặn open); kill switch `NANO_OFFICE_NO_RUST_CONVERTER=1` = đường cũ nguyên vẹn.
+bao giờ chặn open); kill switch `WASEN_OFFICE_NO_RUST_CONVERTER=1` = đường cũ nguyên vẹn.
 Log ADDITIVE `converter: rust-canonical → x2t (…, normalize …)` — không đụng log contract
 gates 9/10/11. Bằng chứng: verify.sh FULL exit 0 (ON) + gate 9/10 counterfactual OFF exit 0
 (Editor.bin 1586 B đường cũ vs 1495 B canonical) + parity-a2.sh exit 0 (7/7 invariant) +
@@ -167,7 +170,7 @@ mở → không ghi số) + `a:blip` Start+End (x2t writer trộn self-closing v
 lại 2 lớp vô hại oracle-obs: rel_id renumber + empty-run drop. Không nâng model (3-state/
 sectPr không bị đòi; blind-spot rStyle ghi DD). Harness ×2 deterministic exit 0.
 Trước đó 02.10 (**T-A22 — A2/S2 docx WRITE + round-trip**, ponytail ULTRA chuỗi A2 —
-verify 16 gates exit 0): crate `nanooffice-ooxml` ghi model → docx hợp lệ — writer đối
+verify 16 gates exit 0): crate `wasenoffice-ooxml` ghi model → docx hợp lệ — writer đối
 xứng parser 1 hàm/construct (`src/write.rs`, quick-xml escape + zip có sẵn, không
 builder/trait); package OPC tự sinh đúng chuẩn (Content_Types/rels — part chính = canonical
 name `word/document.xml` mà reader tra cứu qua root rels, không hardcode path ngược;
@@ -183,7 +186,7 @@ round-trip bắt được: main part phải wrap `w:body`; styles/numbering cầ
 riêng. Limitation ghi diagnostics: Run.bold/italic 2-state → false serialize absent.
 Kế tiếp: **T-A23** (S3 parity, x2t = DEV-ORACLE) → T-A24 adapter seam.
 Trước đó 02.10 (**T-A21 — A2/S1 docx READ đầy đủ**, ponytail ULTRA chuỗi A2 — verify 16 gates
-exit 0): crate `nanooffice-ooxml` đọc đủ văn bản cơ bản — **OPC đúng chuẩn** (Content_Types +
+exit 0): crate `wasenoffice-ooxml` đọc đủ văn bản cơ bản — **OPC đúng chuẩn** (Content_Types +
 rels, part chính tra cứu qua `_rels/.rels` không hardcode, refuse content-type sai),
 recursive-descent parser 1 hàm/construct (không visitor/trait), **table** `w:tbl`/tr/tc
 (cell lồng được), **list** (`w:numPr` raw + `numbering.xml` resolve numFmt/lvlText),
@@ -201,7 +204,7 @@ Trước đó 02.10 (**T-A20 — A2 mở màn**, design-first ponytail ULTRA —
 1586 B Editor.bin deterministic, TLV `[u8 tag][u32 len]` không nén, style resolve trong
 binary + delta records = format thứ 2 → ước lượng tháng + dead code sau A4; P2: 100% spec
 ECMA-376, ~85 element types cho docx cơ bản → tuần (DD mã K01 `docs/design/converter-a2/DD.md`,
-kèm lộ trình S1–S5 + parity criteria). Crate slice `src-tauri/crates/nanooffice-ooxml`:
+kèm lộ trình S1–S5 + parity criteria). Crate slice `src-tauri/crates/wasenoffice-ooxml`:
 parse docx → model tối giản + CLI JSON, 3 test, deps quick-xml/zip qua license gate;
 verify.sh cargo `--workspace` (bẫy: manifest package+workspace root mặc định package-mode).
 T-A21 S1 đã chạy (xem đoạn trên); hàng đợi A2: T-A22 write → T-A23 parity (x2t = DEV-ORACLE) →

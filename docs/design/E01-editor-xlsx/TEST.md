@@ -22,7 +22,7 @@ type: test
 ## 2. Môi trường & fixtures
 
 - Fixture: `harness/fixtures/make_xlsx.py` (stdlib, ECMA-376; tiếng Việt có dấu).
-- Lệnh gate: `harness/scripts/smoke-render.sh /tmp/nanooffice-smoke-fixture.xlsx`
+- Lệnh gate: `harness/scripts/smoke-render.sh /tmp/wasenoffice-smoke-fixture.xlsx`
   (verify.sh chạy tự động — T-048).
 
 ## 3. Test cases

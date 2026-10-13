@@ -1,7 +1,7 @@
 ---
 type: convention
 ---
-# docs/conventions.md — quy ước NanoOffice
+# docs/conventions.md — quy ước WasenOffice
 
 ## Kiến trúc mục tiêu (đã chốt theo feasibility study 21.09.2026)
 
@@ -13,7 +13,7 @@ Lộ trình A: **Tauri shell + engine gốc + x2t sidecar.**
 ```
 src-tauri/ (Rust — mã nguồn chính)
   ├─ bridge/        shim window.AscDesktopEditor: command enum + handlers
-  ├─ protocol/      custom protocol nanooffice-file:// (Range support)
+  ├─ protocol/      custom protocol wasenoffice-file:// (Range support)
   ├─ sidecar/       quản lý x2t (spawn, timeout, queue)
   ├─ window/        cửa sổ, tab, state
   └─ main.rs

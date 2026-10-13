@@ -1,6 +1,6 @@
-# Đóng góp cho NanoOffice
+# Đóng góp cho WasenOffice
 
-NanoOffice là office suite desktop (DOCX/XLSX/PPTX/PDF) hướng **nhẹ + AI local-first**: shell
+WasenOffice là office suite desktop (DOCX/XLSX/PPTX/PDF) hướng **nhẹ + AI local-first**: shell
 Rust + Tauri, tái sử dụng engine editing JS gốc của ONLYOFFICE (AGPL-3.0, submodule chỉ đọc),
 x2t chạy sidecar. Phần code dự án tự viết dùng MIT (xem `LICENSE`).
 
@@ -35,6 +35,6 @@ x2t chạy sidecar. Phần code dự án tự viết dùng MIT (xem `LICENSE`).
 
 ## License
 
-Đóng góp vào phần code tự viết của NanoOffice được phát hành theo MIT (`LICENSE`). Engine
+Đóng góp vào phần code tự viết của WasenOffice được phát hành theo MIT (`LICENSE`). Engine
 upstream giữ nguyên AGPL-3.0 + provenance submodule — xem [`docs/vision.md`](docs/vision.md)
 Quyết định 1 và `harness/rules/licensing.md`.

@@ -155,7 +155,7 @@ pub const EDITOR_BIN_NAME: &str = "Editor.bin";
 /// Per-document x2t work directory — the ONE owner of the on-disk layout the
 /// open-delivery chain (lib.rs) and the save chain (bridge/save.rs) share,
 /// exactly like the real shell's recovery dir. The `folder` string format
-/// (`<tmp>/nanooffice-doc-<id>`) is a contract consumed by
+/// (`<tmp>/wasenoffice-doc-<id>`) is a contract consumed by
 /// src/shim/delivery.js — frozen.
 #[derive(Debug, Clone)]
 pub struct DocWorkdir {
@@ -165,7 +165,7 @@ pub struct DocWorkdir {
 impl DocWorkdir {
     pub fn new(id: u32) -> Self {
         Self {
-            root: std::env::temp_dir().join(format!("nanooffice-doc-{id}")),
+            root: std::env::temp_dir().join(format!("wasenoffice-doc-{id}")),
         }
     }
 
@@ -242,7 +242,7 @@ mod tests {
         let work = DocWorkdir::new(1234);
         assert_eq!(
             work.root().file_name().unwrap().to_string_lossy(),
-            "nanooffice-doc-1234"
+            "wasenoffice-doc-1234"
         );
         assert_eq!(work.editor_bin(), work.root().join("Editor.bin"));
         assert_eq!(

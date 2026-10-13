@@ -13,7 +13,7 @@
 - x2t nhận config file (XML/JSON tùy version) khai báo: source path, target path, format,
   password, options. **Kiểm chứng bằng thực nghiệm trước khi tin khẳng định nào về CLI args.**
 
-## Luồng chuẩn trong NanoOffice
+## Luồng chuẩn trong WasenOffice
 
 ```
 [Rust] cần convert A.doc → A.docx

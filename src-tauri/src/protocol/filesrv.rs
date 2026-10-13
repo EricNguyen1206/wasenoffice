@@ -2,7 +2,7 @@
 //!
 //! Why it exists: the engine classifies document URLs by string scheme
 //! (upstream/sdkjs/common/editorscommon.js:3088) and rejects every custom
-//! scheme as `Invalid`, so a `nanooffice-file://…` document URL is never
+//! scheme as `Invalid`, so a `wasenoffice-file://…` document URL is never
 //! fetched. Serving everything (engine assets under `/editors/`, fonts under
 //! `/fonts/`, documents under `/file/<id>/`) from `http://127.0.0.1:<port>`
 //! gives the editor iframe and its document one origin: no CORS, no mixed
@@ -86,7 +86,7 @@ fn handle(mut stream: TcpStream, registry: Arc<FileRegistry>) {
                 .map(str::to_owned)
         });
 
-    // engine assets + fonts: same routes as the nanooffice-engine:// handler
+    // engine assets + fonts: same routes as the wasenoffice-engine:// handler
     let engine_path = path.trim_start_matches('/').to_string();
     if engine_path == "editors/sdkjs/common/AllFonts.js" {
         match super::allfonts::engine_flavor_js(bound_port()) {
@@ -167,7 +167,7 @@ fn handle(mut stream: TcpStream, registry: Arc<FileRegistry>) {
             respond(&mut stream, 404, &[], &[], false);
             return;
         };
-        match nanooffice_ooxml::try_part_bytes(&zip_bytes, part) {
+        match wasenoffice_ooxml::try_part_bytes(&zip_bytes, part) {
             Some(bytes) => {
                 log::info!(
                     "media serve: fileId {id} part {part} ({} bytes)",
@@ -320,7 +320,7 @@ mod tests {
     fn media_fixture() -> &'static str {
         concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/crates/nanooffice-ooxml/tests/fixtures/nanooffice-media-fixture.docx"
+            "/crates/wasenoffice-ooxml/tests/fixtures/wasenoffice-media-fixture.docx"
         )
     }
 
@@ -362,8 +362,8 @@ mod tests {
             .register("test", std::path::Path::new(media_fixture()))
             .unwrap();
         let raw = std::fs::read(media_fixture()).unwrap();
-        let expected = nanooffice_ooxml::try_part_bytes(&raw, "word/media/image1.png").unwrap();
-        let other = nanooffice_ooxml::try_part_bytes(&raw, "word/media/image2.png").unwrap();
+        let expected = wasenoffice_ooxml::try_part_bytes(&raw, "word/media/image1.png").unwrap();
+        let other = wasenoffice_ooxml::try_part_bytes(&raw, "word/media/image2.png").unwrap();
         assert!(
             !expected.is_empty() && expected != other,
             "fixture parts indistinct"

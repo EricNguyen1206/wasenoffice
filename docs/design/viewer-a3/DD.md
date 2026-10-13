@@ -17,7 +17,7 @@ bước đầu rút sdkjs (313 MB) khỏi đường mở tài liệu; sdkjs/web-
 cao" tới A6 (D1, không hard-cut).
 
 Nền có sẵn, không viết mới:
-- crate `nanooffice-ooxml` (A2, K01): parse docx → model đã parity 15/15 construct với
+- crate `wasenoffice-ooxml` (A2, K01): parse docx → model đã parity 15/15 construct với
   x2t; **in-process lib-dep** của shell (review #3 first-hand: `sidecar/mod.rs:248-251`
   gọi trực tiếp — viewer không cần CLI/JSON trung gian).
 - `protocol/allfonts.rs` (A11): enumerate font + parse OS/2 line metrics (ascent/descent/
@@ -44,7 +44,7 @@ slice đầu của editor riêng, không phải sản phẩm dừng.
 ```
 src-tauri/src/viewer.rs              ← command layer viewer (C3): viewer_open — parse-only
 src/viewer.html + src/viewer.ts      ← webview RIÊNG (không shim, không engine iframe); canvas 2D
-crates/nanooffice-ooxml (K01)        ← model A2; V1 mở render-side (C2), resolve về Rust
+crates/wasenoffice-ooxml (K01)        ← model A2; V1 mở render-side (C2), resolve về Rust
 protocol/allfonts.rs                 ← accessor line metrics (C4-a), V2
 ```
 
@@ -52,10 +52,10 @@ protocol/allfonts.rs                 ← accessor line metrics (C4-a), V2
 
 Viewer cắm ở **Tauri command layer**, KHÔNG ở seam `sidecar::convert`: viewer bỏ qua x2t và
 Editor.bin hoàn toàn (parse trực tiếp file gốc bằng crate — đúng nghĩa "không boot sdkjs"
-và không đụng converter). `viewer_open` = parse-only: đọc file → `nanooffice_ooxml::parse_docx`
+và không đụng converter). `viewer_open` = parse-only: đọc file → `wasenoffice_ooxml::parse_docx`
 → JSON model trả frontend. Không đụng FileRegistry (nhà của delivery), không đụng
 delivery.js, log contract gates 9/10/11 nguyên vẹn. Trigger slice: env
-`NANO_OFFICE_QUICK_VIEW=<path>` (dev-only + gate 12; UX wiring thật = V5 —
+`WASEN_OFFICE_QUICK_VIEW=<path>` (dev-only + gate 12; UX wiring thật = V5 —
 `viewer_view` từ start page, §4 V5/§5.6) — window viewer mở bằng
 entry `viewer.html` riêng, shim bridge/delivery KHÔNG inject (điểm của quick view: không
 engine, không bridge). *(V3 amendment: `viewer_open` ĐĂNG KÝ file vào FileRegistry để
@@ -132,7 +132,7 @@ line height từ C4-a; advances từ `measureText`.
 ### 5.1 Kết quả slice V0 (03.10.2026 — T-A25, số đầu tiên)
 
 Fixture `make_docx_full.py` (3794 B — style chain + table + list + tiếng Việt), debug build,
-boots bằng `NANO_OFFICE_QUICK_VIEW=<file> pnpm tauri dev`, 2 lần chạy nhất quán:
+boots bằng `WASEN_OFFICE_QUICK_VIEW=<file> pnpm tauri dev`, 2 lần chạy nhất quán:
 
 | Đo | Số liệu | Đối chiếu |
 |---|---|---|
@@ -283,7 +283,7 @@ env"; quick-view KHÔNG thành mặc định cho docx — quyết định "mặc
 Light): start page thêm nút **Quick view** cạnh Open → command `viewer_view`: validate
 file tồn tại → stash path vào state `QuickViewRequest` (Mutex, take-once) → mở window
 `quickview-<n>` (focused(false) rule 6b, KHÔNG inject shim/bridge — §3.1); `viewer_open`
-consume stash, **env `NANO_OFFICE_QUICK_VIEW` giữ nguyên làm trigger dev/gate 12**. Disk
+consume stash, **env `WASEN_OFFICE_QUICK_VIEW` giữ nguyên làm trigger dev/gate 12**. Disk
 path không bao giờ vào URL (stash Rust-side — nguyên tắc filesrv). Đóng cửa sổ = close
 native (Cmd-W) — không thêm phím tắt riêng (ponytail: platform feature). **Scroll cơ
 bản:** canvas = trang — cao bằng nội dung đã layout (min = viewport; cap 8192px logic =
@@ -292,8 +292,8 @@ resize clears canvas → **2-pass draw**: measure → resize → re-scale ctx (c
 reset — bẫy) → redraw CÙNG input, cùng tọa độ; evidence lấy từ pass 2.
 
 **Gate 13** `harness/scripts/smoke-quick-view-ui.sh` (thường trụ verify.sh, consumer
-smoke-lib): boot app THƯỜNG (không env quick-view) với driver **`NANO_OFFICE_UX_PROBE`**
-(pattern `NANO_OFFICE_SAVE_PROBE` — init JS điền input + click nút THẬT, không keystroke,
+smoke-lib): boot app THƯỜNG (không env quick-view) với driver **`WASEN_OFFICE_UX_PROBE`**
+(pattern `WASEN_OFFICE_SAVE_PROBE` — init JS điền input + click nút THẬT, không keystroke,
 không focus) → assert `viewer view:` (command = UI wiring) → `viewer first-draw` <
 QUICK_VIEW_MAX_MS → `viewer layout:`, cấm `viewer failed:`. Hằng `SMOKE_RE_QV_VIEW` vào
 khối đóng băng smoke-lib; coordinate/media asserts không nhân bản — vẫn ở gate 12, gate
@@ -338,8 +338,8 @@ Tokenize mang thêm `ri` + `charStart` — thứ tự token KHÔNG đổi.
   tsc-compile module + `layout.test.ts` → node thuần, **42 checks tọa độ tính tay** với
   fake measurer chính xác (mid-line → đúng run/offset; mép dòng → offset biên;
   y-band midpoint; tab; para index; image line; dòng rỗng). Gate 14 sở hữu SEMANTICS.
-- **Gate 12** thêm probe E2E `NANO_OFFICE_QV_HITTEST=1` (env → init script
-  `window.__NANO_OFFICE_QV_HITTEST__` trong lib.rs nhánh quick-view): sau first-draw,
+- **Gate 12** thêm probe E2E `WASEN_OFFICE_QV_HITTEST=1` (env → init script
+  `window.__WASEN_OFFICE_QV_HITTEST__` trong lib.rs nhánh quick-view): sau first-draw,
   viewer round-trip MỌI dòng qua `hitTest` (mid → trong dòng; 2 mép → biên) → log
   `viewer hit-test: 16/16 lines ok` (SMOKE_RE_QV_HIT vào khối đóng băng smoke-lib);
   assert `ok == total == lines` của layout + cấm `viewer hit-test FAIL`. **Negative
@@ -457,7 +457,7 @@ chạy full chuỗi, không assert toạ độ mới).
 - **OQ-V01-2: CHỐT ở V2 — xem §10.**
 - **OQ-V01-3: CHỐT ở V5 — toggle.** Chỉ thị user 03.10: chọn file từ UI mở quick view
   (nút Quick view trên start page → `viewer_view`); quick view KHÔNG thành mặc định cho
-  docx — quyết định "mặc định" thuộc A4 (Nano Light). Env `NANO_OFFICE_QUICK_VIEW` giữ
+  docx — quyết định "mặc định" thuộc A4 (Nano Light). Env `WASEN_OFFICE_QUICK_VIEW` giữ
   làm trigger dev/gate 12.
 
 ## 10. OQ-V01-2 — công thức RAM đã chốt (T-V2, 03.10)

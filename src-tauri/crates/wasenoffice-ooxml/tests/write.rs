@@ -5,24 +5,24 @@
 use std::collections::BTreeMap;
 use std::io::Read as _;
 
-use nanooffice_ooxml::{
+use wasenoffice_ooxml::{
     write_docx, Block, Document, HeaderFooter, ImageRef, NumLvl, NumRef, Paragraph, Run, StyleDef,
     StyleKind, Table, TableCell,
 };
 
 const FULL_FIXTURE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/tests/fixtures/nanooffice-full-fixture.docx"
+    "/tests/fixtures/wasenoffice-full-fixture.docx"
 );
 
 const MEDIA_FIXTURE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/tests/fixtures/nanooffice-media-fixture.docx"
+    "/tests/fixtures/wasenoffice-media-fixture.docx"
 );
 
 const FIDELITY_FIXTURE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/tests/fixtures/nanooffice-fidelity-fixture.docx"
+    "/tests/fixtures/wasenoffice-fidelity-fixture.docx"
 );
 
 /// Điều kiện XONG (1) của DD §4: `parse → write → parse` trên corpus 10
@@ -30,9 +30,9 @@ const FIDELITY_FIXTURE: &str = concat!(
 /// Package shape cũng được kiểm: đúng phần OPC chuẩn, media part là PNG.
 #[test]
 fn round_trip_full_corpus_model_invariant() {
-    let doc1 = nanooffice_ooxml::parse_docx_file(FULL_FIXTURE).unwrap();
+    let doc1 = wasenoffice_ooxml::parse_docx_file(FULL_FIXTURE).unwrap();
     let bytes = write_docx(&doc1, None).unwrap();
-    let doc2 = nanooffice_ooxml::parse_docx(&bytes).unwrap();
+    let doc2 = wasenoffice_ooxml::parse_docx(&bytes).unwrap();
     assert_eq!(doc1, doc2);
 
     let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&bytes[..])).unwrap();
@@ -63,9 +63,9 @@ fn round_trip_full_corpus_model_invariant() {
 #[test]
 fn fidelity_roundtrip_keeps_links_sections_and_passthrough() {
     let src = std::fs::read(FIDELITY_FIXTURE).unwrap();
-    let doc1 = nanooffice_ooxml::parse_docx(&src).unwrap();
+    let doc1 = wasenoffice_ooxml::parse_docx(&src).unwrap();
     let out = write_docx(&doc1, Some(&src)).unwrap();
-    assert_eq!(doc1, nanooffice_ooxml::parse_docx(&out).unwrap());
+    assert_eq!(doc1, wasenoffice_ooxml::parse_docx(&out).unwrap());
 
     let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&out[..])).unwrap();
     let mut rels = String::new();
@@ -74,7 +74,7 @@ fn fidelity_roundtrip_keeps_links_sections_and_passthrough() {
         .read_to_string(&mut rels)
         .unwrap();
     assert!(
-        rels.contains("TargetMode=\"External\"") && rels.contains("nanooffice-fidelity"),
+        rels.contains("TargetMode=\"External\"") && rels.contains("wasenoffice-fidelity"),
         "hyperlink rel must keep its external target: {rels}"
     );
     assert!(rels.contains("relationships/settings") && rels.contains("relationships/theme"));
@@ -94,7 +94,7 @@ fn fidelity_roundtrip_keeps_links_sections_and_passthrough() {
         zip.by_name(part).unwrap().read_to_end(&mut got).unwrap();
         assert_eq!(
             got,
-            nanooffice_ooxml::try_part_bytes(&src, part).unwrap(),
+            wasenoffice_ooxml::try_part_bytes(&src, part).unwrap(),
             "{part} must survive byte-exact"
         );
     }
@@ -104,7 +104,7 @@ fn fidelity_roundtrip_keeps_links_sections_and_passthrough() {
 /// không bịa part nào (passthrough là copy-when-present).
 #[test]
 fn passthrough_is_silent_when_the_source_lacks_the_parts() {
-    let doc = nanooffice_ooxml::parse_docx_file(FULL_FIXTURE).unwrap();
+    let doc = wasenoffice_ooxml::parse_docx_file(FULL_FIXTURE).unwrap();
     let src = std::fs::read(FULL_FIXTURE).unwrap();
     let out = write_docx(&doc, Some(&src)).unwrap();
     let mut zip = zip::ZipArchive::new(std::io::Cursor::new(&out[..])).unwrap();
@@ -119,14 +119,14 @@ fn passthrough_is_silent_when_the_source_lacks_the_parts() {
 #[test]
 fn media_bytes_copied_byte_exact_from_source_package() {
     let src = std::fs::read(MEDIA_FIXTURE).unwrap();
-    let doc = nanooffice_ooxml::parse_docx(&src).unwrap();
+    let doc = wasenoffice_ooxml::parse_docx(&src).unwrap();
     let original = media_parts(&src);
     assert_eq!(original.len(), 2, "fixture: body + header media");
 
     let bytes = write_docx(&doc, Some(&src)).unwrap();
     assert_eq!(
         doc,
-        nanooffice_ooxml::parse_docx(&bytes).unwrap(),
+        wasenoffice_ooxml::parse_docx(&bytes).unwrap(),
         "model invariant through the round-trip with a source"
     );
     assert_eq!(
@@ -244,7 +244,7 @@ fn write_edge_xml_special_and_vietnamese() {
     };
 
     let bytes = write_docx(&doc, None).unwrap();
-    let doc2 = nanooffice_ooxml::parse_docx(&bytes).unwrap();
+    let doc2 = wasenoffice_ooxml::parse_docx(&bytes).unwrap();
     assert_eq!(doc, doc2);
 
     // escape thật sự nằm trong XML emitted (raw & không được lọt qua)
@@ -360,7 +360,7 @@ fn fuzz_write_reparse_never_panics_and_preserves_model() {
         )]),
     };
     let bytes = write_docx(&base, None).unwrap();
-    assert_eq!(nanooffice_ooxml::parse_docx(&bytes).unwrap(), base);
+    assert_eq!(wasenoffice_ooxml::parse_docx(&bytes).unwrap(), base);
 
     const JUNK: &[char] = &[
         '<', '>', '&', '"', '\'', '`', '~', '@', '#', '%', '^', '*', '(', ')', '[', ']', '{', '}',
@@ -431,7 +431,7 @@ fn fuzz_write_reparse_never_panics_and_preserves_model() {
         }
         let bytes =
             write_docx(&m, None).unwrap_or_else(|e| panic!("fuzz round {i}: write failed: {e:?}"));
-        let back = nanooffice_ooxml::parse_docx(&bytes)
+        let back = wasenoffice_ooxml::parse_docx(&bytes)
             .unwrap_or_else(|e| panic!("fuzz round {i}: reparse failed: {e:?}"));
         assert_eq!(
             m, back,

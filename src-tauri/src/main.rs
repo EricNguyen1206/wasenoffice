@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    nanooffice_lib::run()
+    wasenoffice_lib::run()
 }

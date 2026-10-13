@@ -6,7 +6,7 @@
 //! serializes straight through the A2 crate (`write_docx`) — no Editor.bin,
 //! no x2t on this path. The default open path stays the engine (D1 — no
 //! hard-cut); Nano Light has its own window, its own start-page button and
-//! the env `NANO_OFFICE_NANO_LIGHT` as the dev/gate-15 trigger.
+//! the env `WASEN_OFFICE_NANO_LIGHT` as the dev/gate-15 trigger.
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use nanooffice_ooxml::{Document, Page, PageMar, RenderDoc};
+use wasenoffice_ooxml::{Document, Page, PageMar, RenderDoc};
 
 use crate::protocol::FileRegistry;
 use crate::viewer::render_payload;
@@ -276,7 +276,7 @@ fn open_window(
         app,
         &label,
         "editor.html",
-        format!("NanoOffice — Nano Light: {name}"),
+        format!("WasenOffice — Nano Light: {name}"),
         "nano light",
     )?;
     log::info!("nano light view: {path} (window {label})");
@@ -287,7 +287,7 @@ fn open_window(
 /// a dedicated Nano Light window; the error stays on the start page instead
 /// of opening a window just to show a failure.
 #[tauri::command]
-pub fn nano_light_view(
+pub fn wasen_light_view(
     app: tauri::AppHandle,
     handoff: State<'_, Arc<SurfaceHandoff>>,
     path: String,
@@ -301,7 +301,7 @@ pub fn nano_light_view(
 /// Reopen THIS session's document in a new Nano Light window (reads the file
 /// from disk — the disk path never crosses into JS).
 #[tauri::command]
-pub fn nano_light_reopen(
+pub fn wasen_light_reopen(
     app: tauri::AppHandle,
     handoff: State<'_, Arc<SurfaceHandoff>>,
     sessions: State<'_, Arc<EditorSessions>>,
@@ -331,7 +331,7 @@ pub struct NanoLightDoc {
 }
 
 #[tauri::command]
-pub fn nano_light_open(
+pub fn wasen_light_open(
     registry: State<'_, Arc<FileRegistry>>,
     handoff: State<'_, Arc<SurfaceHandoff>>,
     sessions: State<'_, Arc<EditorSessions>>,
@@ -344,12 +344,12 @@ pub fn nano_light_open(
         _ => handoff
             .take(window.label())
             .or_else(|| {
-                std::env::var("NANO_OFFICE_NANO_LIGHT")
+                std::env::var("WASEN_OFFICE_NANO_LIGHT")
                     .ok()
                     .filter(|p| !p.is_empty())
             })
             .ok_or_else(|| {
-                "nano light: no source (UI action or NANO_OFFICE_NANO_LIGHT)".to_string()
+                "nano light: no source (UI action or WASEN_OFFICE_NANO_LIGHT)".to_string()
             })?,
     };
     let p = render_payload(
@@ -360,7 +360,7 @@ pub fn nano_light_open(
     )?;
     // Refuse-warn (OQ-L01-2 closed: open + warn, never refuse — D1 keeps the
     // engine as the advanced mode for everything the model drops on save).
-    let warnings = nanooffice_ooxml::detect_save_losses(&p.bytes);
+    let warnings = wasenoffice_ooxml::detect_save_losses(&p.bytes);
     if !warnings.is_empty() {
         log::warn!("nano light warn: save will drop: {}", warnings.join(", "));
     }
@@ -502,7 +502,7 @@ pub struct EditOutcome {
 }
 
 #[tauri::command]
-pub fn nano_light_edit(
+pub fn wasen_light_edit(
     sessions: State<'_, Arc<EditorSessions>>,
     window: tauri::WebviewWindow,
     cmd: EditCmd,
@@ -517,7 +517,7 @@ pub fn nano_light_edit(
             s.dirty(),
             s.undo.len(),
             s.sel,
-            nanooffice_ooxml::resolve(&s.doc),
+            wasenoffice_ooxml::resolve(&s.doc),
         ))
     })?;
     log::info!(
@@ -539,7 +539,7 @@ pub fn nano_light_edit(
 /// the `bridge/save.rs` pattern). Media parts are copied byte-exact from the
 /// ORIGINAL package bytes the session kept (`media_src`, T-A26).
 #[tauri::command]
-pub fn nano_light_save(
+pub fn wasen_light_save(
     sessions: State<'_, Arc<EditorSessions>>,
     window: tauri::WebviewWindow,
     tab_id: Option<u32>,
@@ -549,7 +549,7 @@ pub fn nano_light_save(
 }
 
 #[tauri::command]
-pub fn nano_light_close_tab(
+pub fn wasen_light_close_tab(
     sessions: State<'_, Arc<EditorSessions>>,
     window: tauri::WebviewWindow,
     tab_id: u32,
@@ -565,9 +565,9 @@ pub fn nano_light_close_tab(
 
 fn save_session(session: &mut EditorSession) -> Result<(), String> {
     let started = std::time::Instant::now();
-    let out = nanooffice_ooxml::write_docx(&session.doc, Some(&session.media_src))
+    let out = wasenoffice_ooxml::write_docx(&session.doc, Some(&session.media_src))
         .map_err(|e| format!("nano light: write docx: {e}"))?;
-    crate::storage::atomic_write_bytes(&session.path, &out, "nanooffice-nl")
+    crate::storage::atomic_write_bytes(&session.path, &out, "wasenoffice-nl")
         .map_err(|e| format!("nano light: {e}"))?;
     session.saved = Some(session.doc.clone());
     let ms = started.elapsed().as_secs_f64() * 1000.0;
@@ -582,7 +582,7 @@ fn save_session(session: &mut EditorSession) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nanooffice_ooxml::{Block, ImageRef, Paragraph, Run, Table, TableCell};
+    use wasenoffice_ooxml::{Block, ImageRef, Paragraph, Run, Table, TableCell};
 
     fn document(body: Vec<Block>) -> Document {
         Document {
@@ -629,7 +629,7 @@ mod tests {
                 cell_para: None,
             },
             sel: None,
-            path: std::env::temp_dir().join("nanooffice-test-nl-unused.docx"),
+            path: std::env::temp_dir().join("wasenoffice-test-nl-unused.docx"),
         }
     }
 
@@ -1068,16 +1068,16 @@ mod tests {
         );
 
         // save through the REAL crate and parse back: content + structure
-        let dir = std::env::temp_dir().join("nanooffice-test-nl-cell");
+        let dir = std::env::temp_dir().join("wasenoffice-test-nl-cell");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("cell.docx");
-        let bytes = nanooffice_ooxml::write_docx(&s.doc, None).unwrap();
+        let bytes = wasenoffice_ooxml::write_docx(&s.doc, None).unwrap();
         std::fs::write(&path, &bytes).unwrap();
         s.media_src = bytes;
         s.path = path.clone();
         save_session(&mut s).unwrap();
-        let back = nanooffice_ooxml::parse_docx_file(&path).unwrap();
+        let back = wasenoffice_ooxml::parse_docx_file(&path).unwrap();
         // the undos left cell A at "after enter, before insert T30-2": the
         // second (empty) paragraph survives the real round-trip
         assert_eq!(
@@ -1182,14 +1182,14 @@ mod tests {
     /// it back — the marker text survives and the file is a valid package.
     #[test]
     fn save_roundtrips_through_the_crate() {
-        let dir = std::env::temp_dir().join("nanooffice-test-nl-save");
+        let dir = std::env::temp_dir().join("wasenoffice-test-nl-save");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("nl.docx");
         // write a minimal real docx via the crate itself (writer is proven;
         // this test only needs a parseable package on disk)
         let doc = doc_one_para();
-        let bytes = nanooffice_ooxml::write_docx(&doc, None).unwrap();
+        let bytes = wasenoffice_ooxml::write_docx(&doc, None).unwrap();
         std::fs::write(&path, &bytes).unwrap();
 
         let mut s = EditorSession {
@@ -1213,14 +1213,14 @@ mod tests {
         save_session(&mut s).unwrap();
         assert!(!s.dirty(), "save clears dirty");
 
-        let back = nanooffice_ooxml::parse_docx_file(&path).unwrap();
+        let back = wasenoffice_ooxml::parse_docx_file(&path).unwrap();
         let text: String = match &back.body[0] {
             Block::Paragraph(p) => p.runs.iter().map(|r| r.text.clone()).collect(),
             _ => unreachable!(),
         };
         assert!(text.contains("MARKER-NL-01"), "saved file carries the edit");
         // the tmp sibling is gone (rename, not a copy)
-        assert!(!path.with_extension("nanooffice-nl.docx").exists());
+        assert!(!path.with_extension("wasenoffice-nl.docx").exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1229,7 +1229,7 @@ mod tests {
     fn link_run(text: &str) -> Run {
         Run {
             text: text.into(),
-            link: Some(nanooffice_ooxml::Hyperlink {
+            link: Some(wasenoffice_ooxml::Hyperlink {
                 rel_id: Some("rIdL".into()),
                 anchor: None,
                 target: Some("https://example.com/nl".into()),
@@ -1261,12 +1261,12 @@ mod tests {
                     text: "sect para".into(),
                     ..Default::default()
                 }],
-                sect: Some(Box::new(nanooffice_ooxml::Section {
-                    page: Some(nanooffice_ooxml::Page {
+                sect: Some(Box::new(wasenoffice_ooxml::Section {
+                    page: Some(wasenoffice_ooxml::Page {
                         w: Some(11906),
                         ..Default::default()
                     }),
-                    mar: Some(nanooffice_ooxml::PageMar {
+                    mar: Some(wasenoffice_ooxml::PageMar {
                         top: Some(1134),
                         ..Default::default()
                     }),
@@ -1342,16 +1342,16 @@ mod tests {
         assert_eq!(s.doc, original, "undo restores link + section intact");
 
         // save through the REAL crate: link (rel + target) + section survive
-        let dir = std::env::temp_dir().join("nanooffice-test-nl-fidelity");
+        let dir = std::env::temp_dir().join("wasenoffice-test-nl-fidelity");
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("fidelity.docx");
-        let bytes = nanooffice_ooxml::write_docx(&s.doc, None).unwrap();
+        let bytes = wasenoffice_ooxml::write_docx(&s.doc, None).unwrap();
         std::fs::write(&path, &bytes).unwrap();
         s.media_src = bytes;
         s.path = path.clone();
         save_session(&mut s).unwrap();
-        let back = nanooffice_ooxml::parse_docx_file(&path).unwrap();
+        let back = wasenoffice_ooxml::parse_docx_file(&path).unwrap();
         let bp = match &back.body[0] {
             Block::Paragraph(p) => p,
             _ => unreachable!(),

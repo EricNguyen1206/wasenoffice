@@ -2,7 +2,7 @@
 """Generate a minimal-but-real XLSX fixture (stdlib only) for the multi-format
 smoke gates (T-048).
 
-Usage: make_xlsx.py [output.xlsx]   (default: /tmp/nanooffice-fixture.xlsx)
+Usage: make_xlsx.py [output.xlsx]   (default: /tmp/wasenoffice-fixture.xlsx)
 Structure follows ECMA-376 / ISO 29500 Part 1 (spreadsheetML) — no upstream
 code involved. One sheet, inline strings (no sharedStrings needed), a heading
 row, Vietnamese diacritics and plain numbers so both text and numeric
@@ -46,7 +46,7 @@ SHEET = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <sheetData>
     <row r="1">
-      <c r="A1" t="inlineStr"><is><t>NanoOffice T-048 Fixture</t></is></c>
+      <c r="A1" t="inlineStr"><is><t>WasenOffice T-048 Fixture</t></is></c>
     </row>
     <row r="2">
       <c r="A2" t="inlineStr"><is><t>Tên mặt hàng</t></is></c>
@@ -69,7 +69,7 @@ SHEET = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 
 
 def main():
-    out = sys.argv[1] if len(sys.argv) > 1 else "/tmp/nanooffice-fixture.xlsx"
+    out = sys.argv[1] if len(sys.argv) > 1 else "/tmp/wasenoffice-fixture.xlsx"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("[Content_Types].xml", CONTENT_TYPES)
         z.writestr("_rels/.rels", ROOT_RELS)

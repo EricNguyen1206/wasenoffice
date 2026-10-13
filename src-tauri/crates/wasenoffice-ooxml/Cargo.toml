@@ -1,8 +1,8 @@
 [package]
-name = "nanooffice-ooxml"
+name = "wasenoffice-ooxml"
 version = "0.1.0"
-description = "NanoOffice OOXML core (Track A rung A2) — spec-first docx read/write (ECMA-376)"
-authors = ["NanoOffice contributors"]
+description = "WasenOffice OOXML core (Track A rung A2) — spec-first docx read/write (ECMA-376)"
+authors = ["WasenOffice contributors"]
 edition = "2021"
 license = "MIT"
 publish = false

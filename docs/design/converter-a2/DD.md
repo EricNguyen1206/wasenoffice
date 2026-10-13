@@ -10,7 +10,7 @@ type: design
 
 ## 1. Bối cảnh + mục tiêu
 
-x2t (113 MB, AGPL C++) làm 2 việc cho NanoOffice: **open** (docx/xlsx/pptx → `Editor.bin`,
+x2t (113 MB, AGPL C++) làm 2 việc cho WasenOffice: **open** (docx/xlsx/pptx → `Editor.bin`,
 magic `DOCY/XLSY/PPTY;v10`) và **save** (`Editor.bin` + `changes0.json` → file gốc, params XML —
 hợp đồng đã reverse: `docs/reference.map.md` § save contract). Cả 2 hướng chạm **Editor.bin —
 định dạng binary NỘI BỘ, không spec công khai**. Đích đóng rung A2 (QĐ9 `docs/vision.md`):
@@ -74,7 +74,7 @@ OOXML→Editor.bin (1 consumer thật: build Editor.bin cho sdkjs advanced-mode)
 ## 3. Kiến trúc (P2) — 1 crate, vài file
 
 ```
-src-tauri/crates/nanooffice-ooxml/     ← crate duy nhất của A2 (KHÔNG workspace đa crate;
+src-tauri/crates/wasenoffice-ooxml/     ← crate duy nhất của A2 (KHÔNG workspace đa crate;
                                         member của workspace src-tauri chỉ để gates kiểm soát)
   src/lib.rs        ← model tối giản + entry parse
   src/opc.rs        ← OPC: zip → parts (ECMA-376 Part 2)
@@ -85,7 +85,7 @@ src-tauri/crates/nanooffice-ooxml/     ← crate duy nhất của A2 (KHÔNG wor
 
 - Model tối giản slice: `Document{paragraphs}`, `Paragraph{style, runs}`, `Run{text, bold, italic}`.
   Không trait hierarchy, không error-type tower — `ParseError(String)`.
-- Ranh giới với shell: crate ĐỨNG NGOÀI `nanooffice_lib` — future adapter cắm sau
+- Ranh giới với shell: crate ĐỨNG NGOÀI `wasenoffice_lib` — future adapter cắm sau
   `sidecar::convert` (T-A14) dưới dạng nhánh gọi crate, không đụng seam khi chưa parity.
 - Dependency (2, qua license gate — justification trong commit): `quick-xml` (MIT OR Apache-2.0 —
   stdlib không có XML; parser tự viết vi phạm rule trust-boundary "bắt XML lỗi thay vì panic")
@@ -105,7 +105,7 @@ src-tauri/crates/nanooffice-ooxml/     ← crate duy nhất của A2 (KHÔNG wor
 > **S4 landed 03.10 (T-A24 — rung A2 đóng):** adapter = open-side pre-normalize trong
 > `sidecar::convert::OpenBinary` (docx → canonical.docx qua crate → x2t; save-side không thay
 > được — x2t fromChanges làm việc trực tiếp trên Editor.bin, giữ x2t đến A4); kill switch
-> `NANO_OFFICE_NO_RUST_CONVERTER`, crate-refuse → fallback file gốc. Chi tiết + bằng chứng:
+> `WASEN_OFFICE_NO_RUST_CONVERTER`, crate-refuse → fallback file gốc. Chi tiết + bằng chứng:
 > diagnostics 03.10 T-A24.
 
 ## 5. Tiêu chí parity đo được
@@ -127,7 +127,7 @@ Harness: `harness/scripts/parity-a2.sh` — 3-way model compare trên canonical 
 
 - **Corpus (7 file):** 2 fixture crate + `harness/fixtures/corpus-a2/` — edge-multilevel-list,
   edge-nested-table, edge-style-override, edge-image-multi (`make_docx_edge.py`) +
-  engine-save-t011 (file thật của gate 10, marker `T011-*-SAVED-BY-NANOOFFICE`).
+  engine-save-t011 (file thật của gate 10, marker `T011-*-SAVED-BY-WASENOFFICE`).
 - **Metric:** **15/15 construct parity** (paragraph/text, pStyle, jc, numPr raw, b/i/u/sz, run
   override tắt-explicit, table, nested table, numbering 3 mức resolve, image part+extent,
   multi-image cùng rel, styles chain resolve, hdr/ftr, tiếng Việt, AlternateContent-image) —
@@ -188,7 +188,7 @@ Harness: `harness/scripts/parity-a2.sh` — 3-way model compare trên canonical 
 - Parity: §5 — S3 sinh harness riêng, là điều kiện mở S4.
 - Gates: verify.sh thêm `--workspace` vào 3 lệnh cargo (check/fmt/clippy — manifest src-tauri
   là package + workspace root, không có flag cargo chỉ chạy package gốc) + `check-licenses.mjs`
-  phủ graph crate tự động (không gate mới). `cargo test` chạy `-p nanooffice-ooxml` thủ công
+  phủ graph crate tự động (không gate mới). `cargo test` chạy `-p wasenoffice-ooxml` thủ công
   theo convention hiện có (shell cũng vậy — 26 test = 23 shell + 3 crate).
 
 ## 8. Câu hỏi mở

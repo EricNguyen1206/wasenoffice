@@ -1,5 +1,5 @@
 #!/bin/bash
-# NanoOffice smoke gate — behavioral verification of the SAVE round-trip
+# WasenOffice smoke gate — behavioral verification of the SAVE round-trip
 # (TC-D01-11, the automation of the manual proof TC-D01-10 — docs/diagnostics.md
 # 28.09 T-010): open fixture → shim probe edits via asc_AddText + calls
 # asc_Save() (NO keystrokes — the T-003 lesson) → x2t converts Editor.bin +
@@ -20,9 +20,9 @@
 # gate breaks silently (same discipline as the frozen gate-9 contract).
 # Since T-053 the patterns + boilerplate live in harness/scripts/smoke-lib.sh.
 #
-# This is verify.sh gate 10. Marker: env NANO_OFFICE_SAVE_PROBE IS the probe
+# This is verify.sh gate 10. Marker: env WASEN_OFFICE_SAVE_PROBE IS the probe
 # text (src-tauri/src/lib.rs injects it verbatim as
-# __NANO_OFFICE_SAVE_PROBE_TEXT__), so the gate randomizes it per run — runs
+# __WASEN_OFFICE_SAVE_PROBE_TEXT__), so the gate randomizes it per run — runs
 # stay independent without touching any code.
 #
 # Usage: smoke-save.sh
@@ -37,10 +37,10 @@ cd "$ROOT"
 . "$ROOT/harness/scripts/smoke-lib.sh"
 
 TIMEOUT="${SMOKE_SAVE_TIMEOUT:-240}"
-LOG="$(mktemp /tmp/nanooffice-smoke-save-XXXXXX)"
-WORK="$(mktemp -d /tmp/nanooffice-smoke-save-XXXXXX)"
+LOG="$(mktemp /tmp/wasenoffice-smoke-save-XXXXXX)"
+WORK="$(mktemp -d /tmp/wasenoffice-smoke-save-XXXXXX)"
 FIXTURE="$WORK/t011.docx"
-MARKER="T011-$RANDOM-SAVED-BY-NANOOFFICE"
+MARKER="T011-$RANDOM-SAVED-BY-WASENOFFICE"
 PROBE_TEXT="$MARKER"
 if [ "${SMOKE_SAVE_NO_PROBE:-0}" = "1" ]; then PROBE_TEXT=""; fi
 
@@ -49,8 +49,8 @@ echo "smoke: fixture=$FIXTURE log=$LOG timeout=${TIMEOUT}s"
 echo "smoke: marker=$MARKER"
 if [ -z "$PROBE_TEXT" ]; then echo "smoke: COUNTERFACTUAL — probe disabled, this run MUST FAIL"; fi
 
-smoke_boot "NANO_OFFICE_OPEN=$FIXTURE" "NANO_OFFICE_SAVE_PROBE=$PROBE_TEXT" \
-  "NANO_OFFICE_DEVTOOLS=0" "RUST_LOG=info" "$LOG"
+smoke_boot "WASEN_OFFICE_OPEN=$FIXTURE" "WASEN_OFFICE_SAVE_PROBE=$PROBE_TEXT" \
+  "WASEN_OFFICE_DEVTOOLS=0" "RUST_LOG=info" "$LOG"
 
 save_signals() {
   smoke_save_evidence "$FIXTURE" "$MARKER" word/document.xml

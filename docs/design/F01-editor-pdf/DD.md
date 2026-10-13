@@ -18,7 +18,7 @@ type: design
 
 ## 1. Tổng quan
 
-Màn mở PDF của NanoOffice: WKWebView hosting **pdfeditor** — app này tái dùng
+Màn mở PDF của WasenOffice: WKWebView hosting **pdfeditor** — app này tái dùng
 sdkjs build `word` (observed: `pdfeditor` app require `sdkjs/word/sdk-all-min`) cộng lớp
 PDF riêng của engine (`sdkjs/pdf/src/engine/drawingfile.wasm`). Khác D01/E01/P01 ở điểm
 quan trọng nhất: **PDF KHÔNG qua x2t convert** — shell copy file gốc vào thư mục work và
@@ -30,7 +30,7 @@ fallback `folder + "/" + file_name(src)` khi Editor.bin thiếu trong
 
 ## 2. Bối cảnh & phạm vi
 
-- **Goals:** mở PDF local render đầy đủ trong shell NanoOffice (đích T-048); smoke gate
+- **Goals:** mở PDF local render đầy đủ trong shell WasenOffice (đích T-048); smoke gate
   behavioral tự động trong verify.sh (TC-F01-01).
 - **Non-goals:** save PDF (pipeline khác — `localSaveToDrawingFormat`, ghi nhận trong
   T-049) · form filling OCR (cắt) · sửa `upstream/`/`engines/`.

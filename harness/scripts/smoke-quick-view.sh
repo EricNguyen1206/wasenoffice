@@ -1,6 +1,6 @@
 #!/bin/bash
-# NanoOffice smoke gate 12 — quick-view metrics (T-V2, Track A rung A3):
-# boots the app with NANO_OFFICE_QUICK_VIEW (viewer slice — NO engine, no x2t,
+# WasenOffice smoke gate 12 — quick-view metrics (T-V2, Track A rung A3):
+# boots the app with WASEN_OFFICE_QUICK_VIEW (viewer slice — NO engine, no x2t,
 # no shim) against the layout fixture and asserts, on the log:
 #   1. `viewer first-draw N ms` with N < 500          (rung-A3 open budget; DD V01 §5)
 #   2. `viewer layout:` coordinates behave: every baseline delta equals the
@@ -35,8 +35,8 @@ cd "$ROOT"
 TIMEOUT="${SMOKE_QUICK_VIEW_TIMEOUT:-240}"
 MAX_MS="${QUICK_VIEW_MAX_MS:-500}"
 MAX_MB="${QUICK_VIEW_MAX_MB:-300}"
-FIXTURE=/tmp/nanooffice-quickview-layout.docx
-LOG="$(mktemp /tmp/nanooffice-smoke-quickview-XXXXXX)"
+FIXTURE=/tmp/wasenoffice-quickview-layout.docx
+LOG="$(mktemp /tmp/wasenoffice-smoke-quickview-XXXXXX)"
 
 python3 "$ROOT/harness/fixtures/make_docx_layout.py" "$FIXTURE" >/dev/null || {
   echo "smoke: cannot generate layout fixture"; exit 1;
@@ -45,7 +45,7 @@ python3 "$ROOT/harness/fixtures/make_docx_layout.py" "$FIXTURE" >/dev/null || {
 smoke_init "$FIXTURE"
 echo "smoke: fixture=$FIXTURE log=$LOG timeout=${TIMEOUT}s budgets=${MAX_MS}ms/${MAX_MB}MB"
 
-smoke_boot "NANO_OFFICE_QUICK_VIEW=$FIXTURE" "NANO_OFFICE_QV_HITTEST=1" "NANO_OFFICE_DEVTOOLS=0" "RUST_LOG=info" "$LOG"
+smoke_boot "WASEN_OFFICE_QUICK_VIEW=$FIXTURE" "WASEN_OFFICE_QV_HITTEST=1" "WASEN_OFFICE_DEVTOOLS=0" "RUST_LOG=info" "$LOG"
 
 quick_view_signals() {
   if grep -q "$SMOKE_RE_QV_FAILED" "$LOG" 2>/dev/null; then
@@ -133,7 +133,7 @@ for i in range(len(media) - 1):
 # boundary offsets). The exact per-coordinate semantics live in gate 14
 # (test-layout.sh); here we assert the E2E wiring on the real model.
 m = re.search(r"viewer hit-test: (\d+)/(\d+) lines ok", text)
-need(m, "no hit-test line (NANO_OFFICE_QV_HITTEST probe missing?)")
+need(m, "no hit-test line (WASEN_OFFICE_QV_HITTEST probe missing?)")
 need(int(m.group(1)) == int(m.group(2)) == lines,
      f"hit-test {m.group(1)}/{m.group(2)} != {lines} lines — inverse mapping regressed")
 need("viewer hit-test FAIL" not in text, "hit-test FAIL line present")
@@ -155,7 +155,7 @@ if smoke_poll "$TIMEOUT" quick_view_signals "quick-view evidence"; then
     local parent="$1" p
     for p in $(pgrep -P "$parent" 2>/dev/null); do
       case "$(ps -o command= -p "$p" 2>/dev/null)" in
-        *target/debug/nanooffice*) VIEWER_APP_PID="$p"; return 0 ;;
+        *target/debug/wasenoffice*) VIEWER_APP_PID="$p"; return 0 ;;
       esac
       find_app_pid "$p"
     done

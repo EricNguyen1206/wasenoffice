@@ -18,7 +18,7 @@
 //! One home for both flavors (T-054): `js_raw` (disk paths, the x2t flavor
 //! written for `<m_sAllFontsPath>`/`<m_sFontDir>`) and the loopback-URL flavor
 //! the engine fetches (`engine_flavor_js`/`rewrite_font_paths` below) —
-//! filesrv and the `nanooffice-engine://` handler are consumers importing
+//! filesrv and the `wasenoffice-engine://` handler are consumers importing
 //! from here. Same source string → engine indexes and x2t indexes are
 //! identical by construction.
 
@@ -32,7 +32,7 @@ use std::sync::OnceLock;
 // so the producer owns its table — consumers import, no upstream `super::`)
 // ---------------------------------------------------------------------------
 
-/// Font URL namespaces reachable through `nanooffice-engine://localhost/fonts/<root>/<enc>`
+/// Font URL namespaces reachable through `wasenoffice-engine://localhost/fonts/<root>/<enc>`
 /// (and the loopback mirror `/fonts/<root>/…`) — mirrors the roots listed in the
 /// installed app's generated AllFonts.js (observed 22.09.2026: only these two).
 /// Since T-A11 these roots are what this module enumerates to GENERATE the
@@ -55,12 +55,12 @@ pub(crate) fn font_root_disk(url_root: &str) -> Option<PathBuf> {
     }
 }
 
-/// Locate `engines/` without hardcoding disk layout: `$NANO_OFFICE_ENGINES`,
+/// Locate `engines/` without hardcoding disk layout: `$WASEN_OFFICE_ENGINES`,
 /// else walk up from the current dir looking for `engines/editors/sdkjs`.
 /// (T-054: moved from protocol/mod.rs — the font bundle root and the engine
 /// assets share this discovery; mod.rs/filesrv now import it from here.)
 pub(crate) fn engines_root() -> Option<PathBuf> {
-    if let Ok(dir) = std::env::var("NANO_OFFICE_ENGINES") {
+    if let Ok(dir) = std::env::var("WASEN_OFFICE_ENGINES") {
         let p = PathBuf::from(dir);
         if p.join("editors/sdkjs").is_dir() {
             return Some(p);
@@ -233,7 +233,7 @@ pub(crate) fn ensure_written() -> Option<PathBuf> {
     WRITTEN
         .get_or_init(|| {
             let fonts = generated().as_ref()?;
-            let dir = std::env::temp_dir().join("nanooffice-allfonts");
+            let dir = std::env::temp_dir().join("wasenoffice-allfonts");
             std::fs::create_dir_all(&dir).ok()?;
             let path = dir.join("AllFonts.js");
             std::fs::write(&path, fonts.js_raw()).ok()?;
@@ -1049,7 +1049,7 @@ mod tests {
 
         // unique per call — tests sharing the file run in parallel threads
         let path = std::env::temp_dir().join(format!(
-            "nanooffice-test-synthetic-{}.ttf",
+            "wasenoffice-test-synthetic-{}.ttf",
             N.fetch_add(1, Ordering::SeqCst)
         ));
         std::fs::write(&path, &dir).expect("write synthetic font");
@@ -1166,9 +1166,9 @@ mod tests {
                     .join("\t")
             ));
         }
-        std::fs::write("/tmp/nanooffice-allfonts-dump.txt", out).unwrap();
+        std::fs::write("/tmp/wasenoffice-allfonts-dump.txt", out).unwrap();
         eprintln!(
-            "dump: {} files / {} faces / {} families / {} ranges → /tmp/nanooffice-allfonts-dump.txt",
+            "dump: {} files / {} faces / {} families / {} ranges → /tmp/wasenoffice-allfonts-dump.txt",
             fonts.files.len(),
             fonts.faces.len(),
             fonts.infos.len(),

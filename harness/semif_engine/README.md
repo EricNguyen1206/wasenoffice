@@ -2,7 +2,7 @@
 
 Engine quyết định phản xạ: nhận `state` + câu hỏi có kiểu → **1 forward pass** đọc trực tiếp
 phân phối xác suất từ logits của answer-letter token — **0 token suy luận, không sinh text**.
-KHÔNG thuộc sản phẩm NanoOffice — chỉ phục vụ agent trong repo.
+KHÔNG thuộc sản phẩm WasenOffice — chỉ phục vụ agent trong repo.
 
 ## Nguồn & license
 

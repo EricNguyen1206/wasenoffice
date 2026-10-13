@@ -3,7 +3,7 @@
 extended by T-V3 (A3/V3) with two body images.
 
 Usage: make_docx_layout.py [output.docx]
-  (default: /tmp/nanooffice-quickview-layout.docx)
+  (default: /tmp/wasenoffice-quickview-layout.docx)
 
 Built for the layout gate's assertions (harness/scripts/smoke-quick-view.sh):
 uniform runs — every run inherits the same font + size from w:docDefaults
@@ -83,7 +83,7 @@ FILLER = (
 ) * 8
 
 MEDIUM = (
-    "NanoOffice renders this paragraph through its own layout engine: "
+    "WasenOffice renders this paragraph through its own layout engine: "
     "greedy line breaking against the text column derived from the A4 "
     "page size, advances measured by the platform text stack, and line "
     "heights taken from the bundled font metrics."
@@ -127,7 +127,7 @@ def document_xml(with_table: bool = False, with_fidelity: bool = False,
                  with_tracked: bool = False, with_tblstyle: bool = False):
     title = '<w:r><w:t xml:space="preserve">Quick view layout fixture</w:t></w:r>'
     if with_tracked:
-        title = f'<w:ins w:id="1" w:date="2026-10-04T00:00:00Z" w:author="NanoOffice">{title}</w:ins>'
+        title = f'<w:ins w:id="1" w:date="2026-10-04T00:00:00Z" w:author="WasenOffice">{title}</w:ins>'
     body = [f"<w:p>{title}</w:p>", p(FILLER), TAB_PARA]
     if with_fidelity:
         body += [FIDELITY_LINK_PARA, FIDELITY_SECT_PARA]
@@ -154,7 +154,7 @@ def document_xml(with_table: bool = False, with_fidelity: bool = False,
 
 
 def main():
-    out = sys.argv[1] if len(sys.argv) > 1 else "/tmp/nanooffice-quickview-layout.docx"
+    out = sys.argv[1] if len(sys.argv) > 1 else "/tmp/wasenoffice-quickview-layout.docx"
     flags = set(sys.argv[2:])
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         content_types, root_rels, doc_rels = CONTENT_TYPES, ROOT_RELS, DOC_RELS

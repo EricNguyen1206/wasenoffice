@@ -22,7 +22,7 @@ type: test
 
 - Fixture: `harness/fixtures/make_pptx.py` (stdlib, ECMA-376 PresentationML; tiếng Việt
   có dấu; 1 slide + 1 master + 1 layout + 1 theme — bộ part tối giản).
-- Lệnh gate: `harness/scripts/smoke-render.sh /tmp/nanooffice-smoke-fixture.pptx`
+- Lệnh gate: `harness/scripts/smoke-render.sh /tmp/wasenoffice-smoke-fixture.pptx`
   (verify.sh chạy tự động — T-048).
 
 ## 3. Test cases

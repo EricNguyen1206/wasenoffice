@@ -1,5 +1,5 @@
 #!/bin/bash
-# NanoOffice gate 14 — layout-core unit tests (T-V7): the PURE layout module
+# WasenOffice gate 14 — layout-core unit tests (T-V7): the PURE layout module
 # (src/viewer/layout.ts) compiled with the repo's tsc and run under plain
 # node — no DOM, no canvas, no test framework. The measurer is a fixed
 # 10px/char fake, so the hit-test assertions are exact hand-computed
@@ -10,7 +10,7 @@
 set -u
 cd "$(dirname "$0")/../.."
 
-OUT="$(mktemp -d /tmp/nanooffice-layout-test-XXXXXX)"
+OUT="$(mktemp -d /tmp/wasenoffice-layout-test-XXXXXX)"
 trap 'rm -rf "$OUT"' EXIT
 
 # NODENEXT: the test imports './layout.js' — tsc resolves it to the .ts

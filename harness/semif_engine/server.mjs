@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// NanoOffice SemIf engine — System-1 decision service (direct logit readout, dev-harness only).
+// WasenOffice SemIf engine — System-1 decision service (direct logit readout, dev-harness only).
 //
 // Nguồn method: SemIf (MIT License) — https://github.com/theoleecj/semif
 // (HEAD ca3ba65, clone 2026-09-21). Copyright (c) 2026 TheoLeeCJ. SemIf formerly = OpenJev.

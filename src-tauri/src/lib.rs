@@ -1,8 +1,8 @@
-//! NanoOffice — Rust shell around the ONLYOFFICE editing engine.
+//! WasenOffice — Rust shell around the ONLYOFFICE editing engine.
 //!
 //! Modules:
 //! - `bridge`   : shim of `window.AscDesktopEditor` (~130 methods, see docs/reference.map.md)
-//! - `protocol` : `nanooffice-engine://` assets + `nanooffice-file://` user documents
+//! - `protocol` : `wasenoffice-engine://` assets + `wasenoffice-file://` user documents
 //! - `sidecar`  : x2t converter seam — binary resolution + `convert()` (T-A14)
 //! - `formats`  : format registry + per-document workdir layout (T-052)
 //! - `viewer`   : quick-view command layer (V01 — parse-only, no engine)
@@ -36,7 +36,7 @@ use protocol::FileRegistry;
 const BRIDGE_JS: &str = include_str!("../../src/shim/desktopEditor.js");
 
 /// Open-delivery chain JS (T-045) — MUST be injected AFTER BRIDGE_JS in every
-/// frame (it consumes `window.__nanooffice_shim`, published by the bridge) and
+/// frame (it consumes `window.__wasenoffice_shim`, published by the bridge) and
 /// imported after it in src/main.ts. Same vite double-duty as BRIDGE_JS.
 const DELIVERY_JS: &str = include_str!("../../src/shim/delivery.js");
 
@@ -88,7 +88,7 @@ pub struct OpenedDocument {
     file_id: u32,
 }
 
-/// Startup document (env `NANO_OFFICE_OPEN`), consumed once by the start page.
+/// Startup document (env `WASEN_OFFICE_OPEN`), consumed once by the start page.
 #[tauri::command]
 fn get_startup_document(
     window: tauri::WebviewWindow,
@@ -297,12 +297,12 @@ pub fn run() {
             frontend_log,
             viewer::viewer_open,
             viewer::viewer_view,
-            editor::nano_light_view,
-            editor::nano_light_reopen,
-            editor::nano_light_open,
-            editor::nano_light_edit,
-            editor::nano_light_save,
-            editor::nano_light_close_tab
+            editor::wasen_light_view,
+            editor::wasen_light_reopen,
+            editor::wasen_light_open,
+            editor::wasen_light_edit,
+            editor::wasen_light_save,
+            editor::wasen_light_close_tab
         ])
         .setup(|app| {
             // Engine-facing document URLs must be loopback HTTP (see filesrv docs).
@@ -325,7 +325,7 @@ pub fn run() {
     #[cfg(target_os = "macos")]
     if config.background {
         app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-        log::info!("background: accessory activation policy (NANO_OFFICE_BACKGROUND)");
+        log::info!("background: accessory activation policy (WASEN_OFFICE_BACKGROUND)");
     }
 
     app.run(|_app_handle, _event| {});

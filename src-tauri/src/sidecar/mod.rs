@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 /// x2t sidecar binary — resolution order (T-A10, Track A rung A1):
-/// 1. env `NANO_OFFICE_X2T` (tests / custom builds) — honored only when the
+/// 1. env `WASEN_OFFICE_X2T` (tests / custom builds) — honored only when the
 ///    file exists, so a bogus value falls through to the bundled converter
 ///    (the T-A10 counterfactual relies on that). The resolved path is logged:
 ///    gate 11 asserts 0 `/Applications/ONLYOFFICE` references in the whole
@@ -31,7 +31,7 @@ use std::time::{Duration, Instant};
 ///    `harness/scripts/bundle-x2t.sh`), found by walking up from the exe dir
 ///    and the cwd — dev trees have the repo root 3 levels above target/debug
 /// 3. installed ONLYOFFICE.app fallback — logged as WARN; DISABLED under
-///    clean-machine mode (`NANO_OFFICE_NO_APP_FALLBACK`), which turns a
+///    clean-machine mode (`WASEN_OFFICE_NO_APP_FALLBACK`), which turns a
 ///    missing bundled converter into a hard error instead (T-A13, gate 11)
 pub fn x2t_path() -> String {
     x2t_path_in(&discovery_roots())
@@ -40,13 +40,13 @@ pub fn x2t_path() -> String {
 /// Same resolution over explicit discovery roots — the resolution-order pin
 /// for tests (tmp dirs + env, never the real /Applications tree).
 fn x2t_path_in(roots: &[PathBuf]) -> String {
-    if let Ok(p) = std::env::var("NANO_OFFICE_X2T") {
+    if let Ok(p) = std::env::var("WASEN_OFFICE_X2T") {
         if !p.is_empty() {
             if Path::new(&p).is_file() {
-                log::info!("[x2t] using NANO_OFFICE_X2T override: {p}");
+                log::info!("[x2t] using WASEN_OFFICE_X2T override: {p}");
                 return p;
             }
-            log::warn!("x2t: NANO_OFFICE_X2T points to a missing file ({p}) — ignoring");
+            log::warn!("x2t: WASEN_OFFICE_X2T points to a missing file ({p}) — ignoring");
         }
     }
     if let Some(p) = find_bundled_x2t_in(roots) {
@@ -54,7 +54,7 @@ fn x2t_path_in(roots: &[PathBuf]) -> String {
     }
     if no_app_fallback() {
         log::error!(
-            "x2t: clean-machine mode (NANO_OFFICE_NO_APP_FALLBACK set): bundled converter engines/converter/{}/x2t not found — app fallback disabled",
+            "x2t: clean-machine mode (WASEN_OFFICE_NO_APP_FALLBACK set): bundled converter engines/converter/{}/x2t not found — app fallback disabled",
             target_dir_name()
         );
         return String::new();
@@ -66,12 +66,12 @@ fn x2t_path_in(roots: &[PathBuf]) -> String {
     "/Applications/ONLYOFFICE.app/Contents/Resources/converter/x2t".to_string()
 }
 
-/// Clean-machine mode (`NANO_OFFICE_NO_APP_FALLBACK`): set (to anything but
+/// Clean-machine mode (`WASEN_OFFICE_NO_APP_FALLBACK`): set (to anything but
 /// "0") the installed-app fallback is off and a missing bundled converter
 /// fails loudly. Gate 11 boots the app with this always on; a dev opts out
 /// explicitly to test the fallback path.
 fn no_app_fallback() -> bool {
-    match std::env::var("NANO_OFFICE_NO_APP_FALLBACK") {
+    match std::env::var("WASEN_OFFICE_NO_APP_FALLBACK") {
         Ok(v) => v != "0",
         Err(_) => false,
     }
@@ -227,7 +227,7 @@ pub fn convert(req: &ConvertRequest<'_>) -> Result<ConvertResult, ConvertError> 
 /// Editor.bin (Editor.bin itself stays x2t's until A4 — DD K01 §2 P2). A file
 /// the crate refuses must still open exactly as before → any parse/write
 /// error only WARNs and falls back to the original bytes. Kill switch
-/// `NANO_OFFICE_NO_RUST_CONVERTER` (set ≠ "0", like `NO_APP_FALLBACK`)
+/// `WASEN_OFFICE_NO_RUST_CONVERTER` (set ≠ "0", like `NO_APP_FALLBACK`)
 /// restores the direct path — counterfactual + rollback.
 fn rust_canonical(src: &Path, dst: &Path) -> Option<PathBuf> {
     let is_docx = src
@@ -237,9 +237,9 @@ fn rust_canonical(src: &Path, dst: &Path) -> Option<PathBuf> {
     if !is_docx {
         return None; // crate scope: docx today (xlsx/pptx = S5)
     }
-    if matches!(std::env::var("NANO_OFFICE_NO_RUST_CONVERTER"), Ok(v) if v != "0") {
+    if matches!(std::env::var("WASEN_OFFICE_NO_RUST_CONVERTER"), Ok(v) if v != "0") {
         log::info!(
-            "converter: rust-canonical OFF (NANO_OFFICE_NO_RUST_CONVERTER set) — x2t direct"
+            "converter: rust-canonical OFF (WASEN_OFFICE_NO_RUST_CONVERTER set) — x2t direct"
         );
         return None;
     }
@@ -248,12 +248,12 @@ fn rust_canonical(src: &Path, dst: &Path) -> Option<PathBuf> {
     let outcome = std::fs::read(src)
         .map_err(|e| format!("read: {e}"))
         .and_then(|bytes| {
-            nanooffice_ooxml::parse_docx(&bytes)
+            wasenoffice_ooxml::parse_docx(&bytes)
                 .map_err(|e| e.to_string())
                 .and_then(|doc| {
                     // source bytes go back in: media parts must survive the
                     // canonical re-serialize byte-exact (T-A26)
-                    nanooffice_ooxml::write_docx_file(&doc, Some(&bytes), &canonical)
+                    wasenoffice_ooxml::write_docx_file(&doc, Some(&bytes), &canonical)
                         .map_err(|e| e.to_string())
                 })
         });
@@ -304,7 +304,7 @@ mod tests {
     use super::*;
 
     fn tmp(tag: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("nanooffice-test-sidecar-{tag}"));
+        let dir = std::env::temp_dir().join(format!("wasenoffice-test-sidecar-{tag}"));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir
@@ -342,13 +342,13 @@ mod tests {
         let env_file = dir.join("override-x2t");
         std::fs::write(&env_file, b"").unwrap();
 
-        let saved_override = std::env::var("NANO_OFFICE_X2T").ok();
-        let saved_strict = std::env::var("NANO_OFFICE_NO_APP_FALLBACK").ok();
-        std::env::remove_var("NANO_OFFICE_X2T");
-        std::env::remove_var("NANO_OFFICE_NO_APP_FALLBACK");
+        let saved_override = std::env::var("WASEN_OFFICE_X2T").ok();
+        let saved_strict = std::env::var("WASEN_OFFICE_NO_APP_FALLBACK").ok();
+        std::env::remove_var("WASEN_OFFICE_X2T");
+        std::env::remove_var("WASEN_OFFICE_NO_APP_FALLBACK");
 
         // 1. env override pointing at an EXISTING file wins over bundled
-        std::env::set_var("NANO_OFFICE_X2T", &env_file);
+        std::env::set_var("WASEN_OFFICE_X2T", &env_file);
         assert_eq!(
             x2t_path_in(&[bundle_root.clone()]),
             env_file.to_string_lossy().into_owned()
@@ -356,7 +356,7 @@ mod tests {
 
         // 2. bogus env (missing file) is ignored → falls through to bundled
         std::env::set_var(
-            "NANO_OFFICE_X2T",
+            "WASEN_OFFICE_X2T",
             dir.join("missing-x2t").to_string_lossy().into_owned(),
         );
         assert_eq!(
@@ -365,12 +365,12 @@ mod tests {
         );
 
         // 3. no env, no bundled, strict mode → hard error (empty path)
-        std::env::remove_var("NANO_OFFICE_X2T");
-        std::env::set_var("NANO_OFFICE_NO_APP_FALLBACK", "1");
+        std::env::remove_var("WASEN_OFFICE_X2T");
+        std::env::set_var("WASEN_OFFICE_NO_APP_FALLBACK", "1");
         assert_eq!(x2t_path_in(&[empty_root.clone()]), "");
 
         // 4. no env, no bundled, no strict → installed-app fallback constant
-        std::env::remove_var("NANO_OFFICE_NO_APP_FALLBACK");
+        std::env::remove_var("WASEN_OFFICE_NO_APP_FALLBACK");
         assert_eq!(
             x2t_path_in(&[empty_root.clone()]),
             "/Applications/ONLYOFFICE.app/Contents/Resources/converter/x2t"
@@ -378,12 +378,12 @@ mod tests {
 
         // restore whatever the environment had before the test
         match saved_override {
-            Some(v) => std::env::set_var("NANO_OFFICE_X2T", v),
-            None => std::env::remove_var("NANO_OFFICE_X2T"),
+            Some(v) => std::env::set_var("WASEN_OFFICE_X2T", v),
+            None => std::env::remove_var("WASEN_OFFICE_X2T"),
         }
         match saved_strict {
-            Some(v) => std::env::set_var("NANO_OFFICE_NO_APP_FALLBACK", v),
-            None => std::env::remove_var("NANO_OFFICE_NO_APP_FALLBACK"),
+            Some(v) => std::env::set_var("WASEN_OFFICE_NO_APP_FALLBACK", v),
+            None => std::env::remove_var("WASEN_OFFICE_NO_APP_FALLBACK"),
         }
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -418,8 +418,8 @@ mod tests {
         std::fs::write(&failing, "#!/bin/sh\necho boom >&2\nexit 3\n").unwrap();
         std::fs::set_permissions(&failing, std::fs::Permissions::from_mode(0o755)).unwrap();
 
-        let saved_override = std::env::var("NANO_OFFICE_X2T").ok();
-        std::env::set_var("NANO_OFFICE_X2T", &fake);
+        let saved_override = std::env::var("WASEN_OFFICE_X2T").ok();
+        std::env::set_var("WASEN_OFFICE_X2T", &fake);
 
         // (a) OpenBinary: success = dst exists (fake copies)
         let src = dir.join("in.docy");
@@ -451,7 +451,7 @@ mod tests {
         assert!(out.metadata().is_ok_and(|m| m.len() > 0));
 
         // (b') failing converter → the historical save-side error note
-        std::env::set_var("NANO_OFFICE_X2T", &failing);
+        std::env::set_var("WASEN_OFFICE_X2T", &failing);
         let err = convert(&ConvertRequest::SaveFromChanges {
             params_xml: &params,
             output: &out,
@@ -474,11 +474,11 @@ mod tests {
         // (d) T-A24 adapter: a .docx source round-trips through the crate —
         // canonical.docx lands next to Editor.bin and is what x2t receives
         // (b' left the env on the failing converter — back to the fake one)
-        std::env::set_var("NANO_OFFICE_X2T", &fake);
-        let doc = nanooffice_ooxml::Document {
-            body: vec![nanooffice_ooxml::Block::Paragraph(
-                nanooffice_ooxml::Paragraph {
-                    runs: vec![nanooffice_ooxml::Run {
+        std::env::set_var("WASEN_OFFICE_X2T", &fake);
+        let doc = wasenoffice_ooxml::Document {
+            body: vec![wasenoffice_ooxml::Block::Paragraph(
+                wasenoffice_ooxml::Paragraph {
+                    runs: vec![wasenoffice_ooxml::Run {
                         text: "adapter".into(),
                         ..Default::default()
                     }],
@@ -494,7 +494,7 @@ mod tests {
             page_mar: None,
         };
         let docx = dir.join("t24.docx");
-        nanooffice_ooxml::write_docx_file(&doc, None, &docx).unwrap();
+        wasenoffice_ooxml::write_docx_file(&doc, None, &docx).unwrap();
         let dst2 = dir.join("Editor2.bin");
         let canonical = dir.join("canonical.docx");
         convert(&ConvertRequest::OpenBinary {
@@ -527,11 +527,11 @@ mod tests {
             "fallback must not leave a canonical copy"
         );
 
-        // (f) kill switch NANO_OFFICE_NO_RUST_CONVERTER → direct path, no
+        // (f) kill switch WASEN_OFFICE_NO_RUST_CONVERTER → direct path, no
         // canonical copy even for a file the crate would accept
-        nanooffice_ooxml::write_docx_file(&doc, None, &docx).unwrap();
-        let saved_switch = std::env::var("NANO_OFFICE_NO_RUST_CONVERTER").ok();
-        std::env::set_var("NANO_OFFICE_NO_RUST_CONVERTER", "1");
+        wasenoffice_ooxml::write_docx_file(&doc, None, &docx).unwrap();
+        let saved_switch = std::env::var("WASEN_OFFICE_NO_RUST_CONVERTER").ok();
+        std::env::set_var("WASEN_OFFICE_NO_RUST_CONVERTER", "1");
         convert(&ConvertRequest::OpenBinary {
             src: &docx,
             dst: &dst2,
@@ -543,12 +543,12 @@ mod tests {
         );
 
         match saved_override {
-            Some(v) => std::env::set_var("NANO_OFFICE_X2T", v),
-            None => std::env::remove_var("NANO_OFFICE_X2T"),
+            Some(v) => std::env::set_var("WASEN_OFFICE_X2T", v),
+            None => std::env::remove_var("WASEN_OFFICE_X2T"),
         }
         match saved_switch {
-            Some(v) => std::env::set_var("NANO_OFFICE_NO_RUST_CONVERTER", v),
-            None => std::env::remove_var("NANO_OFFICE_NO_RUST_CONVERTER"),
+            Some(v) => std::env::set_var("WASEN_OFFICE_NO_RUST_CONVERTER", v),
+            None => std::env::remove_var("WASEN_OFFICE_NO_RUST_CONVERTER"),
         }
         let _ = std::fs::remove_dir_all(&dir);
     }

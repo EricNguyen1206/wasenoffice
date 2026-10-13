@@ -8,11 +8,11 @@ import { check } from '@tauri-apps/plugin-updater';
  * Boot path mirrors the ONLYOFFICE desktop app (desktop-sdk applicationmanager.cpp:89
  * opens `editors/web-apps/apps/api/documents/index.html`): that page reads query
  * params (url/title/filetype/key/doctype/mode/lang/username) and creates the
- * DocsAPI.DocEditor itself — everything on the `nanooffice-engine://` origin,
+ * DocsAPI.DocEditor itself — everything on the `wasenoffice-engine://` origin,
  * so document + fonts + engine assets are same-origin.
- * The document URL flows through `nanooffice-file://<id>/<name>` (disk path stays in Rust).
+ * The document URL flows through `wasenoffice-file://<id>/<name>` (disk path stays in Rust).
  * Shim load order is load-bearing: desktopEditor.js (bridge + shared plumbing)
- * before delivery.js (open-delivery chain, consumes window.__nanooffice_shim).
+ * before delivery.js (open-delivery chain, consumes window.__wasenoffice_shim).
  */
 
 /**
@@ -66,7 +66,7 @@ interface OpenedDoc {
 async function mountEditor(doc: OpenedDoc): Promise<void> {
   // T-059: single choke point of every opened doc — the relay (shim) reads
   // this stamp to key delivery/save on THIS document, never "latest".
-  (window as unknown as { __nanooffice_file_id__?: number }).__nanooffice_file_id__ =
+  (window as unknown as { __wasenoffice_file_id__?: number }).__wasenoffice_file_id__ =
     doc.fileId;
   const boot = await getBootPage();
   const ext = doc.name.includes('.') ? doc.name.split('.').pop()!.toLowerCase() : '';
@@ -140,7 +140,7 @@ async function nanoLight(path: string): Promise<void> {
   }
   logLine(`nano light: ${path}`);
   try {
-    await invoke('nano_light_view', { path });
+    await invoke('wasen_light_view', { path });
   } catch (err) {
     logLine(`ERROR: ${err}`);
   }
@@ -197,10 +197,10 @@ document.querySelector<HTMLButtonElement>('#nano-light-btn')!.addEventListener('
   if (pathInput.value.trim()) void nanoLight(pathInput.value.trim());
 });
 
-// V5 UX E2E driver (gate 13; NANO_OFFICE_UX_PROBE, pattern SAVE_PROBE): fill
+// V5 UX E2E driver (gate 13; WASEN_OFFICE_UX_PROBE, pattern SAVE_PROBE): fill
 // the input and click the real Quick view button — the genuine handler chain
 // runs. No env → this block never does anything (product default untouched).
-const uxProbe = (window as unknown as { __NANO_OFFICE_UX_PROBE__?: string }).__NANO_OFFICE_UX_PROBE__;
+const uxProbe = (window as unknown as { __WASEN_OFFICE_UX_PROBE__?: string }).__WASEN_OFFICE_UX_PROBE__;
 if (uxProbe) {
   pathInput.value = uxProbe;
   document.querySelector<HTMLButtonElement>('#quick-view-btn')!.click();
@@ -229,7 +229,7 @@ window.addEventListener('unhandledrejection', (ev) => {
   }).catch(() => {});
 });
 
-// Startup document (env NANO_OFFICE_OPEN, already registered in Rust).
+// Startup document (env WASEN_OFFICE_OPEN, already registered in Rust).
 void invoke<OpenedDoc | null>('get_startup_document')
   .then((doc) => {
     if (doc) mountEditor(doc);

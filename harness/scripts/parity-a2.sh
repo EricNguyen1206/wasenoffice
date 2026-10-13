@@ -1,5 +1,5 @@
 #!/bin/bash
-# NanoOffice parity harness — A2/S3 (T-A23): crate nanooffice-ooxml ↔ x2t,
+# WasenOffice parity harness — A2/S3 (T-A23): crate wasenoffice-ooxml ↔ x2t,
 # measured on the MODEL (docs/design/converter-a2/DD.md §5) — never on bytes.
 #
 # For each corpus docx:
@@ -7,7 +7,7 @@
 #       two shapes the shell uses, sidecar/mod.rs): docx → Editor.bin
 #       (positional; success = bin exists) → docx (params XML; success = exit 0
 #       + non-empty output).
-#   (b) crate round-trip: parse → write via the nanooffice-ooxml CLI.
+#   (b) crate round-trip: parse → write via the wasenoffice-ooxml CLI.
 #   (c) 3-way model compare on canonical JSON (CLI parse output; BTreeMaps are
 #       key-sorted, so the JSON is a canonical model encoding):
 #         m-orig  = parse(input)
@@ -38,23 +38,23 @@
 set -u
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-CLI="$ROOT/src-tauri/target/debug/nanooffice-ooxml"
+CLI="$ROOT/src-tauri/target/debug/wasenoffice-ooxml"
 
 # x2t resolution mirrors sidecar::x2t_path branch 1+2 (env override, then the
 # bundled converter; no app fallback here — parity measures OUR bundle).
-X2T="${NANO_OFFICE_X2T:-$ROOT/engines/converter/$(rustc -vV | sed -n 's/^host: *//p')/x2t}"
+X2T="${WASEN_OFFICE_X2T:-$ROOT/engines/converter/$(rustc -vV | sed -n 's/^host: *//p')/x2t}"
 [ -f "$X2T" ] || { echo "parity-a2: x2t not found at $X2T (bundle first: harness/scripts/bundle-x2t.sh)"; exit 2; }
 
-cargo build -p nanooffice-ooxml --manifest-path "$ROOT/src-tauri/Cargo.toml" --quiet \
+cargo build -p wasenoffice-ooxml --manifest-path "$ROOT/src-tauri/Cargo.toml" --quiet \
   || { echo "parity-a2: cargo build failed"; exit 2; }
 
 CORPUS=("$@")
 if [ ${#CORPUS[@]} -eq 0 ]; then
-  CORPUS=("$ROOT"/src-tauri/crates/nanooffice-ooxml/tests/fixtures/*.docx
+  CORPUS=("$ROOT"/src-tauri/crates/wasenoffice-ooxml/tests/fixtures/*.docx
           "$ROOT"/harness/fixtures/corpus-a2/*.docx)
 fi
 
-WORK="$(mktemp -d /tmp/nanooffice-parity-a2-XXXXXX)"
+WORK="$(mktemp -d /tmp/wasenoffice-parity-a2-XXXXXX)"
 FORMAT_TO_DOCX=65   # src-tauri/src/formats.rs — docx save code (65 = Wired)
 
 row() { printf '%-34s %-9s %-10s %s\n' "$1" "$2" "$3" "$4"; }

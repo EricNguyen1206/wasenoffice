@@ -2,7 +2,7 @@
 """Generate the V1-corpus DOCX fixture (stdlib only) for T-V1 (A3/V1).
 
 Usage: make_docx_v1.py [output.docx]
-  (default: src-tauri/crates/nanooffice-ooxml/tests/fixtures/nanooffice-v1-fixture.docx)
+  (default: src-tauri/crates/wasenoffice-ooxml/tests/fixtures/wasenoffice-v1-fixture.docx)
 
 Covers the render-side constructs of DD V01 §3.2 the S1 corpus does not
 exercise, spec-derived from ECMA-376 / ISO 29500 (no upstream code involved):
@@ -109,7 +109,7 @@ def document_xml() -> str:
 
 def main():
     out = sys.argv[1] if len(sys.argv) > 1 else (
-        "src-tauri/crates/nanooffice-ooxml/tests/fixtures/nanooffice-v1-fixture.docx"
+        "src-tauri/crates/wasenoffice-ooxml/tests/fixtures/wasenoffice-v1-fixture.docx"
     )
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         for part, content in {

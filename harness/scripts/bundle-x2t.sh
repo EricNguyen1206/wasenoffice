@@ -82,4 +82,4 @@ ln -sfn ../editors "$ROOT/engines/converter/editors"
 # the frameworks — intentionally NOT copied (see header).
 SIZE="$(du -sh "$DEST" | cut -f1)"
 echo "bundle-x2t: done — x2t + DoctRenderer.config + $FOUND frameworks = $SIZE (+ engines/converter/editors → ../editors symlink)"
-echo "bundle-x2t: verify: NANO_OFFICE_X2T unset + ./harness/scripts/smoke-save.sh (gate 10 must log the engines/ path)"
+echo "bundle-x2t: verify: WASEN_OFFICE_X2T unset + ./harness/scripts/smoke-save.sh (gate 10 must log the engines/ path)"

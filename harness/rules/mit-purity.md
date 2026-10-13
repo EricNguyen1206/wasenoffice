@@ -1,6 +1,6 @@
 # Rule: MIT purity — bảo vệ biên license của code tự viết
 
-Mục tiêu (xem `docs/vision.md` Quyết định 1): code NanoOffice tự viết là **MIT, sạch vĩnh viễn**.
+Mục tiêu (xem `docs/vision.md` Quyết định 1): code WasenOffice tự viết là **MIT, sạch vĩnh viễn**.
 Rule này ràng buộc MỌI agent làm việc trong repo — agent chính lẫn subagent được spawn ra.
 
 ## Điều cấm tuyệt đối

@@ -20,7 +20,7 @@ Vòng 1 (task này): caret → gõ → xoá → enter → undo/redo → dirty �
 save-side cho đường riêng" mà DD K01 §2 P2 hẹn "giữ x2t đến A4").
 
 Nền có sẵn, không viết mới:
-- crate `nanooffice-ooxml` (K01): `Document` (CHƯA-resolve — bản ghi-ngược-được),
+- crate `wasenoffice-ooxml` (K01): `Document` (CHƯA-resolve — bản ghi-ngược-được),
   `resolve() → RenderDoc`, `write_docx(&Document, media_src)` round-trip bất biến +
   media byte-exact (T-A22/T-A26 đã proven).
 - `src/viewer/layout.ts` (T-V7): `layoutBlocks → LineModel` + `hitTest(x,y) →
@@ -49,8 +49,8 @@ window-scoped + undo + save-đường-crate; **C3** command layer song song deli
 | Caret vẽ | **Rect tĩnh (không blink) vòng 1**; forward-map `(para,run,offset) → (x, baseline)` = walk item của LineModel (`ri`/`charStart` công khai) + measurer — pure fn ở `editor.ts`, KHÔNG đụng layout.ts | Blink: nice-to-have, thêm timer + trạng thái — để slice sau nếu UX đòi; forward-map thêm vào layout.ts: module đang là asset đóng băng parity, thêm export vô ích rủi ro |
 | Selection kéo | **Ceiling slice sau** (shift+click/mũi tên) — ghi §8 | — |
 | Save | **`write_docx(&doc, Some(&media_src))` → tmp cạnh file gốc → rename** (pattern `save.rs`); đường save ENGINE giữ nguyên byte-identical | Qua Editor.bin/x2t: trái ý nghĩa rung (K01 §2: đường Nano Light là lúc thay) |
-| Entry UI | **Window riêng own-UI `editor.html` (entry vite thứ 3, nằm ROOT — gotcha V01)** không shim/engine; mở qua nút **"Nano Light"** trên start page (command `nano_light_view`) HOẶC env `NANO_OFFICE_NANO_LIGHT` (gate 15, pattern V5 env-trước) | Nhét editor vào window viewer: lẫn hai sản phẩm, viewer là read-only về mặt contract gate |
-| Gõ phím | **`keydown` trong webview** (printable / Backspace / Delete / Enter / Cmd-Z / Cmd-Shift-Z) → gọi command layer. Gate KHÔNG dùng keystroke thật (rule 6b cấm osascript) — probe env `NANO_OFFICE_NL_PROBE` chạy **cùng hàm edit** handler phím dùng | beforeinput/IME pipeline: vòng 1 không tiếng Việt composite (ghi §8), keydown đủ cho subset |
+| Entry UI | **Window riêng own-UI `editor.html` (entry vite thứ 3, nằm ROOT — gotcha V01)** không shim/engine; mở qua nút **"Nano Light"** trên start page (command `wasen_light_view`) HOẶC env `WASEN_OFFICE_NANO_LIGHT` (gate 15, pattern V5 env-trước) | Nhét editor vào window viewer: lẫn hai sản phẩm, viewer là read-only về mặt contract gate |
+| Gõ phím | **`keydown` trong webview** (printable / Backspace / Delete / Enter / Cmd-Z / Cmd-Shift-Z) → gọi command layer. Gate KHÔNG dùng keystroke thật (rule 6b cấm osascript) — probe env `WASEN_OFFICE_NL_PROBE` chạy **cùng hàm edit** handler phím dùng | beforeinput/IME pipeline: vòng 1 không tiếng Việt composite (ghi §8), keydown đủ cho subset |
 
 ## 3. Kiến trúc
 
@@ -60,23 +60,23 @@ src-tauri/src/editor.rs               ← C3: command layer Nano Light (song son
   EditorSession { doc: Document (chưa-resolve), media_src: Vec<u8>,
                   undo/redo: Vec<(Document, Caret)>, saved: Option<Document>,
                   file_id: u32, path: PathBuf }
-  commands: nano_light_view / nano_light_open / nano_light_edit / nano_light_save
+  commands: wasen_light_view / wasen_light_open / wasen_light_edit / wasen_light_save
 editor.html (root) + src/editor.ts    ← webview riêng, không shim; consume
                                         src/viewer/layout.ts NGUYÊN VẸN
-crates/nanooffice-ooxml (K01)         ← Document + resolve + write_docx (0 đổi)
+crates/wasenoffice-ooxml (K01)         ← Document + resolve + write_docx (0 đổi)
 ```
 
-- `nano_light_view(path)` (pattern `viewer_view` V5): validate → stash path →
+- `wasen_light_view(path)` (pattern `viewer_view` V5): validate → stash path →
   window `nanolight-<n>` focused(false) (rule 6b), không inject shim. Log
   `nano light view:`.
-- `nano_light_open(window)`: parse file → **giữ `Document` + bytes gốc trong session**
+- `wasen_light_open(window)`: parse file → **giữ `Document` + bytes gốc trong session**
   (thay cho DROP như `viewer_open` — review #4 C2) → register FileRegistry
   `owner=window-label` (media route) → trả `RenderDoc` + fonts + page + media_base
   (cùng shape payload `QuickView` — frontend viewer/editor dùng chung contract).
-- `nano_light_edit(window, cmd)`: mutate `Document` tại toạ độ hitTest → resolve lại
+- `wasen_light_edit(window, cmd)`: mutate `Document` tại toạ độ hitTest → resolve lại
   → trả `{doc, caret, dirty}` (undoDepth chỉ log Rust — không ai consume TS,
   cut ponytail). Log `nano light edit:`.
-- `nano_light_save(window)`: `write_docx` + tmp + rename → `saved = clone`, dirty=false.
+- `wasen_light_save(window)`: `write_docx` + tmp + rename → `saved = clone`, dirty=false.
   Log `nano light saved:`.
 - Cleanup: `WindowEvent::Destroyed` đã có sẵn ở lib.rs gọi `unregister_owner` (T-059);
   session map thêm hook cùng chỗ để drop session theo label.
@@ -154,8 +154,8 @@ matrix thì mới tính "thay được" — vòng 1 chỉ claim đúng dòng "gi
 ### 5.2 Kết quả slice L0 (03.10.2026 — T-A27)
 
 Vòng edit đầu chạy thật trên `make_docx_layout.py` (6 block: 4 text + 2 ảnh),
-debug build, boot nền env `NANO_OFFICE_NANO_LIGHT` + probe
-`NANO_OFFICE_NL_PROBE` (chuỗi: hitTest đặt caret → insert marker → insert " XY"
+debug build, boot nền env `WASEN_OFFICE_NANO_LIGHT` + probe
+`WASEN_OFFICE_NL_PROBE` (chuỗi: hitTest đặt caret → insert marker → insert " XY"
 → backspace ×3 → enter → insert dòng 2 → undo → redo → save → reopen window 2):
 
 | Đo | Số liệu | Đối chiếu |
@@ -611,7 +611,7 @@ document.xml của main part (byte pattern, không đụng model):
 | footnotes/endnotes | `<w:footnoteReference` · `<w:endnoteReference` |
 | sectPr lạ | block `<w:sectPr…</w:sectPr>` chứa con `<w:…>` khác pgSz/pgMar (pgMar mới vào model — còn lại = mất khi save) |
 
-UX shape: `nano_light_open` chạy detect trên bytes gốc → log ADDITIVE
+UX shape: `wasen_light_open` chạy detect trên bytes gốc → log ADDITIVE
 `nano light warn: save will drop: …` (hằng `SMOKE_RE_NL_WARN` vào khối đóng băng
 smoke-lib CÙNG commit emitting end) + payload `NanoLightDoc` +`warnings: string[]`
 (camelCase) → banner tạo động trong editor window (div gắn vào body — editor.html KHÔNG
@@ -666,11 +666,11 @@ editor+gate15 → b5ecd3c ponytail cuts):**
 
 | Bằng chứng | Kết quả | Ghi |
 |---|---|---|
-| Gate 15 positive | exit 0 ×2 (trước + sau cuts) — first-draw 50.0/99.0 ms (parse 7.8/4.7 ms) · save **3.2 ms / 4503 B** · parse-back: link target `https://example.com/nanooffice-fidelity` còn với **T31LINK trong link run** + anchor nội bộ còn + mid sectPr pgSz 11906/pgMar 1134/720 còn · **settings/theme/docProps sha256 == snapshot** · rels đã-save mang `TargetMode="External"` · **positive KHÔNG có `nano light warn:`** | đích < 500 ms xa |
+| Gate 15 positive | exit 0 ×2 (trước + sau cuts) — first-draw 50.0/99.0 ms (parse 7.8/4.7 ms) · save **3.2 ms / 4503 B** · parse-back: link target `https://example.com/wasenoffice-fidelity` còn với **T31LINK trong link run** + anchor nội bộ còn + mid sectPr pgSz 11906/pgMar 1134/720 còn · **settings/theme/docProps sha256 == snapshot** · rels đã-save mang `TargetMode="External"` · **positive KHÔNG có `nano light warn:`** | đích < 500 ms xa |
 | Gate 15 negative | **7/7 exit 1**: garbage · doctor · seldoctor · clipdoctor · celldoctor (re-proven trên fixture fidelity) · **linkdoctor** (đòi `WRONG-TARGET` — cắn trên target thật) · **warndoor** (fixture tiêm `w:ins` → warn thật `'save will drop: tracked changes'`, assert đòi 'hyperlinks' → cắn — detect bắn đúng đường open E2E) | pattern doctor T-A27..A30 |
 | parity-a2 | exit 0 **×2** (11 file, hard-fails 0) — corpus + `fidelity-ta31.docx`; INVARIANT 11/11; check (e) passthrough mới; diff fidelity 4 dòng = 2 lớp vô hại đã phân loại (hex lowercase + rel_id renumber — DD K01 §5.1) | x2t giữ nguyên link target qua oracle |
 | Gate 12/14 | số KHÔNG đổi: 16 dòng · 601.7 · 600.5 · 750,-250,220 · lhs 17.9 · RSS 133 MB; gate 14 **103 checks** | layout.ts 0 diff — parity-view không chạy (điều kiện chỉ khi đụng) |
-| Bonus engine-oracle | `smoke-render.sh <file-NL-đã-save>` exit 0 — file ghi bằng writer mới (hyperlink + 2 sectPr + 4 part passthrough) mở render GREEN trong ENGINE (canonical open-side T-A24 hưởng writer mới) | smoke log /tmp/nanooffice-smoke-ZoMhTL |
+| Bonus engine-oracle | `smoke-render.sh <file-NL-đã-save>` exit 0 — file ghi bằng writer mới (hyperlink + 2 sectPr + 4 part passthrough) mở render GREEN trong ENGINE (canonical open-side T-A24 hưởng writer mới) | smoke log /tmp/wasenoffice-smoke-ZoMhTL |
 | cargo test | 41 shell lib (+1 link/sect ride edits/undo/round-trip) + **16 crate** (+4: fidelity parse, detect flags/spares, fidelity round-trip byte-exact, passthrough-silent) rc=0 tuần tự | verify FULL exit 0 **19 ▸ steps** ×2 |
 
 Matrix §5.1: **6 dòng MẤT → GIỮ** (hyperlink, sectPr giữa, pgMar cuối, settings,
@@ -721,12 +721,12 @@ thật 'table styling').
   undo/redo往返 + dirty về sạch khi undo về điểm save; session map open/close theo
   window label.
 - **Gate 15** `harness/scripts/smoke-nano-light.sh` (pattern smoke-lib, thường trụ
-  verify.sh sau gate 14): boot nền env `NANO_OFFICE_NANO_LIGHT` + probe
-  `NANO_OFFICE_NL_PROBE=<marker>` → chuỗi edit thật (insert marker + " XY" →
+  verify.sh sau gate 14): boot nền env `WASEN_OFFICE_NANO_LIGHT` + probe
+  `WASEN_OFFICE_NL_PROBE=<marker>` → chuỗi edit thật (insert marker + " XY" →
   backspace ×3 → enter → insert dòng 2 → undo ×1 → redo ×1) → save → assert:
   `nano light first-draw` < 500 ms · `nano light edit:` ×chuỗi · `nano light saved:`
   · **parse lại bằng crate CLI → JSON chứa marker** · media part sha256 == snapshot
-  trước save · **window 2 (mở lại qua `nano_light_view`) render evidence chứa
+  trước save · **window 2 (mở lại qua `wasen_light_view`) render evidence chứa
   marker** · cấm `nano light failed:`.
   Negative ×2 exit 1: (a) doctor — post-check parse bản PRE-SAVE (marker không có
   → assert cắn, chứng minh assert đọc đúng file đã save); (b) .docx rác →

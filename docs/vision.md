@@ -58,9 +58,9 @@ riêng song song bridge.
 1. **Copilot** — command palette + inline generate/edit; drive editor qua config API sdkjs
    (cùng đường với thao tác người dùng).
 2. **Document intelligence local-first** — index + RAG + summarize trên máy user; dữ liệu
-   đi qua `nanooffice-file://`, index nằm ở Rust.
+   đi qua `wasenoffice-file://`, index nằm ở Rust.
 3. **Agent mode + MCP** — agent multi-step thao tác tài liệu qua bridge; export MCP server
-   để mọi AI client ngoài dùng được document ops của NanoOffice.
+   để mọi AI client ngoài dùng được document ops của WasenOffice.
 
 Model strategy: BYO-key cloud trước (0 byte tăng installer) → local model sau qua sidecar
 (llama.cpp/ONNX runtime, tái dùng pattern spawn/timeout/queue của `sidecar/`).
@@ -153,7 +153,7 @@ pattern "strangler fig". Sản phẩm xuất xưởng được ở **mọi rung*
 |---|---|---|
 | A0 ✅ | shell + bridge + save chain của mình | gates 9+10 GREEN (28.09) |
 | A1 ✅ | Tự chủ phân phối: bundle x2t + tự sinh AllFonts.js + font subset | ✅ **02.10.2026** — gate 11 "sạch ONLYOFFICE" thường trụ trong verify.sh (strict clean-machine: round-trip GREEN + 0 path app trong log; negative proven) + test tích thể mv `/Applications/ONLYOFFICE.app`: verify.sh FULL exit 0 khi app ẨN (`harness/scripts/clean-machine-proof.sh`, diagnostics 02.10). Payload: soft target (113 MB x2t — user 30.09 chấp nhận phình, tối ưu sau) |
-| A2 ✅ | Converter Rust thay x2t (DOCX → XLSX → PPTX) | ✅ **03.10.2026** — adapter crate trong production path: open-side pre-normalize qua seam `sidecar::convert` (docx → canonical.docx bằng crate → x2t chuyển ra Editor.bin; kill switch `NANO_OFFICE_NO_RUST_CONVERTER`), parity 15/15 construct (T-A23), gates 9/10/11 GREEN cả ON lẫn OFF (counterfactual); Editor.bin giữ x2t đến A4 (DD K01 §2) · diagnostics 03.10 T-A24 |
+| A2 ✅ | Converter Rust thay x2t (DOCX → XLSX → PPTX) | ✅ **03.10.2026** — adapter crate trong production path: open-side pre-normalize qua seam `sidecar::convert` (docx → canonical.docx bằng crate → x2t chuyển ra Editor.bin; kill switch `WASEN_OFFICE_NO_RUST_CONVERTER`), parity 15/15 construct (T-A23), gates 9/10/11 GREEN cả ON lẫn OFF (counterfactual); Editor.bin giữ x2t đến A4 (DD K01 §2) · diagnostics 03.10 T-A24 |
 | A3 ✅ | Viewer Rust đọc-only ("quick view" không boot sdkjs) | ✅ **03.10.2026** — viewer canvas 2D webview riêng không shim/engine (DD V01), parse+resolve về Rust qua crate A2: parity render vs oracle CDP **6/6 corpus ×2 deterministic + negative cắn, ε=2.0px** (T-V4, OQ-V01-1); mở **<500 ms** GREEN (gate 12, đo 18–89 ms debug); UX dùng được thật: nút Quick view trên start page + scroll (T-V5, OQ-V01-3 toggle) + gate 13 E2E từ UI; **RAM <150 MB = criterion RELEASE** — T-057 (PH-4) chặn đo release, debug tripwire 300 MB (đo 265 MB tree) — ceiling ghi DD V01 §10 · diagnostics 03.10 T-V5 |
 | A4 ✅ | Editor core riêng cho DOCX subset hằng ngày ("Nano Light", engine ONLYOFFICE = "chế độ nâng cao"; **default-switch DỜI A5** — OQ-L01-1, user chốt 04.10) | ✅ **04.10.2026** — parity matrix DD L01 §5.1: **9 lớp GIỮ** (text/para/run · bảng cấu trúc · list · ảnh byte-exact · hdr/ftr · sectPr + pgMar · hyperlink · settings/theme/docProps passthrough) qua gate 15 + parity-a2 11/11 invariant; **dòng mất còn lại TOÀN BỘ detect+warn** (tracked/footnotes/fields · tblPr/tcPr T-A32 · con khác sectPr) — hết mất im lặng; 4 slice + closure: selection/arrows T-A28 · IME/clipboard T-A29 (OQ-L01-3) · dblclick/blink/bảng single-cell T-A30 · save-fidelity T-A31 (OQ-L01-2) · tblPr/tcPr warn T-A32; verify FULL exit 0 19 ▸ steps · diagnostics 04.10 T-A32 |
 | A5 | UI editor riêng thay web-apps | web-apps rút khỏi phân phối mặc định |

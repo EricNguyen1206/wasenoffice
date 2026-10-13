@@ -4,7 +4,7 @@ set -u
 cd "$(dirname "$0")"
 PORT="${SEMIF_ENGINE_PORT:-11435}"
 LLAMA_PORT="${LLAMA_SERVER_PORT:-11436}"
-LOG="${TMPDIR:-/tmp}/nanooffice-semif-engine.log"
+LOG="${TMPDIR:-/tmp}/wasenoffice-semif-engine.log"
 
 # 1) llama-server
 if ! curl -sf "http://127.0.0.1:$LLAMA_PORT/health" >/dev/null 2>&1; then

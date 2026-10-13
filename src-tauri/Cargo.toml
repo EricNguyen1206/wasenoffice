@@ -1,18 +1,18 @@
 [package]
-name = "nanooffice"
+name = "wasenoffice"
 version = "0.1.0"
-description = "NanoOffice — Rust + Tauri shell around the ONLYOFFICE editing engine"
-authors = ["NanoOffice contributors"]
+description = "WasenOffice — Rust + Tauri shell around the ONLYOFFICE editing engine"
+authors = ["WasenOffice contributors"]
 edition = "2021"
 
 [lib]
-name = "nanooffice_lib"
+name = "wasenoffice_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 # Track A A2 slice (T-A20): 1 member — chỉ để các gate sẵn có (check/fmt/
 # clippy/test/license) phủ crate; kiến trúc vẫn 1 crate 1 mục đích (DD K01 §3).
 [workspace]
-members = ["crates/nanooffice-ooxml"]
+members = ["crates/wasenoffice-ooxml"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -27,7 +27,7 @@ env_logger = "0.11.11"
 base64 = "0.23.1"
 # Track A A2 (T-A24): the OOXML crate in the runtime open path (adapter in
 # sidecar::convert) — workspace-member-only (gates) until parity, T-A23.
-nanooffice-ooxml = { path = "crates/nanooffice-ooxml" }
+wasenoffice-ooxml = { path = "crates/wasenoffice-ooxml" }
 
 # T-049 gate 16: assert saved files are real OOXML packages (same spec/version as the runtime crate).
 [dev-dependencies]

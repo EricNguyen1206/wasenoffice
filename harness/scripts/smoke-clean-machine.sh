@@ -1,9 +1,9 @@
 #!/bin/bash
-# NanoOffice smoke gate 11 — "clean ONLYOFFICE" (T-A13, Track A rung A1):
+# WasenOffice smoke gate 11 — "clean ONLYOFFICE" (T-A13, Track A rung A1):
 # the save round-trip of gate 10, booted in CLEAN-MACHINE MODE, asserting the
 # log carries ZERO references to the installed ONLYOFFICE.app.
 #
-# Boots the real app (pnpm tauri dev) with NANO_OFFICE_NO_APP_FALLBACK=1 —
+# Boots the real app (pnpm tauri dev) with WASEN_OFFICE_NO_APP_FALLBACK=1 —
 # src-tauri/src/sidecar/mod.rs::x2t_path() then resolves the bundled
 # converter or fails loudly, never silently falling back to the installed
 # app — plus the same auto-probe as gate 10 (open fixture → asc_AddText +
@@ -27,7 +27,7 @@
 # Usage: smoke-clean-machine.sh
 # Env:   SMOKE_CLEAN_TIMEOUT=240        total seconds before giving up
 #        SMOKE_CLEAN_FORCE_APP_X2T=1    negative-proof mode: point
-#                                       NANO_OFFICE_X2T at the installed
+#                                       WASEN_OFFICE_X2T at the installed
 #                                       app's converter — the gate MUST
 #                                       FAIL (caught by assertion #2)
 set -u
@@ -37,17 +37,17 @@ cd "$ROOT"
 . "$ROOT/harness/scripts/smoke-lib.sh"
 
 TIMEOUT="${SMOKE_CLEAN_TIMEOUT:-240}"
-LOG="$(mktemp /tmp/nanooffice-smoke-clean-XXXXXX)"
-WORK="$(mktemp -d /tmp/nanooffice-smoke-clean-XXXXXX)"
+LOG="$(mktemp /tmp/wasenoffice-smoke-clean-XXXXXX)"
+WORK="$(mktemp -d /tmp/wasenoffice-smoke-clean-XXXXXX)"
 FIXTURE="$WORK/ta13.docx"
-MARKER="TA13-$RANDOM-SAVED-BY-NANOOFFICE"
+MARKER="TA13-$RANDOM-SAVED-BY-WASENOFFICE"
 APP_X2T="/Applications/ONLYOFFICE.app/Contents/Resources/converter/x2t"
 
 if [ "${SMOKE_CLEAN_FORCE_APP_X2T:-0}" = "1" ]; then
   if [ ! -f "$APP_X2T" ]; then
     echo "smoke: negative-proof mode cần app cài sẵn ($APP_X2T không tồn tại)"; exit 1
   fi
-  echo "smoke: NEGATIVE PROOF — NANO_OFFICE_X2T trỏ vào app cài sẵn, gate này PHẢI FAIL"
+  echo "smoke: NEGATIVE PROOF — WASEN_OFFICE_X2T trỏ vào app cài sẵn, gate này PHẢI FAIL"
   FORCE_X2T="$APP_X2T"
 else
   FORCE_X2T=""
@@ -57,9 +57,9 @@ smoke_init "$FIXTURE"
 echo "smoke: fixture=$FIXTURE log=$LOG timeout=${TIMEOUT}s"
 echo "smoke: marker=$MARKER"
 
-BOOT_ENVS=("NANO_OFFICE_OPEN=$FIXTURE" "NANO_OFFICE_SAVE_PROBE=$MARKER" \
-  "NANO_OFFICE_NO_APP_FALLBACK=1" "NANO_OFFICE_DEVTOOLS=0" "RUST_LOG=info")
-[ -n "$FORCE_X2T" ] && BOOT_ENVS+=("NANO_OFFICE_X2T=$FORCE_X2T")
+BOOT_ENVS=("WASEN_OFFICE_OPEN=$FIXTURE" "WASEN_OFFICE_SAVE_PROBE=$MARKER" \
+  "WASEN_OFFICE_NO_APP_FALLBACK=1" "WASEN_OFFICE_DEVTOOLS=0" "RUST_LOG=info")
+[ -n "$FORCE_X2T" ] && BOOT_ENVS+=("WASEN_OFFICE_X2T=$FORCE_X2T")
 smoke_boot "${BOOT_ENVS[@]}" "$LOG"
 
 clean_signals() {

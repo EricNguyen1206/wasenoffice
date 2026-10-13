@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// NanoOffice license gate — allowlist-only cho toàn bộ cargo graph + node_modules.
+// WasenOffice license gate — allowlist-only cho toàn bộ cargo graph + node_modules.
 // ThDependency nào có license ngoài allowlist hoặc không khai báo → exit 1.
 // Rule liên quan: harness/rules/mit-purity.md (điều 3).
 import { execFileSync } from 'node:child_process';
@@ -36,7 +36,7 @@ try {
   const meta = JSON.parse(execFileSync('cargo', ['metadata', '--format-version', '1'], {
     cwd: join(ROOT, 'src-tauri'), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
   }));
-  const rootId = meta.resolve?.root ?? meta.packages.find((p) => p.name === 'nanooffice')?.id;
+  const rootId = meta.resolve?.root ?? meta.packages.find((p) => p.name === 'wasenoffice')?.id;
   for (const p of meta.packages) {
     if (p.id === rootId) continue; // code của mình, không tự kiểm license
     if (!p.license || !exprOk(p.license)) {

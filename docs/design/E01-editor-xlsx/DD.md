@@ -18,7 +18,7 @@ type: design
 
 ## 1. Tổng quan
 
-Màn mở/soạn file XLSX của NanoOffice: cùng kiến trúc với D01 (editor DOCX) — WKWebView
+Màn mở/soạn file XLSX của WasenOffice: cùng kiến trúc với D01 (editor DOCX) — WKWebView
 hosting **spreadsheeteditor** + sdkjs build `cell` — khác D01 ở các điểm do shell điều
 khiển: (1) boot params `doctype=cell&filetype=xlsx` (bản đồ tại `src/main.ts`
 `FILE_FORMATS`, bằng chứng upstream: `docs/reference.map.md` § multi-format), (2) engine
@@ -28,7 +28,7 @@ magic `XLSY` (oracle-obs 29.09).
 
 ## 2. Bối cảnh & phạm vi
 
-- **Goals:** mở XLSX local render đầy đủ trong shell NanoOffice (đích T-048); smoke gate
+- **Goals:** mở XLSX local render đầy đủ trong shell WasenOffice (đích T-048); smoke gate
   behavioral tự động trong verify.sh (TC-E01-01).
 - **Non-goals:** save XLSX (T-049 — format code + font params) · print/clipboard (PH-2) ·
   sửa `upstream/`/`engines/`.

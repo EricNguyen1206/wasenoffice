@@ -1,5 +1,5 @@
 #!/bin/bash
-# NanoOffice parity harness — A3/V4 (T-V4): viewer canvas render ↔ sdkjs render,
+# WasenOffice parity harness — A3/V4 (T-V4): viewer canvas render ↔ sdkjs render,
 # measured LINE-BY-LINE (DD docs/design/viewer-a3/DD.md §4 V4 + §5, OQ-V01-1).
 #
 # ORACLE (clean-room oracle-obs — no upstream source is read): ONLYOFFICE.app
@@ -13,7 +13,7 @@
 # the Builder `ToJSON` (`extent.cx/cy` EMU). All coordinates are CSS px at
 # zoom 100% — the same space the viewer draws in.
 #
-# VIEWER side: boot the app with NANO_OFFICE_QUICK_VIEW (no engine) and read
+# VIEWER side: boot the app with WASEN_OFFICE_QUICK_VIEW (no engine) and read
 # the `viewer evidence:` JSON line (src/viewer.ts — change both in the SAME
 # commit) + the `viewer media:` lines (gate-12 contract).
 #
@@ -56,7 +56,7 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 . "$ROOT/harness/scripts/smoke-lib.sh"
 
-WORK="$(mktemp -d /tmp/nanooffice-parity-view-XXXXXX)"
+WORK="$(mktemp -d /tmp/wasenoffice-parity-view-XXXXXX)"
 EPS_Y="${PARITY_VIEW_EPS_Y:-2.0}"
 EPS_X="${PARITY_VIEW_EPS_X:-2.0}"
 NEGATIVE="${PARITY_VIEW_NEGATIVE:-0}"
@@ -331,9 +331,9 @@ for f in "${CORPUS[@]}"; do
   name="$(basename "$f" .docx)"
 
   # viewer side — boot app nền (rule 6b), poll for the evidence line
-  VLOG="$(mktemp /tmp/nanooffice-parity-viewer-XXXXXX)"
+  VLOG="$(mktemp /tmp/wasenoffice-parity-viewer-XXXXXX)"
   smoke_init "$f"
-  smoke_boot "NANO_OFFICE_QUICK_VIEW=$f" "NANO_OFFICE_DEVTOOLS=0" "RUST_LOG=info" "$VLOG"
+  smoke_boot "WASEN_OFFICE_QUICK_VIEW=$f" "WASEN_OFFICE_DEVTOOLS=0" "RUST_LOG=info" "$VLOG"
   parity_view_signals() {
     if grep -q "$SMOKE_RE_QV_FAILED" "$VLOG" 2>/dev/null; then
       SMOKE_ABORT=1

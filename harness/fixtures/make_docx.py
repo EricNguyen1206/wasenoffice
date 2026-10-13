@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate a minimal-but-real DOCX fixture (stdlib only) for PH-0 render testing.
 
-Usage: make_docx.py [output.docx]   (default: /tmp/nanooffice-fixture.docx)
+Usage: make_docx.py [output.docx]   (default: /tmp/wasenoffice-fixture.docx)
 Structure follows ECMA-376 / ISO 29500 Part 1 (no upstream code involved).
 """
 import sys
@@ -50,7 +50,7 @@ def para(text, style=None, bold=False):
 def document_xml():
     # one run per paragraph — enough to verify headings/bold/unicode rendering
     body = [
-        para("NanoOffice PH-0 Fixture", style="Heading1"),
+        para("WasenOffice PH-0 Fixture", style="Heading1"),
         para("If this paragraph renders in the WKWebView canvas, the editing "
              "engine is alive inside the Tauri shell."),
         para("Bold run check: this whole sentence should be bold.", bold=True),
@@ -65,7 +65,7 @@ def document_xml():
 
 
 def main():
-    out = sys.argv[1] if len(sys.argv) > 1 else "/tmp/nanooffice-fixture.docx"
+    out = sys.argv[1] if len(sys.argv) > 1 else "/tmp/wasenoffice-fixture.docx"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("[Content_Types].xml", CONTENT_TYPES)
         z.writestr("_rels/.rels", ROOT_RELS)

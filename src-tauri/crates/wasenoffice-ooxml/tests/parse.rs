@@ -4,19 +4,19 @@
 
 use std::io::Write as _;
 
-use nanooffice_ooxml::{Block, Document, Paragraph, TableCell};
+use wasenoffice_ooxml::{Block, Document, Paragraph, TableCell};
 
 const FIXTURE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/tests/fixtures/nanooffice-fixture.docx"
+    "/tests/fixtures/wasenoffice-fixture.docx"
 );
 const FULL_FIXTURE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/tests/fixtures/nanooffice-full-fixture.docx"
+    "/tests/fixtures/wasenoffice-full-fixture.docx"
 );
 const V1_FIXTURE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/tests/fixtures/nanooffice-v1-fixture.docx"
+    "/tests/fixtures/wasenoffice-v1-fixture.docx"
 );
 
 /// Fixture chuẩn (sinh bằng `harness/fixtures/make_docx.py` — spec-derived,
@@ -24,13 +24,13 @@ const V1_FIXTURE: &str = concat!(
 /// có dấu, tab literal, smart quotes — text phải exact, không panic.
 #[test]
 fn fixture_parses_to_exact_model() {
-    let doc = nanooffice_ooxml::parse_docx_file(FIXTURE).unwrap();
+    let doc = wasenoffice_ooxml::parse_docx_file(FIXTURE).unwrap();
     assert_eq!(doc.body.len(), 5);
 
     let p = para(&doc, 0);
     assert_eq!(p.style.as_deref(), Some("Heading1"));
     assert_eq!(p.runs.len(), 1);
-    assert_eq!(p.runs[0].text, "NanoOffice PH-0 Fixture");
+    assert_eq!(p.runs[0].text, "WasenOffice PH-0 Fixture");
     assert_eq!(p.runs[0].bold, None);
 
     let p = para(&doc, 2);
@@ -60,7 +60,7 @@ fn fixture_parses_to_exact_model() {
 /// tiếng Việt — parse đúng spec, 100% surface.
 #[test]
 fn full_corpus_parses_every_construct() {
-    let doc = nanooffice_ooxml::parse_docx_file(FULL_FIXTURE).unwrap();
+    let doc = wasenoffice_ooxml::parse_docx_file(FULL_FIXTURE).unwrap();
 
     // body: 7 paragraphs + 1 table + 1 image paragraph + 1 closing paragraph
     assert_eq!(doc.body.len(), 10);
@@ -81,7 +81,7 @@ fn full_corpus_parses_every_construct() {
 
     let p = para(&doc, 0);
     assert_eq!(p.style.as_deref(), Some("Heading1"));
-    assert_eq!(p.runs[0].text, "Giới thiệu NanoOffice");
+    assert_eq!(p.runs[0].text, "Giới thiệu WasenOffice");
 
     // run-level bold=false overrides the style chain (three-state: explicit
     // off is Some(false), distinguishable from not-set None)
@@ -94,7 +94,7 @@ fn full_corpus_parses_every_construct() {
     assert_eq!(p.align.as_deref(), Some("center"));
 
     // run props: bold / italic / underline / size / plain
-    let runs: &[&nanooffice_ooxml::Run] = &[
+    let runs: &[&wasenoffice_ooxml::Run] = &[
         &para(&doc, 3).runs[0],
         &para(&doc, 3).runs[1],
         &para(&doc, 3).runs[2],
@@ -147,7 +147,7 @@ fn full_corpus_parses_every_construct() {
     assert_eq!(doc.headers[0].part, "word/header1.xml");
     assert_eq!(
         block_para(&doc.headers[0].blocks, 0).runs[0].text,
-        "NanoOffice — văn bản mẫu"
+        "WasenOffice — văn bản mẫu"
     );
     assert_eq!(doc.footers.len(), 1);
     assert_eq!(
@@ -174,14 +174,14 @@ fn full_corpus_parses_every_construct() {
 fn malformed_input_is_an_error_not_a_panic() {
     // (a) garbage XML in the document part
     let doc = minimal_package("this is not xml at all <<<");
-    assert!(nanooffice_ooxml::parse_docx(&doc).is_err());
+    assert!(wasenoffice_ooxml::parse_docx(&doc).is_err());
 
     // (b) missing package root relationships
     let parts = vec![
         ("[Content_Types].xml", content_types_xml("")),
         ("word/document.xml", empty_document()),
     ];
-    let err = nanooffice_ooxml::parse_docx(&zip_parts(&parts)).unwrap_err();
+    let err = wasenoffice_ooxml::parse_docx(&zip_parts(&parts)).unwrap_err();
     assert!(err.0.contains("part _rels/.rels"), "unexpected: {err:?}");
 
     // (c) no officeDocument relationship in the root rels
@@ -197,7 +197,7 @@ fn malformed_input_is_an_error_not_a_panic() {
         ),
         ("word/document.xml", empty_document()),
     ];
-    let err = nanooffice_ooxml::parse_docx(&zip_parts(&parts)).unwrap_err();
+    let err = wasenoffice_ooxml::parse_docx(&zip_parts(&parts)).unwrap_err();
     assert!(
         err.0.contains("no officeDocument relationship"),
         "unexpected: {err:?}"
@@ -223,12 +223,12 @@ fn malformed_input_is_an_error_not_a_panic() {
             }
         })
         .collect::<Vec<_>>();
-    let err = nanooffice_ooxml::parse_docx(&zip_parts(&parts)).unwrap_err();
+    let err = wasenoffice_ooxml::parse_docx(&zip_parts(&parts)).unwrap_err();
     assert!(err.0.contains("refusing"), "unexpected: {err:?}");
 
     // (e) truncated zip
     let doc = minimal_package(&empty_document());
-    let err = nanooffice_ooxml::parse_docx(&doc[..doc.len() / 2]).unwrap_err();
+    let err = wasenoffice_ooxml::parse_docx(&doc[..doc.len() / 2]).unwrap_err();
     assert!(err.0.contains("zip"), "unexpected: {err:?}");
 
     // (f) basedOn cycle in styles.xml
@@ -243,7 +243,7 @@ fn malformed_input_is_an_error_not_a_panic() {
         &style_image_rels(),
         &[("word/styles.xml", styles.to_string())],
     );
-    let err = nanooffice_ooxml::parse_docx(&doc).unwrap_err();
+    let err = wasenoffice_ooxml::parse_docx(&doc).unwrap_err();
     assert!(err.0.contains("cycle"), "unexpected: {err:?}");
 
     // (g) a:blip r:embed pointing at a relationship that does not exist
@@ -257,7 +257,7 @@ fn malformed_input_is_an_error_not_a_panic() {
         r#"</w:body></w:document>"#,
     );
     let doc = minimal_package_with(&drawing, "", &[]);
-    let err = nanooffice_ooxml::parse_docx(&doc).unwrap_err();
+    let err = wasenoffice_ooxml::parse_docx(&doc).unwrap_err();
     assert!(err.0.contains("rIdGhost"), "unexpected: {err:?}");
 
     // (h) header part whose root is not w:hdr — refuse
@@ -276,7 +276,7 @@ fn malformed_input_is_an_error_not_a_panic() {
             ("word/header1.xml", empty_document()),
         ],
     );
-    let err = nanooffice_ooxml::parse_docx(&doc).unwrap_err();
+    let err = wasenoffice_ooxml::parse_docx(&doc).unwrap_err();
     assert!(err.0.contains("w:hdr"), "unexpected: {err:?}");
 
     // (i) officeDocument target points at a part that is not in the zip
@@ -284,7 +284,7 @@ fn malformed_input_is_an_error_not_a_panic() {
         ("[Content_Types].xml", content_types_xml("")),
         ("_rels/.rels", root_rels_xml()),
     ];
-    let err = nanooffice_ooxml::parse_docx(&zip_parts(&parts)).unwrap_err();
+    let err = wasenoffice_ooxml::parse_docx(&zip_parts(&parts)).unwrap_err();
     assert!(
         err.0.contains("part word/document.xml"),
         "unexpected: {err:?}"
@@ -313,7 +313,7 @@ fn construct_semantics() {
         r#"<w:tbl><w:tr><w:tc><w:p><w:r><w:t>x</w:t></w:r></w:p></w:tc><w:tc/></w:tr></w:tbl>"#,
         r#"</w:body></w:document>"#,
     );
-    let doc = nanooffice_ooxml::parse_docx(&minimal_package(xml)).unwrap();
+    let doc = wasenoffice_ooxml::parse_docx(&minimal_package(xml)).unwrap();
     assert_eq!(doc.body.len(), 7);
 
     let p = para(&doc, 0);
@@ -400,7 +400,7 @@ fn alternate_content_choice_surfaces_image() {
         r#"</w:body></w:document>"#,
     );
     let rels = r#"<Relationship Id="rIdImg" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/>"#;
-    let doc = nanooffice_ooxml::parse_docx(&minimal_package_with(&xml, rels, &[])).unwrap();
+    let doc = wasenoffice_ooxml::parse_docx(&minimal_package_with(&xml, rels, &[])).unwrap();
 
     let p = para(&doc, 0);
     assert_eq!(p.runs.len(), 1, "AlternateContent KHÔNG tách run");
@@ -414,8 +414,8 @@ fn alternate_content_choice_surfaces_image() {
     assert_eq!((img.cx_emu, img.cy_emu), (9525, 19050));
 
     // round-trip: writer ghi plain w:drawing, re-parse vẫn đủ image
-    let out = nanooffice_ooxml::write_docx(&doc, None).unwrap();
-    let reparsed = nanooffice_ooxml::parse_docx(&out).unwrap();
+    let out = wasenoffice_ooxml::write_docx(&doc, None).unwrap();
+    let reparsed = wasenoffice_ooxml::parse_docx(&out).unwrap();
     assert_eq!(doc, reparsed, "round-trip bất biến qua AlternateContent");
 }
 
@@ -465,7 +465,7 @@ fn v1_render_constructs_parse_resolve_and_round_trip() {
         r#"<w:sectPr><w:pgSz w:w="11906" w:h="16838" w:orient="portrait"/></w:sectPr>"#,
         r#"</w:body></w:document>"#,
     );
-    let doc = nanooffice_ooxml::parse_docx(&minimal_package_with(
+    let doc = wasenoffice_ooxml::parse_docx(&minimal_package_with(
         xml,
         doc_rels,
         &[("word/styles.xml", styles.to_string())],
@@ -514,9 +514,9 @@ fn v1_render_constructs_parse_resolve_and_round_trip() {
     );
 
     // ---- resolved (§17.7.2: direct → rStyle → pStyle → docDefaults) ----
-    let r = nanooffice_ooxml::resolve(&doc);
+    let r = wasenoffice_ooxml::resolve(&doc);
     let rp = |i: usize| match &r.body[i] {
-        nanooffice_ooxml::RBlock::Paragraph(p) => p,
+        wasenoffice_ooxml::RBlock::Paragraph(p) => p,
         other => panic!("body[{i}] not a paragraph: {other:?}"),
     };
 
@@ -576,7 +576,7 @@ fn v1_render_constructs_parse_resolve_and_round_trip() {
     );
     assert_eq!(
         rp(2).ind.as_ref().unwrap(),
-        &nanooffice_ooxml::Ind {
+        &wasenoffice_ooxml::Ind {
             left: Some(100),
             right: Some(200),
             first_line: Some(50),
@@ -601,8 +601,8 @@ fn v1_render_constructs_parse_resolve_and_round_trip() {
     );
 
     // ---- round-trip through the symmetric writer ----
-    let out = nanooffice_ooxml::write_docx(&doc, None).unwrap();
-    let reparsed = nanooffice_ooxml::parse_docx(&out).unwrap();
+    let out = wasenoffice_ooxml::write_docx(&doc, None).unwrap();
+    let reparsed = wasenoffice_ooxml::parse_docx(&out).unwrap();
     assert_eq!(doc, reparsed, "round-trip bất biến qua mọi construct V1");
 }
 
@@ -611,7 +611,7 @@ fn v1_render_constructs_parse_resolve_and_round_trip() {
 /// §17.7.2 (default-para-style / rStyle / docDefaults) + page + grid.
 #[test]
 fn v1_fixture_parses_resolved_values() {
-    let doc = nanooffice_ooxml::parse_docx_file(V1_FIXTURE).unwrap();
+    let doc = wasenoffice_ooxml::parse_docx_file(V1_FIXTURE).unwrap();
 
     // docDefaults + default paragraph style surface raw
     let dd = doc.doc_defaults.as_ref().unwrap();
@@ -623,9 +623,9 @@ fn v1_fixture_parses_resolved_values() {
     assert!(doc.styles["Normal"].default);
     assert_eq!(doc.page.as_ref().unwrap().w, Some(12240));
 
-    let r = nanooffice_ooxml::resolve(&doc);
+    let r = wasenoffice_ooxml::resolve(&doc);
     let rp = |i: usize| match &r.body[i] {
-        nanooffice_ooxml::RBlock::Paragraph(p) => p,
+        wasenoffice_ooxml::RBlock::Paragraph(p) => p,
         other => panic!("body[{i}] not a paragraph: {other:?}"),
     };
 
@@ -674,21 +674,21 @@ fn v1_fixture_parses_resolved_values() {
 
     // table grid (resolved table keeps the row structure)
     let tbl = match &r.body[6] {
-        nanooffice_ooxml::RBlock::Table(t) => t,
+        wasenoffice_ooxml::RBlock::Table(t) => t,
         other => panic!("expected table, got {other:?}"),
     };
     assert_eq!(tbl.rows.len(), 1);
 
     // round-trip: writer emits every V1 construct, model invariant
-    let out = nanooffice_ooxml::write_docx(&doc, None).unwrap();
-    assert_eq!(doc, nanooffice_ooxml::parse_docx(&out).unwrap());
+    let out = wasenoffice_ooxml::write_docx(&doc, None).unwrap();
+    assert_eq!(doc, wasenoffice_ooxml::parse_docx(&out).unwrap());
 }
 
 // ── T-A31 (DD L01 §5.6): hyperlink + sectPr + passthrough + detect ────────
 
 const FIDELITY_FIXTURE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/tests/fixtures/nanooffice-fidelity-fixture.docx"
+    "/tests/fixtures/wasenoffice-fidelity-fixture.docx"
 );
 
 /// Fidelity corpus: hyperlink groups (external `r:id` + internal `w:anchor`)
@@ -697,7 +697,7 @@ const FIDELITY_FIXTURE: &str = concat!(
 /// nothing `detect_save_losses` would warn about.
 #[test]
 fn fidelity_corpus_parses_hyperlinks_and_sections() {
-    let doc = nanooffice_ooxml::parse_docx_file(FIDELITY_FIXTURE).unwrap();
+    let doc = wasenoffice_ooxml::parse_docx_file(FIDELITY_FIXTURE).unwrap();
     let link_para = para(&doc, 1);
     assert_eq!(
         link_para.runs.len(),
@@ -708,10 +708,10 @@ fn fidelity_corpus_parses_hyperlinks_and_sections() {
     assert_eq!(link.rel_id.as_deref(), Some("rIdLink"));
     assert_eq!(
         link.target.as_deref(),
-        Some("https://example.com/nanooffice-fidelity")
+        Some("https://example.com/wasenoffice-fidelity")
     );
     assert!(link.external);
-    assert_eq!(link_para.runs[1].text, "NanoOffice fidelity link");
+    assert_eq!(link_para.runs[1].text, "WasenOffice fidelity link");
     let anchor = link_para.runs[3].link.as_ref().unwrap();
     assert_eq!(anchor.anchor.as_deref(), Some("sect-anchor"));
     assert!(anchor.rel_id.is_none() && anchor.target.is_none());
@@ -735,7 +735,7 @@ fn fidelity_corpus_parses_hyperlinks_and_sections() {
     assert_eq!(doc.page.as_ref().unwrap().w, Some(11906));
 
     assert!(
-        nanooffice_ooxml::detect_save_losses(&std::fs::read(FIDELITY_FIXTURE).unwrap()).is_empty(),
+        wasenoffice_ooxml::detect_save_losses(&std::fs::read(FIDELITY_FIXTURE).unwrap()).is_empty(),
         "the fidelity fixture must not trigger false warnings"
     );
 }
@@ -747,7 +747,7 @@ fn fidelity_corpus_parses_hyperlinks_and_sections() {
 #[test]
 fn detect_save_losses_flags_and_spares() {
     let clean = minimal_package(&empty_document());
-    assert!(nanooffice_ooxml::detect_save_losses(&clean).is_empty());
+    assert!(wasenoffice_ooxml::detect_save_losses(&clean).is_empty());
 
     let dirty = concat!(
         r#"<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>"#,
@@ -758,7 +758,7 @@ fn detect_save_losses_flags_and_spares() {
         r#"<w:p><w:pPr><w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:cols w:num="2"/></w:sectPr></w:pPr></w:p>"#,
         r#"</w:body></w:document>"#,
     );
-    let losses = nanooffice_ooxml::detect_save_losses(&minimal_package(dirty));
+    let losses = wasenoffice_ooxml::detect_save_losses(&minimal_package(dirty));
     assert!(
         losses.contains(&"tracked changes".to_string()),
         "{losses:?}"
@@ -778,14 +778,14 @@ fn detect_save_losses_flags_and_spares() {
         r#"<w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134"/></w:sectPr></w:pPr></w:p>"#,
         r#"</w:body></w:document>"#,
     );
-    assert!(nanooffice_ooxml::detect_save_losses(&minimal_package(plain_sect)).is_empty());
+    assert!(wasenoffice_ooxml::detect_save_losses(&minimal_package(plain_sect)).is_empty());
     // <w:insideH>/<w:delText> must NOT trip the tracked-change scan
     let lookalikes = concat!(
         r#"<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>"#,
         r#"<w:tbl><w:tr><w:tc><w:p><w:r><w:delText>x</w:t></w:r></w:p></w:tc></w:tr></w:tbl>"#,
         r#"</w:body></w:document>"#,
     );
-    assert!(nanooffice_ooxml::detect_save_losses(&minimal_package(lookalikes)).is_empty());
+    assert!(wasenoffice_ooxml::detect_save_losses(&minimal_package(lookalikes)).is_empty());
     // <w:tblPrChange>/<w:tblPrEx> must NOT trip the table-styling scan
     // (exact tag boundary — T-A32, DD L01 §5.7)
     let tblprop_lookalikes = concat!(
@@ -793,7 +793,7 @@ fn detect_save_losses_flags_and_spares() {
         r#"<w:tbl><w:tr><w:tc><w:tcPrChange><w:tcPr/></w:tcPrChange><w:p><w:r><w:t>x</w:t></w:r></w:p></w:tc></w:tr></w:tbl>"#,
         r#"</w:body></w:document>"#,
     );
-    assert!(nanooffice_ooxml::detect_save_losses(&minimal_package(tblprop_lookalikes)).is_empty());
+    assert!(wasenoffice_ooxml::detect_save_losses(&minimal_package(tblprop_lookalikes)).is_empty());
 }
 
 /// Fuzz (mutation, seed cố định, không dep): XML mutations + zip mutations —
@@ -810,7 +810,7 @@ fn fuzz_mutations_never_panic() {
     );
     let base_zip = minimal_package(base_xml);
     assert!(
-        nanooffice_ooxml::parse_docx(&base_zip).is_ok(),
+        wasenoffice_ooxml::parse_docx(&base_zip).is_ok(),
         "precondition: unmutated base must parse"
     );
 
@@ -870,7 +870,7 @@ fn fuzz_mutations_never_panic() {
             }
         };
         // Ok or Err are both fine — the contract is: never panic.
-        let _ = nanooffice_ooxml::parse_docx(&bytes);
+        let _ = wasenoffice_ooxml::parse_docx(&bytes);
     }
 }
 
@@ -1029,7 +1029,7 @@ fn zip_bytes(parts: &[(String, Vec<u8>)]) -> Vec<u8> {
 // after the mark (oracle-obs: engine GetText "1. ").
 #[test]
 fn resolve_numbering_marks_formats_counters_and_separator() {
-    use nanooffice_ooxml::{NumLvl, NumRef, Paragraph, Run, Spacing};
+    use wasenoffice_ooxml::{NumLvl, NumRef, Paragraph, Run, Spacing};
     let numbered = |num_id: u32, ilvl: u32| {
         Block::Paragraph(Paragraph {
             numbering: Some(NumRef { num_id, ilvl }),
@@ -1116,9 +1116,9 @@ fn resolve_numbering_marks_formats_counters_and_separator() {
         page: None,
         page_mar: None,
     };
-    let r = nanooffice_ooxml::resolve(&doc);
+    let r = wasenoffice_ooxml::resolve(&doc);
     let mark = |i: usize| match &r.body[i] {
-        nanooffice_ooxml::RBlock::Paragraph(p) => p.mark.clone().unwrap(),
+        wasenoffice_ooxml::RBlock::Paragraph(p) => p.mark.clone().unwrap(),
         _ => panic!("expected paragraph"),
     };
     assert_eq!(mark(0).as_str(), "1. ", "decimal %1. + separator");
@@ -1133,7 +1133,7 @@ fn resolve_numbering_marks_formats_counters_and_separator() {
         "bullet lvlText raw + separator"
     );
     let sp = match &r.body[7] {
-        nanooffice_ooxml::RBlock::Paragraph(p) => p.spacing.as_ref().map(|s| (s.before, s.after)),
+        wasenoffice_ooxml::RBlock::Paragraph(p) => p.spacing.as_ref().map(|s| (s.before, s.after)),
         _ => panic!("expected paragraph"),
     };
     assert_eq!(

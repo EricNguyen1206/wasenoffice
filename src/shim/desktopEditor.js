@@ -22,15 +22,15 @@
  *   bytes back down → engine frame calls window.DesktopOfflineAppDocumentEndLoad.
  *   The delivery chain itself lives in src/shim/delivery.js (T-045) — this file
  *   only triggers it on LocalStartOpen and publishes the shared plumbing
- *   (`window.__nanooffice_shim`: tauriInvoke/forwardLog) that delivery.js
+ *   (`window.__wasenoffice_shim`: tauriInvoke/forwardLog) that delivery.js
  *   consumes. Run order matters: this file loads FIRST in every frame (init
  *   script order in src-tauri/src/lib.rs, import order in src/main.ts).
  */
 (function (window) {
   'use strict';
 
-  if (window.__nanooffice_bridge_installed) return;
-  window.__nanooffice_bridge_installed = true;
+  if (window.__wasenoffice_bridge_installed) return;
+  window.__wasenoffice_bridge_installed = true;
 
   // Methods observed in upstream call-sites (lower bound, docs/reference.map.md).
   var KNOWN_METHODS = [
@@ -74,9 +74,9 @@
   ];
 
   var BRIDGE_CMD = 'asc_desktop_editor';
-  var RELAY_TYPE = '__nanooffice_bridge';   // engine frame → main frame (log + dispatch)
-  var LOG_TYPE = '__nanooffice_log';        // any frame → main frame (stdout)
-  // DOWN_TYPE ('__nanooffice_down', main frame → engine frame document
+  var RELAY_TYPE = '__wasenoffice_bridge';   // engine frame → main frame (log + dispatch)
+  var LOG_TYPE = '__wasenoffice_log';        // any frame → main frame (stdout)
+  // DOWN_TYPE ('__wasenoffice_down', main frame → engine frame document
   // delivery) lives in src/shim/delivery.js — the only consumer of that lane.
 
   /**
@@ -92,7 +92,7 @@
     CreateEditorApi: function () { return null; },
     execCommand: function () { return null; },
     GetEncryptedHeader: function () { return 'ENCRYPTED;'; },
-    CheckUserId: function () { return 'nanooffice-ph0'; },
+    CheckUserId: function () { return 'wasenoffice-ph0'; },
     GetInstallPlugins: function () {
       // CPluginsManager::GetPluginsJson shape: [systemFolder, userFolder],
       // each with a pluginsData array (empty = nothing installed).
@@ -198,7 +198,7 @@
           if (data.method === 'LocalStartOpen') {
             // Engine is ready — start the delivery chain (src/shim/delivery.js).
             mainFrameInvoke('LocalStartOpen', data.args).catch(function () {});
-            if (window.__nanooffice_delivery) window.__nanooffice_delivery.deliverDocument();
+            if (window.__wasenoffice_delivery) window.__wasenoffice_delivery.deliverDocument();
           } else {
             relayQueue = relayQueue.then(function () {
               return mainFrameInvoke(data.method, data.args);
@@ -212,7 +212,7 @@
         return;
       }
 
-      // No DOWN branch here: that lane (__nanooffice_down) is handled by
+      // No DOWN branch here: that lane (__wasenoffice_down) is handled by
       // src/shim/delivery.js with its own message listener.
     });
   }
@@ -220,20 +220,20 @@
   function mainFrameInvoke(method, args) {
     var invoke = tauriInvoke();
     if (!invoke) {
-      console.warn('[nanooffice-bridge] __TAURI__ unavailable; method', method);
+      console.warn('[wasenoffice-bridge] __TAURI__ unavailable; method', method);
       return Promise.resolve(null);
     }
     // T-059: the main frame owns the document — `open_document` returned its
-    // fileId (main.ts keeps it in window.__nanooffice_file_id__). Every
+    // fileId (main.ts keeps it in window.__wasenoffice_file_id__). Every
     // relayed engine call is stamped with it so Rust resolves exactly that
     // registry entry instead of an implicit "latest" (quick-view windows
     // register files into the same registry).
     var payload = { args: args };
-    if (window.__nanooffice_file_id__ != null) payload.fileId = window.__nanooffice_file_id__;
+    if (window.__wasenoffice_file_id__ != null) payload.fileId = window.__wasenoffice_file_id__;
     return invoke(BRIDGE_CMD, { method: method, payload: payload }).catch(function (err) {
       var msg = String(err);
       if (msg.indexOf('UNIMPL:') === 0) {
-        console.warn('[nanooffice-bridge] UNIMPL hit:', msg, 'args:', safeArgs(args));
+        console.warn('[wasenoffice-bridge] UNIMPL hit:', msg, 'args:', safeArgs(args));
       }
       throw err;
     });
@@ -320,8 +320,8 @@
       return;
     }
     var proto = window.AscFonts[variant.loader].prototype;
-    if (proto.__nanooffice_patched) return;
-    proto.__nanooffice_patched = true;
+    if (proto.__wasenoffice_patched) return;
+    proto.__wasenoffice_patched = true;
     proto[variant.fn] = function (_baseUrl, onDone) {
       var self = this;
       if (self[variant.status] !== -1) return true; // loading (2) / loaded (0) / failed (1)
@@ -380,7 +380,7 @@
         // through its own channel (e.g. DesktopOfflineAppDocumentEndSave), the
         // engine never consumes this return value — resolve instead of leaving
         // a floating rejection on every fire-and-forget call.
-        console.warn('[nanooffice-bridge] async relay (iframe):', method, safeArgs(args));
+        console.warn('[wasenoffice-bridge] async relay (iframe):', method, safeArgs(args));
         return Promise.resolve(null);
       };
     });
@@ -427,7 +427,7 @@
           if (abs.indexOf('sdk-all.js') !== -1) {
             patchDesktopFontLoader();
           }
-          var pending = window.__nanooffice_pending_js;
+          var pending = window.__wasenoffice_pending_js;
           var done = pending && pending[url];
           if (done) {
             delete pending[url];
@@ -453,12 +453,12 @@
 
     // Coordination tables for LoadJS (see rb() in sdk-all-min).
     window.local_load_add = function (store, name, url) {
-      window.__nanooffice_pending_js = window.__nanooffice_pending_js || {};
-      window.__nanooffice_pending_js[url] = store.completeLoad;
+      window.__wasenoffice_pending_js = window.__wasenoffice_pending_js || {};
+      window.__wasenoffice_pending_js[url] = store.completeLoad;
       return store;
     };
     window.local_load_remove = function (url) {
-      if (window.__nanooffice_pending_js) delete window.__nanooffice_pending_js[url];
+      if (window.__wasenoffice_pending_js) delete window.__wasenoffice_pending_js[url];
     };
 
 
@@ -466,7 +466,7 @@
     if (!window.RendererProcessVariable) window.RendererProcessVariable = {};
     if (!window.on_native_message) {
       window.on_native_message = function (cmd, param) {
-        console.debug('[nanooffice-bridge] on_native_message (stub):', cmd, param);
+        console.debug('[wasenoffice-bridge] on_native_message (stub):', cmd, param);
       };
     }
 
@@ -475,7 +475,7 @@
     // Shared plumbing for sibling shim modules: delivery.js loads AFTER this
     // file in every frame (init-script order in src-tauri/src/lib.rs, import
     // order in src/main.ts) and consumes exactly this surface. Keep minimal.
-    window.__nanooffice_shim = {
+    window.__wasenoffice_shim = {
       tauriInvoke: tauriInvoke,
       forwardLog: forwardLog,
       detectFontVariant: detectFontVariant,

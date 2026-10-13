@@ -2,7 +2,7 @@
 """Generate a minimal-but-real PPTX fixture (stdlib only) for the multi-format
 smoke gates (T-048).
 
-Usage: make_pptx.py [output.pptx]   (default: /tmp/nanooffice-fixture.pptx)
+Usage: make_pptx.py [output.pptx]   (default: /tmp/wasenoffice-fixture.pptx)
 Structure follows ECMA-376 / ISO 29500 Part 1 (PresentationML) — no upstream
 code involved. One slide on one blank layout, one master, one theme (the
 smallest part set renderers accept), Vietnamese diacritics in the slide text.
@@ -87,7 +87,7 @@ SLIDE = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
     <p:sp>
       <p:nvSpPr><p:cNvPr id="2" name="Tiêu đề"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr ph type="title"/></p:nvSpPr>
       <p:spPr><a:xfrm><a:off x="838200" y="365125"/><a:ext cx="10515600" cy="1325563"/></a:xfrm></p:spPr>
-      <p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="vi-VN" sz="4000"/><a:t>NanoOffice T-048 Fixture</a:t></a:r></a:p></p:txBody>
+      <p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="vi-VN" sz="4000"/><a:t>WasenOffice T-048 Fixture</a:t></a:r></a:p></p:txBody>
     </p:sp>
     <p:sp>
       <p:nvSpPr><p:cNvPr id="3" name="Nội dung"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr ph type="body" idx="1"/></p:nvSpPr>
@@ -110,9 +110,9 @@ SLIDE_RELS = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 
 # minimal-but-valid DrawingML theme (clrScheme + fontScheme + fmtScheme stubs)
 THEME = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="NanoOffice">
+<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="WasenOffice">
   <a:themeElements>
-    <a:clrScheme name="NanoOffice">
+    <a:clrScheme name="WasenOffice">
       <a:dk1><a:srgbClr val="000000"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>
       <a:dk2><a:srgbClr val="44546A"/></a:dk2><a:lt2><a:srgbClr val="E7E6E6"/></a:lt2>
       <a:accent1><a:srgbClr val="4472C4"/></a:accent1><a:accent2><a:srgbClr val="ED7D31"/></a:accent2>
@@ -120,11 +120,11 @@ THEME = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
       <a:accent5><a:srgbClr val="5B9BD5"/></a:accent5><a:accent6><a:srgbClr val="70AD47"/></a:accent6>
       <a:hlink><a:srgbClr val="0563C1"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink>
     </a:clrScheme>
-    <a:fontScheme name="NanoOffice">
+    <a:fontScheme name="WasenOffice">
       <a:majorFont><a:latin typeface="Calibri Light"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont>
       <a:minorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont>
     </a:fontScheme>
-    <a:fmtScheme name="NanoOffice">
+    <a:fmtScheme name="WasenOffice">
       <a:fillStyleLst>
         <a:solidFill><a:schemeClr val="phClr"/></a:solidFill>
         <a:solidFill><a:schemeClr val="phClr"/></a:solidFill>
@@ -152,7 +152,7 @@ THEME = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 
 
 def main():
-    out = sys.argv[1] if len(sys.argv) > 1 else "/tmp/nanooffice-fixture.pptx"
+    out = sys.argv[1] if len(sys.argv) > 1 else "/tmp/wasenoffice-fixture.pptx"
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("[Content_Types].xml", CONTENT_TYPES)
         z.writestr("_rels/.rels", ROOT_RELS)

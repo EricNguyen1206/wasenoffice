@@ -1,5 +1,5 @@
 #!/bin/bash
-# NanoOffice smoke gate — behavioral verification of the render chain (TC-D01-06).
+# WasenOffice smoke gate — behavioral verification of the render chain (TC-D01-06).
 #
 # Boots the real app (pnpm tauri dev) with a generated DOCX fixture and waits,
 # on the ACCUMULATING stdout log, for the three GREEN signals of TC-D01-06:
@@ -31,14 +31,14 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 . "$ROOT/harness/scripts/smoke-lib.sh"
 
-FIXTURE="${1:-/tmp/nanooffice-smoke-fixture.docx}"
+FIXTURE="${1:-/tmp/wasenoffice-smoke-fixture.docx}"
 TIMEOUT="${SMOKE_TIMEOUT:-240}"
-LOG="$(mktemp /tmp/nanooffice-smoke-XXXXXX)"
+LOG="$(mktemp /tmp/wasenoffice-smoke-XXXXXX)"
 
 smoke_init "$FIXTURE"
 echo "smoke: fixture=$FIXTURE log=$LOG timeout=${TIMEOUT}s"
 
-smoke_boot "NANO_OFFICE_OPEN=$FIXTURE" "NANO_OFFICE_DEVTOOLS=0" "RUST_LOG=info" "$LOG"
+smoke_boot "WASEN_OFFICE_OPEN=$FIXTURE" "WASEN_OFFICE_DEVTOOLS=0" "RUST_LOG=info" "$LOG"
 
 render_signals() {
   local s1 s2 s3

@@ -1,6 +1,6 @@
 # Skill: Open / Save DOCX (đại diện cho XLSX/PPTX/PDF)
 
-> Mục đích: chuẩn hóa luồng "mở file từ đĩa → engine render → lưu về đĩa" trong NanoOffice.
+> Mục đích: chuẩn hóa luồng "mở file từ đĩa → engine render → lưu về đĩa" trong WasenOffice.
 > Dùng như checklist cho cả 4 định dạng; khác biệt từng format ghi ở cuối.
 
 ## Luồng chuẩn (target kiến trúc)
@@ -9,7 +9,7 @@
 [User chọn file] (tauri-plugin-dialog)
       ↓ absolute path (Rust)
 [Rust: đăng ký session] — cấp fileId, ghi entry vào recents
-      ↓ custom protocol: nanooffice-file://<fileId>/...
+      ↓ custom protocol: wasenoffice-file://<fileId>/...
 [WebView: engine fetch file] — sdkjs mở qua url đó, không biết đường đĩa thật
       ↓ editing trong memory (model JS)
 [Save] engine yêu cầu save → shim gom dữ liệu (blob/binary) → invoke Rust
@@ -19,7 +19,7 @@
 
 ## Các bước implement
 
-1. **Custom protocol** `nanooffice-file://`: serve file từ Rust với đúng MIME; hỗ trợ Range request
+1. **Custom protocol** `wasenoffice-file://`: serve file từ Rust với đúng MIME; hỗ trợ Range request
    (engine có thể fetch từng phần cho file lớn).
 2. **Open flow**: dialog → path → Rust tạo fileId → trả engine một URL protocol trên →
    `DocsAPI.DocEditor` init với document url đó.

@@ -42,7 +42,7 @@ ONLYOFFICE.app — the current bootstrap source for engine artifacts.
 
 ```bash
 git clone --recurse-submodules https://github.com/EricNguyen1206/wasenoffice.git
-cd nanooffice
+cd wasenoffice
 pnpm install
 
 # Engine artifacts (x2t converter, fonts, editors build) are NOT committed
@@ -61,7 +61,7 @@ Run the full verification suite: `bash harness/scripts/verify.sh`
 
 ```
 src-tauri/                      Rust: shell, bridge, sidecar, editor sessions
-├── crates/nanooffice-ooxml/    clean-room OOXML (docx) read/write crate
+├── crates/wasenoffice-ooxml/    clean-room OOXML (docx) read/write crate
 src/                            Frontend: start page, viewer, editor (canvas)
 harness/                        Rules, skills, verification gates (verify.sh)
 upstream/                       AGPL submodules (sdkjs, web-apps) — read-only

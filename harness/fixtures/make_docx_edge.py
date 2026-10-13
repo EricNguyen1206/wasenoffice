@@ -84,7 +84,7 @@ def make_multilevel_list() -> None:
         f'<w:p><w:pPr><w:numPr><w:ilvl w:val="{lvl}"/><w:numId w:val="1"/></w:numPr></w:pPr>'
         f'<w:r><w:t xml:space="preserve">{text}</w:t></w:r></w:p>'
         for lvl, text in [
-            (0, "Chương: Kiến trúc NanoOffice"),
+            (0, "Chương: Kiến trúc WasenOffice"),
             (0, "Chương: Ràng buộc license"),
             (1, "Mục con: shell Rust"),
             (1, "Mục con: engine giữ nguyên"),

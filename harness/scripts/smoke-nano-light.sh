@@ -1,8 +1,8 @@
 #!/bin/bash
-# NanoOffice smoke gate 15 — Nano Light editor vòng 1 (T-A27, Track A rung A4):
-# boots the app with NANO_OFFICE_NANO_LIGHT (the dedicated editor entry — NO
+# WasenOffice smoke gate 15 — Nano Light editor vòng 1 (T-A27, Track A rung A4):
+# boots the app with WASEN_OFFICE_NANO_LIGHT (the dedicated editor entry — NO
 # engine, no x2t, no Editor.bin on this path) plus the edit driver
-# NANO_OFFICE_NL_PROBE=<marker> (pattern NANO_OFFICE_SAVE_PROBE: the editor
+# WASEN_OFFICE_NL_PROBE=<marker> (pattern WASEN_OFFICE_SAVE_PROBE: the editor
 # page sets the caret via a REAL hitTest, then drives the SAME edit()/save()
 # the keydown handler uses — no synthetic keystrokes, rule 6b) and asserts
 # the full round-trip:
@@ -14,7 +14,7 @@
 #      AND the selection type-replace ("paragraphT28" — the probe's
 #      shift+Arrow selection replaced by typing, T-A28)
 #   5. media parts are byte-exact vs the pre-save snapshot (sha256 per part)
-#   6. REOPEN: a second window (opened AFTER the save, via nano_light_reopen)
+#   6. REOPEN: a second window (opened AFTER the save, via wasen_light_reopen)
 #      renders evidence containing the marker — "mở lại render đúng nội dung
 #      đã edit" (DD L01 §5)
 #   7. SELECTION evidence (T-A28): `nano light selection:` lines exist and
@@ -103,9 +103,9 @@ MIN_SPAN="${NANO_LIGHT_MIN_SPAN:-3}"
 COMPOSE="${NANO_LIGHT_COMPOSE:-Xin chào}"
 REPL='T28'
 NEGATIVE="${NANO_LIGHT_NEGATIVE:-}"
-FIXTURE=/tmp/nanooffice-nanolight.docx
-SNAPSHOT=/tmp/nanooffice-nanolight-pre.docx
-LOG="$(mktemp /tmp/nanooffice-smoke-nanolight-XXXXXX)"
+FIXTURE=/tmp/wasenoffice-nanolight.docx
+SNAPSHOT=/tmp/wasenoffice-nanolight-pre.docx
+LOG="$(mktemp /tmp/wasenoffice-smoke-nanolight-XXXXXX)"
 
 if [ "$NEGATIVE" = "garbage" ]; then
   printf 'not a docx package' > "$FIXTURE"
@@ -131,15 +131,15 @@ cp "$FIXTURE" "$SNAPSHOT"
 smoke_init "$FIXTURE"
 echo "smoke: fixture=$FIXTURE log=$LOG timeout=${TIMEOUT}s budget=${MAX_MS}ms marker=$MARKER compose=$COMPOSE (NL probe driver${NEGATIVE:+, negative=$NEGATIVE})"
 
-smoke_boot "NANO_OFFICE_NANO_LIGHT=$FIXTURE" "NANO_OFFICE_NL_PROBE=$MARKER" "NANO_OFFICE_DEVTOOLS=0" "RUST_LOG=info" "$LOG"
+smoke_boot "WASEN_OFFICE_NANO_LIGHT=$FIXTURE" "WASEN_OFFICE_NL_PROBE=$MARKER" "WASEN_OFFICE_DEVTOOLS=0" "RUST_LOG=info" "$LOG"
 
 # The CLI is the crate's parse face (parity-a2.sh uses the same binary).
-CLI="$ROOT/src-tauri/target/debug/nanooffice-ooxml"
-cargo build -p nanooffice-ooxml --manifest-path "$ROOT/src-tauri/Cargo.toml" --quiet || {
-  echo "smoke: cannot build the nanooffice-ooxml CLI"; exit 1;
+CLI="$ROOT/src-tauri/target/debug/wasenoffice-ooxml"
+cargo build -p wasenoffice-ooxml --manifest-path "$ROOT/src-tauri/Cargo.toml" --quiet || {
+  echo "smoke: cannot build the wasenoffice-ooxml CLI"; exit 1;
 }
 
-nano_light_signals() {
+wasen_light_signals() {
   if grep -q "$SMOKE_RE_NL_FAILED" "$LOG" 2>/dev/null; then
     SMOKE_ABORT=1
     SMOKE_SUMMARY="nano light error ($(grep -m1 "$SMOKE_RE_NL_FAILED" "$LOG" | cut -c1-120))"
@@ -292,7 +292,7 @@ def walk_paras(blocks):
                     yield from walk_paras(cell["blocks"])
 
 link_runs = [r for p in walk_paras(mj["body"]) for r in p["runs"] if r.get("link")]
-ext = [r for r in link_runs if r["link"].get("target") == "https://example.com/nanooffice-fidelity"]
+ext = [r for r in link_runs if r["link"].get("target") == "https://example.com/wasenoffice-fidelity"]
 if negative == "linkdoctor":
     need(bool(ext) and all(r["link"].get("target") == "WRONG-TARGET" for r in ext),
          f"linkdoctor: the real link target survived on {len(ext)} run(s) — the assert must bite here")
@@ -329,7 +329,7 @@ need(pt_before == pt_after,
      f"settings/theme/docProps changed on save: {sorted(set(pt_before.items()) ^ set(pt_after.items()))[:4]}")
 if negative != "doctor":
     saved_rels = zipfile.ZipFile(fixture).read("word/_rels/document.xml.rels").decode()
-    need('TargetMode="External"' in saved_rels and "nanooffice-fidelity" in saved_rels,
+    need('TargetMode="External"' in saved_rels and "wasenoffice-fidelity" in saved_rels,
          "the saved package must keep the hyperlink rel with TargetMode External")
 
 # (6) REOPEN: the LAST `nano light: opened` after the `nano light saved:`
@@ -340,7 +340,7 @@ opened_idx = max(
     (i for i, l in enumerate(lines) if i > saved_idx and "nano light: opened" in l),
     default=None,
 )
-wait(opened_idx is not None, "reopen window not up yet (nano_light_reopen)")
+wait(opened_idx is not None, "reopen window not up yet (wasen_light_reopen)")
 evidences = []
 for l in lines[opened_idx:]:
     if "nano light evidence: " in l:
@@ -368,7 +368,7 @@ PY
   return "$rc"
 }
 
-if smoke_poll "$TIMEOUT" nano_light_signals "Nano Light edit round-trip evidence"; then
+if smoke_poll "$TIMEOUT" wasen_light_signals "Nano Light edit round-trip evidence"; then
   echo "smoke: ✓ first-draw < ${MAX_MS} ms · ✓ edit chain (insert/backspace/delete/enter/undo/redo) · ✓ selection span ≥ ${MIN_SPAN} + Cmd-A cross-para · ✓ dblclick word span 4 + triple-click paragraph · ✓ composition commits '${COMPOSE}' (1 undo unit) · ✓ clipboard copy→paste→copy-all round · ✓ single-cell round (cell text changed, other cell + structure intact) · ✓ type-replace → save (write_docx + atomic replace) · ✓ parse-back contains marker + 'paragraph${REPL}' + '${COMPOSE}' + paste result + T30 cell round · ✓ hyperlink (rel+target+runs, insert inside) + mid sectPr + settings/theme/docProps byte-exact · ✓ media byte-exact · ✓ reopen renders the edit"
   grep -m1 "$SMOKE_RE_NL_FIRST_DRAW" "$LOG" | sed 's/^/smoke:   /' | cut -c1-160
   grep -m1 "$SMOKE_RE_NL_SEL" "$LOG" | sed 's/^/smoke:   /' | cut -c1-160

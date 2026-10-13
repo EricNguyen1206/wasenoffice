@@ -16,7 +16,7 @@
  * selection before the verb; undo snapshots carry the selection). The
  * caret/selection `para` is the BODY BLOCK index (`Hit.block` — §5.3a;
  * `caretXY` matches on block). Typing is plain `keydown` (no synthetic
- * keystrokes anywhere — rule 6b); the gate-15 probe (NANO_OFFICE_NL_PROBE)
+ * keystrokes anywhere — rule 6b); the gate-15 probe (WASEN_OFFICE_NL_PROBE)
  * drives the SAME edit()/navigation the handlers use. No engine shim is
  * loaded on this page. T-A29 (DD §5.4): IME composition (preedit overlay,
  * commit = 1 insert = 1 undo unit), plain-text clipboard (Cmd-C/X/V via
@@ -133,7 +133,7 @@ async function main(): Promise<void> {
 
   try {
     surface = new DocumentSurface('cv');
-    const nl = await invoke<NanoLightDoc>('nano_light_open');
+    const nl = await invoke<NanoLightDoc>('wasen_light_open');
     nameEl.textContent = nl.name;
     surface.showWarnings(nl.warnings);
     let body = nl.doc.body;
@@ -232,7 +232,7 @@ async function main(): Promise<void> {
     const closeTab = async (tabId: number): Promise<void> => {
       if (tabs.size <= 1) return;
       tabs.delete(tabId);
-      void invoke('nano_light_close_tab', { tabId }).catch(() => {});
+      void invoke('wasen_light_close_tab', { tabId }).catch(() => {});
       if (activeTabId === tabId) {
         const first = tabs.keys().next().value;
         if (first !== undefined) {
@@ -528,7 +528,7 @@ async function main(): Promise<void> {
             message: `nano light cell: op=${cmd.kind} row=${cmd.caret.cell[0]} col=${cmd.caret.cell[1]} para=${cmd.caret.cellPara}`,
           });
         }
-        const out = await invoke<EditOutcome>('nano_light_edit', { cmd, tabId: activeTabId });
+        const out = await invoke<EditOutcome>('wasen_light_edit', { cmd, tabId: activeTabId });
         body = out.doc.body;
         caret = out.caret;
         dirty = out.dirty;
@@ -545,7 +545,7 @@ async function main(): Promise<void> {
 
     const save = async (): Promise<void> => {
       try {
-        await invoke('nano_light_save', { tabId: activeTabId });
+        await invoke('wasen_light_save', { tabId: activeTabId });
         dirty = false;
         updateStatus();
       } catch (e) {
@@ -912,13 +912,13 @@ async function main(): Promise<void> {
       });
     }
 
-    // Gate-15 edit driver (pattern NANO_OFFICE_SAVE_PROBE): caret from a
+    // Gate-15 edit driver (pattern WASEN_OFFICE_SAVE_PROBE): caret from a
     // genuine hitTest, then the SAME edit()/navigation the handlers use,
     // then a reopen in a second window. Product default (no env): never
     // runs. The selection chain dispatches REAL KeyboardEvents through the
     // keydown handler (shift+arrows extend, no keystrokes — rule 6b) and
     // replaces the selection through edit() with the live state.
-    const probe = (window as unknown as { __NANO_OFFICE_NL_PROBE__?: string }).__NANO_OFFICE_NL_PROBE__;
+    const probe = (window as unknown as { __WASEN_OFFICE_NL_PROBE__?: string }).__WASEN_OFFICE_NL_PROBE__;
     if (probe && model.lines.length > 0) {
       try {
         const first = model.lines[0];
@@ -988,7 +988,7 @@ async function main(): Promise<void> {
           if (h) await edit({ kind: 'insert', text: 'T31LINK', caret: h, sel: null });
         }
         await save();
-        await invoke('nano_light_reopen');
+        await invoke('wasen_light_reopen');
         await invoke('frontend_log', { level: 'info', message: 'nano light probe: chain done (edit → save → reopen)' });
       } catch (e) {
         await invoke('frontend_log', { level: 'error', message: `nano light failed: probe ${e}` });

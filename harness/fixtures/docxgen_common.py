@@ -31,8 +31,8 @@ def png_1x1(r: int, g: int, b: int) -> bytes:
 # T-A31 fidelity extras (hyperlink + mid sectPr + settings/theme/docProps) shared by the corpus generator and make_docx_layout.py's `fidelity` flag.
 
 LINK_REL_ID = "rIdLink"
-LINK_TARGET = "https://example.com/nanooffice-fidelity"
-LINK_TEXT = "NanoOffice fidelity link"
+LINK_TARGET = "https://example.com/wasenoffice-fidelity"
+LINK_TEXT = "WasenOffice fidelity link"
 ANCHOR_NAME = "sect-anchor"
 
 _SETTINGS_XML = (
@@ -42,19 +42,19 @@ _SETTINGS_XML = (
 )
 _THEME_XML = (
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-    '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="NanoOffice">'
+    '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="WasenOffice">'
     '<a:themeElements>'
-    '<a:clrScheme name="NanoOffice"><a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1>'
+    '<a:clrScheme name="WasenOffice"><a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1>'
     '<a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="44546A"/></a:dk2>'
     '<a:lt2><a:srgbClr val="E7E6E6"/></a:lt2><a:accent1><a:srgbClr val="0563C1"/></a:accent1>'
     '<a:accent2><a:srgbClr val="ED7D31"/></a:accent2><a:accent3><a:srgbClr val="A5A5A5"/></a:accent3>'
     '<a:accent4><a:srgbClr val="FFC000"/></a:accent4><a:accent5><a:srgbClr val="4472C4"/></a:accent5>'
     '<a:accent6><a:srgbClr val="70AD47"/></a:accent6><a:hlink><a:srgbClr val="0563C1"/></a:hlink>'
     '<a:folHlink><a:srgbClr val="954F72"/></a:folHlink></a:clrScheme>'
-    '<a:fontScheme name="NanoOffice"><a:majorFont><a:latin typeface="Carlito"/><a:ea typeface=""/>'
+    '<a:fontScheme name="WasenOffice"><a:majorFont><a:latin typeface="Carlito"/><a:ea typeface=""/>'
     '<a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="Carlito"/><a:ea typeface=""/>'
     '<a:cs typeface=""/></a:minorFont></a:fontScheme>'
-    '<a:fmtScheme name="NanoOffice">'
+    '<a:fmtScheme name="WasenOffice">'
     '<a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill>'
     '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst>'
     '<a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln>'
@@ -72,12 +72,12 @@ _CORE_XML = (
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '
     'xmlns:dc="http://purl.org/dc/elements/1.1/">'
-    '<dc:title>NanoOffice fidelity fixture</dc:title><dc:creator>NanoOffice</dc:creator></cp:coreProperties>'
+    '<dc:title>WasenOffice fidelity fixture</dc:title><dc:creator>WasenOffice</dc:creator></cp:coreProperties>'
 )
 _APP_XML = (
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">'
-    '<Application>NanoOffice</Application></Properties>'
+    '<Application>WasenOffice</Application></Properties>'
 )
 
 FIDELITY_PARTS = {

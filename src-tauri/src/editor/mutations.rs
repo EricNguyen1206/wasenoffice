@@ -5,7 +5,7 @@
 //! (`Vec<Block>` + `Caret` → `Caret`); the only production consumer is
 //! `apply()` in the parent module.
 
-use nanooffice_ooxml::{Block, Document, Paragraph, Run};
+use wasenoffice_ooxml::{Block, Document, Paragraph, Run};
 
 use super::{Caret, SelRange};
 

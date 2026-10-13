@@ -21,7 +21,7 @@ pub fn create_boot_window(
         BootMode::QuickView(_) => {
             let mut win =
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::App("viewer.html".into()))
-                    .title("NanoOffice — Quick View")
+                    .title("WasenOffice — Quick View")
                     .inner_size(1000.0, 700.0)
                     .visible(true)
                     .focused(false);
@@ -30,7 +30,7 @@ pub fn create_boot_window(
             }
             if config.qv_hittest {
                 win = win.initialization_script_for_all_frames(
-                    "window.__NANO_OFFICE_QV_HITTEST__ = true;",
+                    "window.__WASEN_OFFICE_QV_HITTEST__ = true;",
                 );
             }
             let _ = win.build()?;
@@ -39,7 +39,7 @@ pub fn create_boot_window(
         BootMode::NanoLight(_) => {
             let mut win =
                 WebviewWindowBuilder::new(app, "main", WebviewUrl::App("editor.html".into()))
-                    .title("NanoOffice — Nano Light")
+                    .title("WasenOffice — Nano Light")
                     .inner_size(1000.0, 700.0)
                     .visible(true)
                     .focused(false);
@@ -48,7 +48,7 @@ pub fn create_boot_window(
             }
             if let Some(marker) = &config.nl_probe_marker {
                 let script = format!(
-                    "window.__NANO_OFFICE_NL_PROBE__ = {};",
+                    "window.__WASEN_OFFICE_NL_PROBE__ = {};",
                     serde_json::json!(marker)
                 );
                 win = win.initialization_script_for_all_frames(&script);
@@ -58,7 +58,7 @@ pub fn create_boot_window(
         }
         BootMode::Normal => {
             let mut win = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
-                .title("NanoOffice")
+                .title("WasenOffice")
                 .inner_size(1280.0, 800.0)
                 .min_inner_size(940.0, 560.0)
                 .visible(true)

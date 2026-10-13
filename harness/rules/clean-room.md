@@ -2,7 +2,7 @@
 
 Kèm theo QĐ9 (roadmap tự chủ mã nguồn, `docs/vision.md`). Rule này ràng buộc MỌI agent
 (agent chính + subagent) khi viết bất kỳ module nào thuộc **Track A** (thay thế x2t /
-sdkjs / web-apps bằng code NanoOffice). Prompt subagent làm việc Track A PHẢI nhúng/trỏ
+sdkjs / web-apps bằng code WasenOffice). Prompt subagent làm việc Track A PHẢI nhúng/trỏ
 rule này — cùng xử lý với `mit-purity.md`.
 
 ## Nguyên tắc

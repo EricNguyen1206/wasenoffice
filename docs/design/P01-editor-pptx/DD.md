@@ -18,7 +18,7 @@ type: design
 
 ## 1. Tổng quan
 
-Màn mở/soạn file PPTX của NanoOffice: cùng kiến trúc với D01 (editor DOCX) — WKWebView
+Màn mở/soạn file PPTX của WasenOffice: cùng kiến trúc với D01 (editor DOCX) — WKWebView
 hosting **presentationeditor** + sdkjs build `slide` — khác D01 ở: (1) boot params
 `doctype=slide&filetype=pptx` (bản đồ `FILE_FORMATS` trong `src/main.ts`, bằng chứng
 upstream: `docs/reference.map.md` § multi-format), (2) engine build `slide` dùng bộ tên
@@ -27,7 +27,7 @@ minified riêng cho font loader / glyph manager — shim generalise theo biến 
 
 ## 2. Bối cảnh & phạm vi
 
-- **Goals:** mở PPTX local render đầy đủ trong shell NanoOffice (đích T-048); smoke gate
+- **Goals:** mở PPTX local render đầy đủ trong shell WasenOffice (đích T-048); smoke gate
   behavioral tự động trong verify.sh (TC-P01-01).
 - **Non-goals:** save PPTX (T-049) · print/clipboard (PH-2) · sửa `upstream/`/`engines/`.
 - **Quyết định liên quan:** QĐ6 (DD+TEST theo màn) · contract mở/save: `reference.map.md`.

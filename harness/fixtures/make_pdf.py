@@ -2,7 +2,7 @@
 """Generate a minimal-but-real PDF fixture (stdlib only, handwritten per
 ISO 32000) for the multi-format smoke gates (T-048).
 
-Usage: make_pdf.py [output.pdf]   (default: /tmp/nanooffice-fixture.pdf)
+Usage: make_pdf.py [output.pdf]   (default: /tmp/wasenoffice-fixture.pdf)
 One page, base-14 Helvetica text, xref table computed from real byte offsets.
 Vietnamese diacritics live in the document Title metadata (UTF-16BE hex
 string): the base-14 fonts are WinAnsi-encoded and cannot render Vietnamese
@@ -12,7 +12,7 @@ proportion for a smoke fixture. Body text stays ASCII on purpose.
 import sys
 
 TEXT_LINES = [
-    "NanoOffice T-048 Fixture",
+    "WasenOffice T-048 Fixture",
     "If this page renders in the WKWebView canvas,",
     "the PDF editor is alive inside the Tauri shell.",
 ]
@@ -23,9 +23,9 @@ def utf16be_hex(s: str) -> str:
 
 
 def build_pdf() -> bytes:
-    title_utf16 = utf16be_hex("Tệp kiểm tra NanoOffice — T-048")
+    title_utf16 = utf16be_hex("Tệp kiểm tra WasenOffice — T-048")
 
-    info = f"<< /Title <{title_utf16}> /Producer (NanoOffice fixture) >>"
+    info = f"<< /Title <{title_utf16}> /Producer (WasenOffice fixture) >>"
     content_lines = "\n".join(
         f"BT /F1 18 Tf 72 {740 - i * 32} Td ({line}) Tj ET" for i, line in enumerate(TEXT_LINES)
     )
@@ -65,7 +65,7 @@ def build_pdf() -> bytes:
 
 
 def main():
-    out = sys.argv[1] if len(sys.argv) > 1 else "/tmp/nanooffice-fixture.pdf"
+    out = sys.argv[1] if len(sys.argv) > 1 else "/tmp/wasenoffice-fixture.pdf"
     data = build_pdf()
     with open(out, "wb") as f:
         f.write(data)

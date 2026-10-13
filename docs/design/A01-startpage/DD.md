@@ -19,7 +19,7 @@ type: design
 ## 1. Tổng quan
 
 Màn đầu tiên khi mở app không kèm file đối số: nơi tạo tài liệu mới, mở file có sẵn, quay lại
-tài liệu gần dùng. Thay thế **loginpage** của upstream bằng JS riêng của NanoOffice (`src/startpage/`)
+tài liệu gần dùng. Thay thế **loginpage** của upstream bằng JS riêng của WasenOffice (`src/startpage/`)
 — không login, không cloud, không mạng (đúng định vị local-first + dữ liệu không rời máy).
 
 ## 2. Bối cảnh & phạm vi

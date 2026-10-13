@@ -3,7 +3,7 @@ type: evidence
 ---
 # docs/reference.map.md
 
-Bản đồ bằng chứng: upstream code ↔ nanooffice cần làm gì. Trạng thái: observed (có path) /
+Bản đồ bằng chứng: upstream code ↔ wasenoffice cần làm gì. Trạng thái: observed (có path) /
 candidate (cần kiểm chứng). Cập nhật mỗi khi phát hiện mới.
 
 ## Viewer media route + quy ước EMU (mới 03.10, T-V3 — clean-room, spec-ref + nguồn mở)
@@ -17,7 +17,7 @@ candidate (cần kiểm chứng). Cập nhật mỗi khi phát hiện mới.
 - **Route media viewer:** `/media/<fileId>/<OPC-part>` trong
   `src-tauri/src/protocol/filesrv.rs` — key bằng fileId của `FileRegistry` (cùng contract
   `/file/<id>/`: URL không mang đường đĩa); part lookup **exact-name trong bảng entry zip**
-  qua `nanooffice_ooxml::try_part_bytes` (re-export mới từ `mod opc` private) → tên
+  qua `wasenoffice_ooxml::try_part_bytes` (re-export mới từ `mod opc` private) → tên
   traversal không thể resolve ra đĩa; `..`/`\` → 403 tường minh trước lookup (defense-in-depth,
   test `media_rejects_traversal_and_unknown_targets`).
 - **Viewer fetch ảnh** (`src/viewer.ts`): `fetch()` + `createImageBitmap` (không
@@ -35,19 +35,19 @@ candidate (cần kiểm chứng). Cập nhật mỗi khi phát hiện mới.
 | desktop-sdk (CEF wrapper) | `~/DATA/Backend/rust/onlyoffice-study/desktop-sdk` (HEAD 2f16486, clone 22.09) | nguồn chân lý native surface |
 | build_tools | **CHƯA CÓ** | cần khi tự build engine/x2t |
 
-## Bridge JS→Native — trạng thái PH-0 (observed trong runtime NanoOffice 22.09)
+## Bridge JS→Native — trạng thái PH-0 (observed trong runtime WasenOffice 22.09)
 
 Chuẩn method: tên giữ NGUYÊN VĂN upstream. Điểm into: `upstream/sdkjs/common/apiBase.js:266`.
 "Sync-truth" = shim trả lời đồng bộ trong engine frame (CEF shell làm điều đó native-side;
 async bridge không thay thế được — call-sites dùng trong `if` / lúc load script).
 
-| Method | Bằng chứng call-site | Trạng thái NanoOffice |
+| Method | Bằng chứng call-site | Trạng thái WasenOffice |
 |---|---|---|
 | `CreateEditorApi` | apiBase.js:266 | **DONE** (ack; engine chỉ cần call không lỗi) |
 | `IsLocalFile` | apiBase.js:1419, 2394, 3222, 5085 (sync boolean) | **DONE** (true — PH-0 local-only; sync-truth) |
 | `getEngineVersion` | web-apps Desktop.js | DONE (pkg version) |
 | `GetEncryptedHeader` | editorscommon.js:12380 (sync lúc load sdk-all) | **DONE** ("ENCRYPTED;" = fallback engine) |
-| `CheckUserId` | sdk-all EndLoad path, gọi không điều kiện | **DONE** ("nanooffice-ph0") |
+| `CheckUserId` | sdk-all EndLoad path, gọi không điều kiện | **DONE** ("wasenoffice-ph0") |
 | `GetInstallPlugins` | apiBase_plugins.js:1691,1745 (`JSON.parse` → `[system,user]`, mỗi cái `pluginsData[]`) | **DONE** (2 entries `pluginsData:[]` — tránh crash `a[0]`) |
 | `isSupportPlugins` / `isSupportMacroses` | apiBase_plugins.js | DONE (true) |
 | `SetDocumentName` | apiBase.js:701 | DONE (ack + log) |
@@ -67,9 +67,9 @@ async bridge không thay thế được — call-sites dùng trong `if` / lúc l
 | `LoadFontBase64` | wrapper cpp:1475 — sync set `window["<path>"]="<size>;<base64>"`; **build word 9.4 KHÔNG dùng** (font đi qua scheme `ascdesktop://fonts/`, xem § Font contract) | STUB (UNIMPL khi bị gọi — giữ quan sát) |
 | Còn lại (~110 method) | bảng gốc bên dưới | STUB (UNIMPL logged khi bị gọi) |
 
-## Desktop open contract (observed 22.09, từ desktop-sdk + runtime NanoOffice)
+## Desktop open contract (observed 22.09, từ desktop-sdk + runtime WasenOffice)
 
-Chuỗi mở file local của shell thật — NanoOffice tái tạo trong shim + `get_document_for_delivery`:
+Chuỗi mở file local của shell thật — WasenOffice tái tạo trong shim + `get_document_for_delivery`:
 
 1. Engine boot với document url `_offline_` → apiBase.js:682 `put_OfflineApp` → gọi `LocalStartOpen`
    (sdkjs Local/common.js:64 — chỉ sau khi modules load xong).
@@ -179,7 +179,7 @@ black-box trên binary đã build (`otool -L`, chạy thật) — không đọc 
   trim còn lại thuộc T-A12 (UnicodeConverter 31 MB + x2t 42 MB là 2 mục tiêu lớn nhất;
   đề xuất re-baseline budget ở diagnostics — không tự sửa vision).
 - **Resolution x2t path (1 nhà: `save.rs::x2t_path()`, cả open-delivery lẫn save đều
-  gọi):** env `NANO_OFFICE_X2T` (chỉ nhận khi file tồn tại — env sai → WARN + rơi xuống
+  gọi):** env `WASEN_OFFICE_X2T` (chỉ nhận khi file tồn tại — env sai → WARN + rơi xuống
   nhánh sau) → bundled `engines/converter/<target>/x2t` (walk ancestors từ exe dir + cwd)
   → app cài sẵn (log WARN — dependency đang rút). `<target>` = triple rustc host
   (`aarch64-apple-darwin`), bảng compose từ `std::env::consts::ARCH/OS` ở
@@ -206,7 +206,7 @@ aarch64-apple-darwin/x2t <in.docx> <out.bin>` (positional 2-arg — seam `OpenBi
   records trong changes0.json — T-010: run-length, DoctRenderer áp) → ước lượng tháng, dead
   code sau A4 → **chốt P2 "OOXML core trước"** (100% spec ECMA-376); trigger mở lại P1:
   rút x2t trước A4 (khi đó chỉ cần writer OOXML→Editor.bin). Crate slice:
-  `src-tauri/crates/nanooffice-ooxml` (P2, clean-room).
+  `src-tauri/crates/wasenoffice-ooxml` (P2, clean-room).
 
 ## AllFonts generator — Rust thay việc app sinh (mới 30.09, T-A11, rung A1 — clean-room ĐẦU TIÊN)
 
@@ -215,7 +215,7 @@ aarch64-apple-darwin/x2t <in.docx> <out.bin>` (positional 2-arg — seam `OpenBi
   § Font bundle — hết đọc app cài sẵn)
   + parse sfnt std-thuần (seek-read từng table, không đọc nguyên file — TTC lớn) → 1 chuỗi
   AllFonts.js (`js_raw`). 2 consumer: filesrv serve `rewrite_font_paths(js_raw)` (URL loopback)
-  + `bridge/save.rs` ghi `js_raw` (disk path) ra `$TMPDIR/nanooffice-allfonts/AllFonts.js` cho
+  + `bridge/save.rs` ghi `js_raw` (disk path) ra `$TMPDIR/wasenoffice-allfonts/AllFonts.js` cho
   `<m_sAllFontsPath>`/`<m_sFontDir>`. Cùng 1 chuỗi nguồn → index filesrv và x2t khớp nhau
   **by construction** (không cần khớp thứ tự của app). `all_fonts_source()` (đọc data-dir app) ĐÃ XÓA.
 - **Format file (oracle-obs — decode byte-exact artifact của app: 557 record sạch 91283/91283
@@ -299,7 +299,7 @@ aarch64-apple-darwin/x2t <in.docx> <out.bin>` (positional 2-arg — seam `OpenBi
   `XFg="../../../../fonts/"`) pump queue `tVa` poll 50 ms; `AscFonts.fU.YD(name)` tra font.
 - **Shell thật:** CEF chặn scheme `ascdesktop://fonts/<abs disk path>` trả bytes font
   (runtime observed: mở fixture → `Hcc=15` streams UB=0 — Arial/Courier New/Times New Roman).
-- **NanoOffice:** Rust filesrv rewrite path font → loopback URL khi serve AllFonts.js
+- **WasenOffice:** Rust filesrv rewrite path font → loopback URL khi serve AllFonts.js
   (`protocol/mod.rs` `rewrite_font_paths`); shim patch `AscFonts.sje.prototype.BSa` ngay sau
   khi eval sdk-all.js (`patchDesktopFontLoader` trong `src/shim/desktopEditor.js`) — same-origin
   XHR tới URL đó, nạp cùng registry/status/callback. Re-implement từ behavior, không copy code.
@@ -357,19 +357,19 @@ và `<m_sFileFrom>` trỏ vào thư mục chứa `changes/`.
 
 - Engine phân loại document URL theo chuỗi scheme: editorscommon.js:3088 (`getUrlType`) +
   allowlist `:2939` `(^((https?|ftps?|file|tessa|joplin|smb)://)|(mailto:))` → **custom scheme
-  (`nanooffice-file://`) bị đánh Invalid/Unsafe, engine không bao giờ fetch**.
+  (`wasenoffice-file://`) bị đánh Invalid/Unsafe, engine không bao giờ fetch**.
 - Desktop-mode mở file OOXML cần `window.Asc.Addons.ooxml === true`
   (apiBase.js:5217 `asc_isSupportFeature`) — shell set (tương đương `CSdkjsAddons::CheckLocal`).
 - Custom-scheme page = secure context → fetch `http://` bị chặn mixed-content → engine assets +
   fonts + documents phải **cùng origin**.
 - **Deviation kiến trúc PH-0:** toàn bộ engine + documents serve qua loopback
   `http://127.0.0.1:14321` (Rust `protocol/filesrv.rs`; URL document chỉ chứa fileId opaque,
-  disk path không bao giờ ra JS). `nanooffice-engine://` + `nanooffice-file://` vẫn đăng ký.
+  disk path không bao giờ ra JS). `wasenoffice-engine://` + `wasenoffice-file://` vẫn đăng ký.
   Quyết định dài hạn chốt ở PH-1 khi làm sidecar.
 
 ## Bridge JS→Native (observed, lower-bound ~130 method — bảng khảo sát 21.09)
 
-| Nhóm | Method | Call-sites tiêu biểu | Trạng thái NanoOffice |
+| Nhóm | Method | Call-sites tiêu biểu | Trạng thái WasenOffice |
 |---|---|---|---|
 | File | `OpenFilenameDialog` (20), `LocalFileGetImageUrl` (22), `LocalFileSaveDialog`, `loadLocalFile`, `GetDropFiles`, `convertFile`, `startExternalConvertation`, `ResaveFile` | `sdkjs/common/apiBase.js` | STUB (PH-1+; riêng `LocalFileSave` + `LocalFileSaveChanges` đã DONE-PH1 — xem bảng trên) |
 | Print | `Print`, `Print_Start/Page/End`, `IsFilePrinting`, `emulateCloudPrinting` (apiBase.js:5684), `localSaveToDrawingFormat` (:5698) | apiBase.js | STUB (PH-2) |

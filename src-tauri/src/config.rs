@@ -10,32 +10,32 @@
 pub enum BootMode {
     /// Standard application flow: start page or default document editor.
     Normal,
-    /// Quick view surface (V01, DD V01 §3.1) triggered by `NANO_OFFICE_QUICK_VIEW`.
+    /// Quick view surface (V01, DD V01 §3.1) triggered by `WASEN_OFFICE_QUICK_VIEW`.
     QuickView(String),
-    /// Nano Light editor surface (L01, DD L01 §3) triggered by `NANO_OFFICE_NANO_LIGHT`.
+    /// Nano Light editor surface (L01, DD L01 §3) triggered by `WASEN_OFFICE_NANO_LIGHT`.
     NanoLight(String),
 }
 
 /// Typed configuration snapshot parsed at startup.
 pub struct AppConfig {
-    /// Rule 6b background execution mode (`NANO_OFFICE_BACKGROUND=1`).
+    /// Rule 6b background execution mode (`WASEN_OFFICE_BACKGROUND=1`).
     pub background: bool,
-    /// Startup document path (`NANO_OFFICE_OPEN`), consumed once on load.
+    /// Startup document path (`WASEN_OFFICE_OPEN`), consumed once on load.
     startup_document: std::sync::Mutex<Option<String>>,
-    /// Devtools toggle in debug builds (`NANO_OFFICE_DEVTOOLS=1`).
+    /// Devtools toggle in debug builds (`WASEN_OFFICE_DEVTOOLS=1`).
     #[allow(dead_code)]
     pub devtools: bool,
     /// Boot mode and entry window flavor.
     pub boot_mode: BootMode,
-    /// Whether frontend diagnostic probes are enabled (`NANO_OFFICE_PROBE`).
+    /// Whether frontend diagnostic probes are enabled (`WASEN_OFFICE_PROBE`).
     pub probe_enabled: bool,
-    /// Marker text for save probe automation (`NANO_OFFICE_SAVE_PROBE`).
+    /// Marker text for save probe automation (`WASEN_OFFICE_SAVE_PROBE`).
     pub save_probe_text: Option<String>,
-    /// Document path for start page UX probe (`NANO_OFFICE_UX_PROBE`).
+    /// Document path for start page UX probe (`WASEN_OFFICE_UX_PROBE`).
     pub ux_probe_path: Option<String>,
-    /// Marker text for Nano Light edit probe (`NANO_OFFICE_NL_PROBE`).
+    /// Marker text for Nano Light edit probe (`WASEN_OFFICE_NL_PROBE`).
     pub nl_probe_marker: Option<String>,
-    /// Quick view layout hit-test probe (`NANO_OFFICE_QV_HITTEST`).
+    /// Quick view layout hit-test probe (`WASEN_OFFICE_QV_HITTEST`).
     pub qv_hittest: bool,
 }
 
@@ -52,31 +52,31 @@ impl AppConfig {
     {
         let non_empty = |k: &str| lookup(k).filter(|v| !v.trim().is_empty());
         let background = matches!(
-            lookup("NANO_OFFICE_BACKGROUND").as_deref(),
+            lookup("WASEN_OFFICE_BACKGROUND").as_deref(),
             Some(v) if !v.is_empty() && v != "0"
         );
 
-        let startup_document = std::sync::Mutex::new(non_empty("NANO_OFFICE_OPEN"));
-        let devtools = matches!(lookup("NANO_OFFICE_DEVTOOLS").as_deref(), Some("1"));
+        let startup_document = std::sync::Mutex::new(non_empty("WASEN_OFFICE_OPEN"));
+        let devtools = matches!(lookup("WASEN_OFFICE_DEVTOOLS").as_deref(), Some("1"));
 
-        let boot_mode = if let Some(path) = non_empty("NANO_OFFICE_QUICK_VIEW") {
+        let boot_mode = if let Some(path) = non_empty("WASEN_OFFICE_QUICK_VIEW") {
             BootMode::QuickView(path)
-        } else if let Some(path) = non_empty("NANO_OFFICE_NANO_LIGHT") {
+        } else if let Some(path) = non_empty("WASEN_OFFICE_NANO_LIGHT") {
             BootMode::NanoLight(path)
         } else {
             BootMode::Normal
         };
 
-        let probe_enabled = match lookup("NANO_OFFICE_PROBE").as_deref() {
+        let probe_enabled = match lookup("WASEN_OFFICE_PROBE").as_deref() {
             Some("0") => false,
             Some("1") => true,
             _ => cfg!(debug_assertions),
         };
 
-        let save_probe_text = non_empty("NANO_OFFICE_SAVE_PROBE");
-        let ux_probe_path = non_empty("NANO_OFFICE_UX_PROBE");
-        let nl_probe_marker = non_empty("NANO_OFFICE_NL_PROBE");
-        let qv_hittest = lookup("NANO_OFFICE_QV_HITTEST").is_some_and(|v| !v.is_empty());
+        let save_probe_text = non_empty("WASEN_OFFICE_SAVE_PROBE");
+        let ux_probe_path = non_empty("WASEN_OFFICE_UX_PROBE");
+        let nl_probe_marker = non_empty("WASEN_OFFICE_NL_PROBE");
+        let qv_hittest = lookup("WASEN_OFFICE_QV_HITTEST").is_some_and(|v| !v.is_empty());
 
         Self {
             background,
@@ -114,18 +114,18 @@ impl AppConfig {
         let mut scripts = Vec::new();
         if let Some(path) = &self.ux_probe_path {
             scripts.push(format!(
-                "window.__NANO_OFFICE_UX_PROBE__ = {};",
+                "window.__WASEN_OFFICE_UX_PROBE__ = {};",
                 serde_json::json!(path)
             ));
         }
         if let Some(text) = &self.save_probe_text {
             scripts.push(format!(
-                "window.__NANO_OFFICE_SAVE_PROBE_TEXT__ = {};",
+                "window.__WASEN_OFFICE_SAVE_PROBE_TEXT__ = {};",
                 serde_json::json!(text)
             ));
         }
         scripts.push(format!(
-            "window.__NANO_OFFICE_PROBE__ = {};",
+            "window.__WASEN_OFFICE_PROBE__ = {};",
             self.probe_enabled
         ));
         scripts
@@ -155,15 +155,15 @@ mod tests {
     #[test]
     fn test_background_flag_parsing() {
         let mut env = HashMap::new();
-        env.insert("NANO_OFFICE_BACKGROUND", "1".into());
+        env.insert("WASEN_OFFICE_BACKGROUND", "1".into());
         let cfg = AppConfig::from_lookup(|k| env.get(k).cloned());
         assert!(cfg.background);
 
-        env.insert("NANO_OFFICE_BACKGROUND", "0".into());
+        env.insert("WASEN_OFFICE_BACKGROUND", "0".into());
         let cfg = AppConfig::from_lookup(|k| env.get(k).cloned());
         assert!(!cfg.background);
 
-        env.insert("NANO_OFFICE_BACKGROUND", "".into());
+        env.insert("WASEN_OFFICE_BACKGROUND", "".into());
         let cfg = AppConfig::from_lookup(|k| env.get(k).cloned());
         assert!(!cfg.background);
     }
@@ -171,13 +171,13 @@ mod tests {
     #[test]
     fn test_boot_mode_precedence() {
         let mut env = HashMap::new();
-        env.insert("NANO_OFFICE_QUICK_VIEW", "/tmp/doc.docx".into());
+        env.insert("WASEN_OFFICE_QUICK_VIEW", "/tmp/doc.docx".into());
         let cfg = AppConfig::from_lookup(|k| env.get(k).cloned());
         assert_eq!(cfg.boot_mode, BootMode::QuickView("/tmp/doc.docx".into()));
 
         // When quick-view is absent, nano-light activates
-        env.remove("NANO_OFFICE_QUICK_VIEW");
-        env.insert("NANO_OFFICE_NANO_LIGHT", "/tmp/nl.docx".into());
+        env.remove("WASEN_OFFICE_QUICK_VIEW");
+        env.insert("WASEN_OFFICE_NANO_LIGHT", "/tmp/nl.docx".into());
         let cfg = AppConfig::from_lookup(|k| env.get(k).cloned());
         assert_eq!(cfg.boot_mode, BootMode::NanoLight("/tmp/nl.docx".into()));
     }
@@ -185,15 +185,15 @@ mod tests {
     #[test]
     fn test_probe_script_generation() {
         let mut env = HashMap::new();
-        env.insert("NANO_OFFICE_PROBE", "1".into());
-        env.insert("NANO_OFFICE_SAVE_PROBE", "save-test".into());
-        env.insert("NANO_OFFICE_UX_PROBE", "ux-path.docx".into());
+        env.insert("WASEN_OFFICE_PROBE", "1".into());
+        env.insert("WASEN_OFFICE_SAVE_PROBE", "save-test".into());
+        env.insert("WASEN_OFFICE_UX_PROBE", "ux-path.docx".into());
         let cfg = AppConfig::from_lookup(|k| env.get(k).cloned());
 
         let scripts = cfg.normal_probe_scripts();
         assert_eq!(scripts.len(), 3);
-        assert!(scripts[0].contains("window.__NANO_OFFICE_UX_PROBE__"));
-        assert!(scripts[1].contains("window.__NANO_OFFICE_SAVE_PROBE_TEXT__"));
-        assert!(scripts[2].contains("window.__NANO_OFFICE_PROBE__ = true;"));
+        assert!(scripts[0].contains("window.__WASEN_OFFICE_UX_PROBE__"));
+        assert!(scripts[1].contains("window.__WASEN_OFFICE_SAVE_PROBE_TEXT__"));
+        assert!(scripts[2].contains("window.__WASEN_OFFICE_PROBE__ = true;"));
     }
 }
