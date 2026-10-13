@@ -166,7 +166,7 @@ const CONTROL_SKIN =
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <header class="flex items-center gap-4 border-b border-edge bg-panel px-4 py-2.5 shadow-sm">
     <div class="flex items-center gap-2.5 shrink-0">
-      <img src="/src/assets/logo.png" alt="WasenOffice" class="h-6 w-6 rounded object-contain" />
+      <img src="/logo.png" alt="WasenOffice" class="h-6 w-6 rounded object-contain" />
       <h1 class="m-0 text-[1.05em] font-semibold text-fg tracking-tight">WasenOffice</h1>
     </div>
     <form id="open-form" class="flex flex-1 items-center gap-2">
