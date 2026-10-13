@@ -15,13 +15,13 @@ type: queue
 
 ## Tình hình nhanh
 
-▶ Kế tiếp: **PH-4 đóng gói hoàn tất** (bundle .app 6.9 MB + .dmg 6.4 MB) / **T-051 ĐÓNG 13.10** (Licensing NOTICE + AGPL source offer) / **T-057 ĐÓNG 13.10**
+▶ Kế tiếp: **Milestone A5 — Slice 5** (Tab bar kéo thả & mở rộng đa cửa sổ) / **T-065 ĐÓNG 13.10** (Auto-updater qua GitHub Releases)
 
 | Phase | Tổng | ✅ | 🟨 | ⏸ | ⬜ |
 |---|---|---|---|---|---|
 | PH-0 — ĐÃ ĐÓNG 27.09  |  6  | 6  | 0  | 0  | 0  |
 | PH-1  |  12 | 11 | 0  | 0  | 1  |
-| PH-4  |  4  | 2  | 0  | 0  | 2  |
+| PH-4  |  5  | 3  | 0  | 0  | 2  |
 | Track A (QĐ9) |  32 | 32 | 0  | 0  | 0  |
 | META  | 16  | 12 | 0  | 0  | 4  |
 
@@ -50,6 +50,7 @@ type: queue
 
 - [x] ✅ T-051 · Nhắc licensing khi bundle AGPL trong installer — **ĐÓNG 13.10**: file `NOTICE` tại root ghi nhận MIT license cho first-party code, GNU AGPL v3.0 + Section 7 link source offer (`ONLYOFFICE/core` x2t + `sdkjs`/`web-apps`), SIL OFL cho bundled fonts; cấu hình `copyright`, `licenseFile` và `resources` trong `tauri.conf.json`; đóng gói installer DMG `NanoOffice_0.1.0_aarch64.dmg` (6.4 MB); license gate (`check-licenses.mjs`) 446 cargo + 7 node packages GREEN; verify FULL exit 0, 20 ▸ steps · 13.10 · diagnostics 13.10 (T-051)
 - [x] ✅ T-057 · Release boot webview stall — **ĐÓNG 13.10**: macOS WebKit XPC sandbox yêu cầu WKWebView có asset scheme nhúng phải chạy trong Mach-O `.app` bundle (chạy bare binary bị `web content process terminated`); đổi identifier `"com.nanooffice.desktop"` tránh xung đột `.app`; cấu hình `fileAssociations` (docx/xlsx/pptx/pdf); đóng gói `pnpm tauri build --bundles app` tạo `NanoOffice.app` (6.9 MB); đo RAM release: binary 89.7 MB, tree 228.7 MB (đo thật OQ-V01-2); first-draw release 8.0 ms (Nano Light) / 72.0 ms (Quick View); verify FULL exit 0, 20 ▸ steps · 13.10 · diagnostics 13.10 (T-057)
+- [x] ✅ T-065 · Tích hợp Auto-Updater qua GitHub Releases — **ĐÓNG 13.10**: plugin `tauri-plugin-updater` + `@tauri-apps/plugin-updater`, sinh cặp khóa ký minisign (pubkey nhúng trong `tauri.conf.json`), endpoint `https://github.com/EricNguyen1206/nanooffice/releases/latest/download/latest.json`, quyền `updater:default`, tự động check update trên start page `src/main.ts`; license allowlist 473 packages cargo + 8 node GREEN; verify FULL exit 0, 20 ▸ steps · 13.10 · diagnostics 13.10 (T-065)
 - [ ] 🚫 T-040 · ~~Trim engines payload 313 MB → ≤100 MB~~ gộp vào Track A **T-A12** theo QĐ9 (29.09) — nằm trong rung A1
 - [ ] 🚫 T-041 · ~~Quyết bundle vs download-first~~ gộp vào **T-A10** (A1 buộc bundle x2t) + PH-4 packaging (câu hỏi download-first còn lại áp cho toàn engine) theo QĐ9
 

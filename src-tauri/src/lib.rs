@@ -254,6 +254,7 @@ pub fn run() {
     let config = Arc::new(AppConfig::from_env());
 
     let mut app = tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Arc::clone(&config))
         .manage(Arc::new(FileRegistry::default()))
         .manage(Arc::new(window::SurfaceHandoff::default()))

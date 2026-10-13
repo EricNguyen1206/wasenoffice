@@ -1,5 +1,6 @@
 import './shim/desktopEditor.js';
 import './shim/delivery.js';
+import { check } from '@tauri-apps/plugin-updater';
 
 /**
  * PH-0 start page: open one real DOCX and boot the editor.
@@ -234,3 +235,26 @@ void invoke<OpenedDoc | null>('get_startup_document')
     if (doc) mountEditor(doc);
   })
   .catch((err) => logLine(`startup doc ERROR: ${err}`));
+
+// Check for updates on startup (PH-4 T-065).
+async function checkForAppUpdates(): Promise<void> {
+  try {
+    const update = await check();
+    if (update?.available) {
+      logLine(`update: phát hiện phiên bản mới v${update.version}`);
+      const ok = window.confirm(
+        `Đã có phiên bản NanoOffice mới (v${update.version}). Bạn có muốn cập nhật ngay không?`
+      );
+      if (ok) {
+        logLine(`update: đang tải bản v${update.version}...`);
+        await update.downloadAndInstall();
+        logLine(`update: tải hoàn tất! Vui lòng khởi động lại.`);
+        alert(`Bản cập nhật v${update.version} đã sẵn sàng. Vui lòng khởi động lại app.`);
+      }
+    }
+  } catch (err) {
+    // Expected when offline or running locally before first GitHub release
+    console.warn('updater check:', err);
+  }
+}
+void checkForAppUpdates();
