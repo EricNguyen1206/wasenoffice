@@ -1,5 +1,5 @@
 /**
- * Global declarations for the NanoOffice bridge.
+ * Global declarations for the WasenOffice bridge.
  * Method surface mirrors docs/reference.map.md (lower bound ~130, waves added as implemented).
  */
 

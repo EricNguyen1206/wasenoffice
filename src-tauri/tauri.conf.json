@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "NanoOffice",
+  "productName": "WasenOffice",
   "version": "0.1.0",
-  "identifier": "com.nanooffice.desktop",
+  "identifier": "com.wasenoffice.desktop",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -18,7 +18,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://github.com/EricNguyen1206/nanooffice/releases/latest/download/latest.json"
+        "https://github.com/EricNguyen1206/wasenoffice/releases/latest/download/latest.json"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFFQkYxMEZBQzEwQUY1MzIKUldReTlRckIraEMvSHZVOXBxQVdhcXpRaXlQeXhJRmFTMXhXVVFGdi9lZUc1b3FZWGdMM0V3bisK"
     }
@@ -26,7 +26,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "copyright": "Copyright © 2026 NanoOffice contributors. Includes ONLYOFFICE components licensed under GNU AGPL v3.0.",
+    "copyright": "Copyright © 2026 WasenOffice contributors. Includes ONLYOFFICE components licensed under GNU AGPL v3.0.",
     "licenseFile": "../NOTICE",
     "resources": [
       "../NOTICE"

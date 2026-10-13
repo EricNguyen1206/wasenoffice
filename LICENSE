@@ -1,6 +1,6 @@
 MIT License
 
-Copyright (c) 2026 NanoOffice contributors
+Copyright (c) 2026 WasenOffice contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,7 +22,7 @@ SOFTWARE.
 
 ---
 
-Scope note: this license applies to NanoOffice's own code (src-tauri/, src/,
+Scope note: this license applies to WasenOffice's own code (src-tauri/, src/,
 harness/, docs/). The upstream/ directory contains ONLYOFFICE components
 (sdkjs, web-apps) licensed under AGPL-3.0 with their own LICENSE files, kept
 as read-only git submodules. The x2t converter sidecar is also AGPL-3.0.

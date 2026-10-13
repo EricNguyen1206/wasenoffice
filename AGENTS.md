@@ -1,11 +1,13 @@
-# NanoOffice — AGENTS.md
+# WasenOffice — AGENTS.md
 
 > Harness cho dự án clone ONLYOFFICE Desktop Editors sang Rust + Tauri.
 > Agent làm việc trong repo này BẮT BUỘC đọc và tuân thủ file này.
 
 ## identity & mục tiêu
 
-- **Tên dự án:** NanoOffice
+- **Tên dự án:** WasenOffice (đổi thương hiệu từ "NanoOffice" 13.10; repo `github.com/EricNguyen1206/wasenoffice`).
+  Identifier nội bộ **GIỮ NGUYÊN**: crate `nanooffice-ooxml`, binary cargo `nanooffice`, env `NANO_OFFICE_*`,
+  lệnh `nano_light_*`, window stamp `__nanooffice_*` — đổi chúng là task riêng, phải chạy verify FULL.
 - **Mục tiêu:** app desktop office suite (DOCX/XLSX/PPTX/PDF) — shell Rust + Tauri,
   giữ engine editing JS gốc của ONLYOFFICE (sdkjs + web-apps), x2t chạy sidecar.
 - **Thay engine chỉ bằng clean-room, không port/translate** (QĐ9, 29.09.2026): cấm mang code
@@ -37,7 +39,7 @@ nanooffice/
 1. **Upstream chỉ đọc.** Mọi file trong `upstream/` không được sửa, không được copy-and-patch.
    Cần thay đổi hành vi engine → làm ở lớp wrapper/adapter phía mình (shim, monkey-patch qua config API).
    Lý do: giữ khả năng pull upstream theo quý. Xem `harness/rules/upstream-read-only.md`.
-2. **Không sửa upstream → không vi phạm AGPL cho phần code của mình.** Phần code NanoOffice tự viết
+2. **Không sửa upstream → không vi phạm AGPL cho phần code của mình.** Phần code WasenOffice tự viết
    dùng **MIT** (`LICENSE` ở root); engine AGPL giữ nguyên provenance qua submodule. Khi PHÁT HÀNH binary có nhúng
    AGPL component → vẫn phải tuân thủ AGPL cho component đó (mở source component + ghi credit).
    Xem `harness/rules/licensing.md` và `docs/vision.md`.

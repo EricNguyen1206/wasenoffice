@@ -84,7 +84,7 @@ async function mountEditor(doc: OpenedDoc): Promise<void> {
     doctype: format.doctype,
     mode: 'edit',
     lang: navigator.language.slice(0, 2) || 'en',
-    username: 'NanoOffice User',
+    username: 'WasenOffice User',
     type: 'desktop',
   });
   if (format.isForm) params.set('isForm', format.isForm);
@@ -166,8 +166,8 @@ const CONTROL_SKIN =
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <header class="flex items-center gap-4 border-b border-edge bg-panel px-4 py-2.5 shadow-sm">
     <div class="flex items-center gap-2.5 shrink-0">
-      <img src="/src/assets/logo.png" alt="NanoOffice" class="h-6 w-6 rounded object-contain" />
-      <h1 class="m-0 text-[1.05em] font-semibold text-fg tracking-tight">NanoOffice</h1>
+      <img src="/src/assets/logo.png" alt="WasenOffice" class="h-6 w-6 rounded object-contain" />
+      <h1 class="m-0 text-[1.05em] font-semibold text-fg tracking-tight">WasenOffice</h1>
     </div>
     <form id="open-form" class="flex flex-1 items-center gap-2">
       <input
@@ -243,7 +243,7 @@ async function checkForAppUpdates(): Promise<void> {
     if (update?.available) {
       logLine(`update: phát hiện phiên bản mới v${update.version}`);
       const ok = window.confirm(
-        `Đã có phiên bản NanoOffice mới (v${update.version}). Bạn có muốn cập nhật ngay không?`
+        `Đã có phiên bản WasenOffice mới (v${update.version}). Bạn có muốn cập nhật ngay không?`
       );
       if (ok) {
         logLine(`update: đang tải bản v${update.version}...`);

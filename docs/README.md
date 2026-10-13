@@ -6,6 +6,10 @@ type: registry
 > File này là chỗ **duy nhất** liệt kê mọi tài liệu của dự án: doc không có dòng ở đây = chưa chính thức.
 > Quy tắc tổ chức: `docs/conventions.md`. Quyết định về hệ tài liệu public: `docs/vision.md` QĐ6.
 
+> **Rename 13.10:** thương hiệu đổi **NanoOffice → WasenOffice**; identifier nội bộ (crate
+> `nanooffice-ooxml`, env `NANO_OFFICE_*`, lệnh `nano_light_*`) giữ nguyên — tài liệu lịch sử
+> bên dưới vẫn dùng tên cũ, đây là ghi chú duy nhất về việc đổi tên.
+
 ## Định tuyến — thông tin nào ghi vào đâu
 
 | Loại thông tin | Ngôi nhà | Khi nào cập nhật |

@@ -1,4 +1,4 @@
-# NanoOffice
+# WasenOffice
 
 **A lightweight, local-first, open-source office suite.** View and edit DOCX · XLSX · PPTX · PDF in a native Rust + Tauri shell — no account, no telemetry, 100% offline.
 
@@ -8,7 +8,7 @@
 ![License: MIT](https://img.shields.io/badge/first--party%20code-MIT-blue)
 ![Platform](https://img.shields.io/badge/platform-macOS-lightgrey)
 
-## Why NanoOffice?
+## Why WasenOffice?
 
 - 🪶 **Light** — the Rust-native Quick View opens documents in well under 500 ms; release builds run at ~90 MB RAM, a fraction of what web-engine editors need.
 - 🏠 **Local-first** — your files never leave the machine. No account, no cloud, no telemetry.
@@ -18,7 +18,7 @@
 
 ## Status — alpha
 
-NanoOffice is under active development. What works today:
+WasenOffice is under active development. What works today:
 
 | Capability | Status |
 |---|---|
@@ -33,7 +33,7 @@ Development happens fully in the open: working queue in [docs/TODO.md](docs/TODO
 
 ## Download
 
-Prebuilt binaries live on the [Releases](https://github.com/EricNguyen1206/nanooffice/releases) page (macOS DMG, ~6.4 MB). The in-app auto-updater checks the same releases.
+Prebuilt binaries live on the [Releases](https://github.com/EricNguyen1206/wasenoffice/releases) page (macOS DMG, ~6.4 MB). The in-app auto-updater checks the same releases.
 
 ## Build from source
 
@@ -41,7 +41,7 @@ Prerequisites: macOS, Rust (stable), Node.js ≥ 20 with pnpm, and an installed
 ONLYOFFICE.app — the current bootstrap source for engine artifacts.
 
 ```bash
-git clone --recurse-submodules https://github.com/EricNguyen1206/nanooffice.git
+git clone --recurse-submodules https://github.com/EricNguyen1206/wasenoffice.git
 cd nanooffice
 pnpm install
 
