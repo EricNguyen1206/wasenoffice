@@ -62,6 +62,9 @@ harness/scripts/smoke-quick-view.sh || fail=1
 echo "▸ smoke quick-view UX wiring E2E (gate 13: start-page probe → viewer_view → render — T-V5)"
 harness/scripts/smoke-quick-view-ui.sh || fail=1
 
+echo "▸ smoke startpage Welcome + recents wiring E2E (gate 17: welcome render + recents row → open — T-A38)"
+harness/scripts/smoke-startpage.sh || fail=1
+
 echo "▸ smoke Nano Light editor round-trip (gate 15: edit → save write_docx → parse-back → reopen — T-A27)"
 harness/scripts/smoke-nano-light.sh || fail=1
 

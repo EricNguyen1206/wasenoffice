@@ -290,12 +290,16 @@ fn open_window(
 pub fn wasen_light_view(
     app: tauri::AppHandle,
     handoff: State<'_, Arc<SurfaceHandoff>>,
+    recents: State<'_, Arc<crate::recents::RecentsStore>>,
     path: String,
 ) -> Result<(), String> {
     if !std::path::Path::new(&path).is_file() {
         return Err(format!("nano light: no such file: {path}"));
     }
-    open_window(&app, handoff.inner(), path)
+    open_window(&app, handoff.inner(), path.clone())?;
+    // A01: successful open = a recent (best-effort, same as engine opens).
+    recents.record(std::path::Path::new(&path));
+    Ok(())
 }
 
 /// Reopen THIS session's document in a new Nano Light window (reads the file
@@ -304,11 +308,15 @@ pub fn wasen_light_view(
 pub fn wasen_light_reopen(
     app: tauri::AppHandle,
     handoff: State<'_, Arc<SurfaceHandoff>>,
+    recents: State<'_, Arc<crate::recents::RecentsStore>>,
     sessions: State<'_, Arc<EditorSessions>>,
     window: tauri::WebviewWindow,
 ) -> Result<(), String> {
     let path = sessions.with_session(window.label(), |s| Ok(s.path.clone()))?;
-    open_window(&app, handoff.inner(), path.display().to_string())
+    open_window(&app, handoff.inner(), path.display().to_string())?;
+    // A01: a reopen refreshes the recency timestamp too.
+    recents.record(&path);
+    Ok(())
 }
 
 /// The Nano Light payload — same shape as the viewer's `QuickView` (the two

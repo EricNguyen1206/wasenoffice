@@ -18,6 +18,7 @@ mod config;
 mod editor;
 mod formats;
 mod protocol;
+mod recents;
 mod sidecar;
 pub(crate) mod storage;
 mod viewer;
@@ -51,9 +52,12 @@ fn open_document(
     window: tauri::WebviewWindow,
     path: String,
     registry: State<'_, Arc<FileRegistry>>,
+    recents: State<'_, Arc<recents::RecentsStore>>,
 ) -> Result<OpenedDocument, String> {
     log::info!("open_document: {path}");
     let id = registry.register(window.label(), std::path::Path::new(&path))?;
+    // A01: successful open = a recent. Best-effort — never blocks the open.
+    recents.record(std::path::Path::new(&path));
     let disk = registry_path(&registry, id);
     let name = disk
         .file_name()
@@ -93,10 +97,11 @@ pub struct OpenedDocument {
 fn get_startup_document(
     window: tauri::WebviewWindow,
     registry: State<'_, Arc<FileRegistry>>,
+    recents: State<'_, Arc<recents::RecentsStore>>,
     config: State<'_, Arc<AppConfig>>,
 ) -> Result<Option<OpenedDocument>, String> {
     match config.take_startup_document() {
-        Some(path) => open_document(window, path, registry).map(Some),
+        Some(path) => open_document(window, path, registry, recents).map(Some),
         None => Ok(None),
     }
 }
@@ -254,6 +259,7 @@ pub fn run() {
     let config = Arc::new(AppConfig::from_env());
 
     let mut app = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Arc::clone(&config))
         .manage(Arc::new(FileRegistry::default()))
@@ -297,6 +303,8 @@ pub fn run() {
             frontend_log,
             viewer::viewer_open,
             viewer::viewer_view,
+            recents::recents_list,
+            recents::recents_remove,
             editor::wasen_light_view,
             editor::wasen_light_reopen,
             editor::wasen_light_open,
@@ -314,6 +322,13 @@ pub fn run() {
             // Window factory seam (T-046): creates initial boot window matching config
             let config = Arc::clone(app.state::<Arc<AppConfig>>().inner());
             window::create_boot_window(app.handle(), &config, BRIDGE_JS, DELIVERY_JS)?;
+
+            // Recents store (A01 T-A38): app-data JSON home; gate/test override
+            // via WASEN_OFFICE_RECENTS_FILE so verify never touches real recents.
+            app.manage(Arc::new(recents::RecentsStore::resolve(
+                app.handle(),
+                config.recents_file.as_deref(),
+            )));
             Ok(())
         })
         .build(tauri::generate_context!())

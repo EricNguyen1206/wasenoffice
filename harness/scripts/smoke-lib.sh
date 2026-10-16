@@ -46,6 +46,11 @@
 #            cell, cùng consumer). T-A31 thêm `nano light warn:` (ADDITIVE —
 #            refuse-warn mất-khi-save, emit src-tauri/src/editor.rs
 #            wasen_light_open, cùng consumer)
+#   gate 17 · startpage ready (welcome) + recents not-found (T-A38 — wiring
+#            Welcome/Recents; consumer harness/scripts/smoke-startpage.sh)
+#            ← src/main.ts renderRecents/activateRecent (driver
+#            WASEN_OFFICE_STARTPAGE_PROBE, store WASEN_OFFICE_RECENTS_FILE;
+#            open_document/editor booting là dòng có sẵn của chain open)
 set -u
 
 SMOKE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -84,6 +89,15 @@ SMOKE_RE_NL_CLIP='nano light clipboard:'
 SMOKE_RE_NL_CELL='nano light cell:'
 SMOKE_RE_NL_WARN='nano light warn:'
 SMOKE_RE_NL_FAILED='nano light failed:'
+# gate 17 (startpage Welcome + recents wiring, T-A38) — dòng ADDITIVE của
+# startpage + 2 dòng có sẵn của chain open (emitting ends: src/main.ts
+# renderRecents/activateRecent; src-tauri/src/lib.rs open_document;
+# src/main.ts mountEditor — cùng commit khi đổi).
+SMOKE_RE_SP_READY='startpage ready .welcome.: recents='
+SMOKE_RE_SP_NOTFOUND='ERROR: file not found: '
+SMOKE_RE_SP_WEB_ERROR='\[web\] ERROR:'
+SMOKE_RE_SP_BOOTING='editor booting .word.: '
+SMOKE_RE_OPEN_DOC='open_document: '
 
 # ── Trạng thái dùng chung (consumer đọc, không ghi trực tiếp khi không cần) ──
 SMOKE_APP_PID=""     # PID process-group của app (smoke_boot đặt)

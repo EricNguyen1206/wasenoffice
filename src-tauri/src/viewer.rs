@@ -25,6 +25,7 @@ pub(crate) use crate::window::SurfaceHandoff;
 pub fn viewer_view(
     app: tauri::AppHandle,
     quick: State<'_, Arc<SurfaceHandoff>>,
+    recents: State<'_, Arc<crate::recents::RecentsStore>>,
     path: String,
 ) -> Result<(), String> {
     if !std::path::Path::new(&path).is_file() {
@@ -46,6 +47,8 @@ pub fn viewer_view(
         format!("WasenOffice — Quick View: {name}"),
         "viewer",
     )?;
+    // A01: successful open = a recent (best-effort, same as engine opens).
+    recents.record(std::path::Path::new(&path));
     log::info!("viewer view: {path} (window {label})");
     Ok(())
 }

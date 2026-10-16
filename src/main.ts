@@ -1,12 +1,14 @@
 import './shim/desktopEditor.js';
 import './shim/delivery.js';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
+import { getVersion } from '@tauri-apps/api/app';
 import { check } from '@tauri-apps/plugin-updater';
 
 /**
- * PH-0 start page: open one real DOCX and boot the editor.
- *
- * Boot path mirrors the ONLYOFFICE desktop app (desktop-sdk applicationmanager.cpp:89
- * opens `editors/web-apps/apps/api/documents/index.html`): that page reads query
+ * Start page (A01, DD docs/design/A01-startpage/DD.md): Welcome — create/open
+ * documents, get back to recents. The editor boot path mirrors the ONLYOFFICE
+ * desktop app (desktop-sdk applicationmanager.cpp:89 opens
+ * `editors/web-apps/apps/api/documents/index.html`): that page reads query
  * params (url/title/filetype/key/doctype/mode/lang/username) and creates the
  * DocsAPI.DocEditor itself — everything on the `wasenoffice-engine://` origin,
  * so document + fonts + engine assets are same-origin.
@@ -42,6 +44,38 @@ const FILE_FORMATS: Record<string, { filetype: string; doctype: string; isForm?:
   pdf: { filetype: 'pdf', doctype: 'pdf', isForm: 'false' },
 };
 
+/**
+ * Start-page labels (DD A01 §8): VI/EN by system language, EN fallback.
+ * Log lines stay English — they are gate/diagnostics contract, not UI.
+ */
+const STRINGS = {
+  en: {
+    tagline: 'Local-first office suite — your documents never leave this machine.',
+    openDocument: 'Open document…',
+    quickView: 'Quick view…',
+    nanoLight: 'Nano Light…',
+    recents: 'Recent documents',
+    orPastePath: 'or paste a path…',
+    open: 'Open',
+    removeRecent: 'Remove from recents',
+    dialogFailed: 'open dialog failed',
+  },
+  vi: {
+    tagline: 'Bộ văn phòng local-first — tài liệu không bao giờ rời máy bạn.',
+    openDocument: 'Mở tài liệu…',
+    quickView: 'Xem nhanh…',
+    nanoLight: 'Nano Light…',
+    recents: 'Tài liệu gần đây',
+    orPastePath: 'hoặc dán đường dẫn…',
+    open: 'Mở',
+    removeRecent: 'Gỡ khỏi danh sách',
+    dialogFailed: 'hộp thoại mở file lỗi',
+  },
+} as const;
+type Lang = keyof typeof STRINGS;
+const LANG: Lang = navigator.language.toLowerCase().startsWith('vi') ? 'vi' : 'en';
+const t = STRINGS[LANG];
+
 const { invoke } = window.__TAURI__.core;
 
 // Loopback origin serving the engine + documents (Rust command).
@@ -63,6 +97,7 @@ interface OpenedDoc {
   fileId: number;
 }
 
+/** Welcome out, editing surface in (DD A01 §3 OPENING → exit). */
 async function mountEditor(doc: OpenedDoc): Promise<void> {
   // T-059: single choke point of every opened doc — the relay (shim) reads
   // this stamp to key delivery/save on THIS document, never "latest".
@@ -93,6 +128,10 @@ async function mountEditor(doc: OpenedDoc): Promise<void> {
   frame.className = 'absolute inset-0 h-full w-full border-0';
   frame.src = `${boot}?${params.toString()}`;
   frame.allow = 'clipboard-read; clipboard-write';
+  // Welcome out, editing surface in (DD A01 §3 OPENING → exit).
+  welcome.hidden = true;
+  topBar.classList.remove('hidden');
+  editorRoot.classList.remove('hidden');
   document.getElementById('editor-root')!.replaceChildren(frame);
   logLine(`editor booting (${format.doctype}): ${doc.name}`);
 }
@@ -153,6 +192,95 @@ function logLine(text: string): void {
   void invoke('frontend_log', { level: 'info', message: text }).catch(() => {});
 }
 
+// ── Welcome (A01 DD §4): one centered column — brand, actions, recents ──
+
+/** Open dialog of the OS, filtered to the formats this app accepts (DD §5). */
+const DOC_FILTERS = [{ name: 'Documents', extensions: ['docx', 'xlsx', 'pptx', 'pdf'] }];
+async function pickPath(): Promise<string | null> {
+  try {
+    const picked = await openDialog({ multiple: false, directory: false, filters: DOC_FILTERS });
+    return typeof picked === 'string' ? picked : null;
+  } catch (err) {
+    logLine(`ERROR: ${t.dialogFailed}: ${err}`);
+    return null;
+  }
+}
+
+/** One recents row (recents_list payload — serde camelCase, T-059 gotcha). */
+interface RecentRow {
+  path: string;
+  name: string;
+  kind: string;
+  openedAt: number;
+  exists: boolean;
+}
+
+/** Act on a recents row: missing file → loud error + removal hint (DD §6). */
+function activateRecent(row: RecentRow): void {
+  if (!row.exists) {
+    logLine(`ERROR: file not found: ${row.path} — remove it from recents`);
+    return;
+  }
+  void openPath(row.path);
+}
+
+async function renderRecents(): Promise<void> {
+  let rows: RecentRow[] = [];
+  try {
+    rows = await invoke<RecentRow[]>('recents_list');
+  } catch (err) {
+    logLine(`ERROR: recents list: ${err}`);
+  }
+  const missing = rows.filter((r) => !r.exists).length;
+  // Gate 17 log contract (frozen: smoke-lib.sh SMOKE_RE_SP_READY) — change in the SAME commit.
+  logLine(`startpage ready (welcome): recents=${rows.length} missing=${missing} lang=${LANG}`);
+
+  const list = document.getElementById('recents-list')!;
+  list.replaceChildren();
+  document.getElementById('recents-box')!.classList.toggle('hidden', rows.length === 0);
+  for (const row of rows) {
+    const li = document.createElement('li');
+    li.className = `flex cursor-pointer items-center gap-3 rounded-panel border border-edge bg-panel px-3 py-2 text-fg shadow-sm outline-none transition-colors duration-150 hover:bg-panel-active ${
+      row.exists ? '' : 'opacity-50'
+    }`;
+    const kind = document.createElement('span');
+    kind.className = 'rounded bg-panel-active px-1.5 py-0.5 text-[0.65em] font-semibold uppercase';
+    kind.textContent = row.kind || '?';
+    const name = document.createElement('span');
+    name.className = 'flex-1 truncate text-[0.88em] font-medium';
+    name.textContent = row.name;
+    const dir = document.createElement('span');
+    dir.className = 'truncate text-[0.72em] text-fg/45';
+    dir.textContent = row.path;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.title = t.removeRecent;
+    remove.textContent = '×';
+    remove.className =
+      'cursor-pointer border-0 bg-transparent p-0 text-[1.1em] leading-none text-fg/40 hover:text-fg';
+    remove.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      void invoke('recents_remove', { path: row.path }).then(() => renderRecents());
+    });
+    li.append(kind, name, dir, remove);
+    li.addEventListener('click', () => activateRecent(row));
+    list.appendChild(li);
+  }
+  return runStartpageProbe(rows);
+}
+
+/** Gate 17 driver (WASEN_OFFICE_STARTPAGE_PROBE, pattern UX_PROBE): click the
+ * Nth REAL recents row — the genuine handler chain runs. No env → nothing. */
+function runStartpageProbe(rows: RecentRow[]): void {
+  const probe = (window as unknown as { __WASEN_OFFICE_STARTPAGE_PROBE__?: string })
+    .__WASEN_OFFICE_STARTPAGE_PROBE__;
+  const match = probe?.match(/^recent:(\d+)$/);
+  if (!match) return;
+  const row = rows[Number(match[1]) - 1];
+  if (row) activateRecent(row);
+  else logLine(`ERROR: startpage probe: no recents row #${match[1]}`);
+}
+
 const log: HTMLDivElement = document.createElement('div');
 log.id = 'ph0-log';
 // was the `#ph0-log` rule (styles.css pre-T-058); font-mono's first family
@@ -164,26 +292,50 @@ const CONTROL_SKIN =
   'rounded-panel border border-edge bg-panel px-[1.2em] py-[0.5em] text-[0.9em] font-medium font-[family-name:inherit] text-fg shadow-sm outline-none transition-colors duration-150 hover:bg-panel-active active:bg-panel-active focus:border-accent disabled:opacity-50';
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-  <header class="flex items-center gap-4 border-b border-edge bg-panel px-4 py-2.5 shadow-sm">
-    <div class="flex items-center gap-2.5 shrink-0">
-      <img src="/logo.png" alt="WasenOffice" class="h-6 w-6 rounded object-contain" />
-      <h1 class="m-0 text-[1.05em] font-semibold text-fg tracking-tight">WasenOffice</h1>
-    </div>
-    <form id="open-form" class="flex flex-1 items-center gap-2">
-      <input
-        id="doc-path"
-        type="text"
-        placeholder="/absolute/path/to/document (.docx .xlsx .pptx .pdf)"
-        class="flex-1 ${CONTROL_SKIN}"
-      />
-      <button type="submit" class="cursor-pointer ${CONTROL_SKIN}">Open</button>
-      <button type="button" id="quick-view-btn" class="cursor-pointer ${CONTROL_SKIN}">Quick view</button>
-      <button type="button" id="nano-light-btn" class="cursor-pointer ${CONTROL_SKIN}">Nano Light</button>
-    </form>
+  <header id="top-bar" class="hidden items-center gap-2.5 border-b border-edge bg-panel px-4 py-2.5 shadow-sm">
+    <img src="/logo.png" alt="WasenOffice" class="h-6 w-6 rounded object-contain" />
+    <h1 class="m-0 text-[1.05em] font-semibold text-fg tracking-tight">WasenOffice</h1>
   </header>
-  <main id="editor-root" class="relative flex-1 bg-paper"></main>
+  <main id="editor-root" class="relative hidden flex-1 bg-paper"></main>
+  <section id="welcome" class="flex flex-1 flex-col overflow-auto bg-bg text-fg">
+    <div class="m-auto flex w-full max-w-xl flex-col items-center gap-7 px-6 py-10">
+      <div class="flex flex-col items-center gap-2 text-center">
+        <img src="/logo.png" alt="WasenOffice" class="h-16 w-16 rounded-xl object-contain" />
+        <h1 class="m-0 text-[2em] font-semibold tracking-tight">WasenOffice</h1>
+        <p class="m-0 max-w-md text-[0.9em] text-fg/60">${t.tagline}</p>
+      </div>
+      <div class="flex flex-wrap items-center justify-center gap-2.5">
+        <button type="button" id="welcome-open" class="cursor-pointer rounded-panel border border-accent bg-accent px-5 py-2 text-[0.95em] font-semibold text-white shadow-sm outline-none transition-[filter] duration-150 hover:brightness-110 focus:border-accent">${t.openDocument}</button>
+        <button type="button" id="welcome-quick" class="cursor-pointer ${CONTROL_SKIN}">${t.quickView}</button>
+        <button type="button" id="welcome-nano" class="cursor-pointer ${CONTROL_SKIN}">${t.nanoLight}</button>
+      </div>
+      <section id="recents-box" class="hidden w-full flex-col gap-2">
+        <h2 class="m-0 text-[0.8em] font-semibold uppercase tracking-wide text-fg/50">${t.recents}</h2>
+        <ul id="recents-list" class="m-0 flex w-full list-none flex-col gap-1.5 p-0"></ul>
+      </section>
+      <footer class="flex flex-col items-center gap-2.5">
+        <button type="button" id="paste-toggle" class="cursor-pointer border-0 bg-transparent p-0 text-[0.8em] text-fg/50 underline outline-none hover:text-fg">${t.orPastePath}</button>
+        <form id="open-form" class="hidden flex items-center gap-2">
+          <input
+            id="doc-path"
+            type="text"
+            placeholder="/absolute/path/to/document (.docx .xlsx .pptx .pdf)"
+            class="w-[26em] ${CONTROL_SKIN}"
+          />
+          <button type="submit" class="cursor-pointer ${CONTROL_SKIN}">${t.open}</button>
+          <button type="button" id="quick-view-btn" class="cursor-pointer ${CONTROL_SKIN}">${t.quickView}</button>
+          <button type="button" id="nano-light-btn" class="cursor-pointer ${CONTROL_SKIN}">${t.nanoLight}</button>
+        </form>
+        <span id="version" class="text-[0.72em] text-fg/40"></span>
+      </footer>
+    </div>
+  </section>
 `;
-document.querySelector<HTMLDivElement>('#app')!.appendChild(log);
+const app = document.querySelector<HTMLDivElement>('#app')!;
+app.appendChild(log);
+const welcome = document.getElementById('welcome')!;
+const topBar = document.getElementById('top-bar')!;
+const editorRoot = document.getElementById('editor-root')!;
 
 const pathInput = document.querySelector<HTMLInputElement>('#doc-path')!;
 document.querySelector<HTMLFormElement>('#open-form')!.addEventListener('submit', (ev) => {
@@ -196,10 +348,27 @@ document.querySelector<HTMLButtonElement>('#quick-view-btn')!.addEventListener('
 document.querySelector<HTMLButtonElement>('#nano-light-btn')!.addEventListener('click', () => {
   if (pathInput.value.trim()) void nanoLight(pathInput.value.trim());
 });
+document.querySelector<HTMLButtonElement>('#paste-toggle')!.addEventListener('click', () => {
+  document.getElementById('open-form')!.classList.remove('hidden');
+  pathInput.focus();
+});
+document.querySelector<HTMLButtonElement>('#welcome-open')!.addEventListener('click', async () => {
+  const path = await pickPath();
+  if (path) void openPath(path);
+});
+document.querySelector<HTMLButtonElement>('#welcome-quick')!.addEventListener('click', async () => {
+  const path = await pickPath();
+  if (path) void quickView(path);
+});
+document.querySelector<HTMLButtonElement>('#welcome-nano')!.addEventListener('click', async () => {
+  const path = await pickPath();
+  if (path) void nanoLight(path);
+});
 
 // V5 UX E2E driver (gate 13; WASEN_OFFICE_UX_PROBE, pattern SAVE_PROBE): fill
 // the input and click the real Quick view button — the genuine handler chain
 // runs. No env → this block never does anything (product default untouched).
+// The form stays in the DOM (hidden inside Welcome) so the probe reaches it.
 const uxProbe = (window as unknown as { __WASEN_OFFICE_UX_PROBE__?: string }).__WASEN_OFFICE_UX_PROBE__;
 if (uxProbe) {
   pathInput.value = uxProbe;
@@ -235,6 +404,15 @@ void invoke<OpenedDoc | null>('get_startup_document')
     if (doc) mountEditor(doc);
   })
   .catch((err) => logLine(`startup doc ERROR: ${err}`));
+
+// Welcome + recents (A01): the ready line is gate 17's log contract.
+void renderRecents();
+
+void getVersion()
+  .then((v) => {
+    document.getElementById('version')!.textContent = `WasenOffice v${v}`;
+  })
+  .catch(() => {});
 
 // Check for updates on startup (PH-4 T-065).
 async function checkForAppUpdates(): Promise<void> {

@@ -37,6 +37,12 @@ pub struct AppConfig {
     pub nl_probe_marker: Option<String>,
     /// Quick view layout hit-test probe (`WASEN_OFFICE_QV_HITTEST`).
     pub qv_hittest: bool,
+    /// Start page probe driver (`WASEN_OFFICE_STARTPAGE_PROBE`), e.g.
+    /// `recent:1` — the gate 17 wiring driver (A01 T-A38).
+    pub startpage_probe: Option<String>,
+    /// Recents store override (`WASEN_OFFICE_RECENTS_FILE`) — tests/gates so
+    /// verify never touches the user's real recents (A01 T-A38).
+    pub recents_file: Option<String>,
 }
 
 impl AppConfig {
@@ -77,6 +83,8 @@ impl AppConfig {
         let ux_probe_path = non_empty("WASEN_OFFICE_UX_PROBE");
         let nl_probe_marker = non_empty("WASEN_OFFICE_NL_PROBE");
         let qv_hittest = lookup("WASEN_OFFICE_QV_HITTEST").is_some_and(|v| !v.is_empty());
+        let startpage_probe = non_empty("WASEN_OFFICE_STARTPAGE_PROBE");
+        let recents_file = non_empty("WASEN_OFFICE_RECENTS_FILE");
 
         Self {
             background,
@@ -88,6 +96,8 @@ impl AppConfig {
             ux_probe_path,
             nl_probe_marker,
             qv_hittest,
+            startpage_probe,
+            recents_file,
         }
     }
 
@@ -124,6 +134,12 @@ impl AppConfig {
                 serde_json::json!(text)
             ));
         }
+        if let Some(probe) = &self.startpage_probe {
+            scripts.push(format!(
+                "window.__WASEN_OFFICE_STARTPAGE_PROBE__ = {};",
+                serde_json::json!(probe)
+            ));
+        }
         scripts.push(format!(
             "window.__WASEN_OFFICE_PROBE__ = {};",
             self.probe_enabled
@@ -150,6 +166,8 @@ mod tests {
         assert_eq!(cfg.ux_probe_path, None);
         assert_eq!(cfg.nl_probe_marker, None);
         assert!(!cfg.qv_hittest);
+        assert_eq!(cfg.startpage_probe, None);
+        assert_eq!(cfg.recents_file, None);
     }
 
     #[test]
@@ -188,12 +206,16 @@ mod tests {
         env.insert("WASEN_OFFICE_PROBE", "1".into());
         env.insert("WASEN_OFFICE_SAVE_PROBE", "save-test".into());
         env.insert("WASEN_OFFICE_UX_PROBE", "ux-path.docx".into());
+        env.insert("WASEN_OFFICE_STARTPAGE_PROBE", "recent:1".into());
+        env.insert("WASEN_OFFICE_RECENTS_FILE", "/tmp/recents-test.json".into());
         let cfg = AppConfig::from_lookup(|k| env.get(k).cloned());
 
         let scripts = cfg.normal_probe_scripts();
-        assert_eq!(scripts.len(), 3);
+        assert_eq!(scripts.len(), 4);
         assert!(scripts[0].contains("window.__WASEN_OFFICE_UX_PROBE__"));
         assert!(scripts[1].contains("window.__WASEN_OFFICE_SAVE_PROBE_TEXT__"));
-        assert!(scripts[2].contains("window.__WASEN_OFFICE_PROBE__ = true;"));
+        assert!(scripts[2].contains("window.__WASEN_OFFICE_STARTPAGE_PROBE__"));
+        assert!(scripts[3].contains("window.__WASEN_OFFICE_PROBE__ = true;"));
+        assert_eq!(cfg.recents_file.as_deref(), Some("/tmp/recents-test.json"));
     }
 }
