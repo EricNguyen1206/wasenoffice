@@ -8,6 +8,38 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-17 · T-A38: Startpage Welcome — Open dialog + Recents + i18n (A01 v1, A5)
+
+- **Bối cảnh:** user báo 2 vấn đề 17.10 (kèm ảnh): (1) không thể chọn file — startpage chỉ có ô
+  gõ absolute path tay; (2) màn hình vừa vào là vùng `bg-paper` trắng trơn (di sản PH-0 harness).
+  Grill-with-docs 2 rounds → DD A01 v1 ratified (a390bd2): Welcome + Open dialog + Recents +
+  Create-new + i18n; Recovers ĐÌNH CHỈ.
+- **Triệu chứng phụ (bắt được khi viết gate 17):** `mktemp /tmp/xxx-XXXXXX.json` — BSD mktemp đòi
+  X ở **CUỐI** template; với đuôi `.json`, lần chạy 1 nó tạo file tên-literal (gate vẫn PASS ảo —
+  seed đọc được), lần 2 fail "File exists" → biến rỗng → `WASEN_OFFICE_RECENTS_FILE=` (rỗng) bị
+  `config::non_empty` drop lặng lẽ → app đọc/ghi **store thật của user**. Confirmed bằng lần 2 đọc
+  được `recents=0` (store user rỗng) thay vì seed 2 entries.
+- **Fix:** template mktemp không đuôi + guard cứng `|| exit 1` ngay tại gán — mktemp fail = gate
+  chết, không bao giờ fallback vào store user. Bài học tổng quát: env-override rỗng = quay về mặc
+  định sản phẩm — trong gate đó là THẢM HỌA im lặng; mọi override dùng cho gate phải guard fail
+  sớm ở phía shell.
+- **Bằng chứng:**
+  - verify FULL exit 0, **21 ▸ steps** (gate 17 mới: positive — seed store qua
+    `WASEN_OFFICE_RECENTS_FILE` → `[web] startpage ready (welcome): recents=2 missing=1 lang=en`
+    → probe `WASEN_OFFICE_STARTPAGE_PROBE=recent:2` click row THẬT → `open_document:` →
+    `[web] editor booting (word):`; negative `STARTPAGE_NEGATIVE=1` — row missing cắn
+    `[web] ERROR: file not found: …` exit 1 nhanh, không chờ timeout).
+  - cargo test 6 recents tests (upsert/cap-10/cờ exists/corrupt-reset/persist-across-instances/
+    serde camelCase) + clippy -D warnings sạch + fmt sạch.
+  - Gate 13 hồi quy GREEN không đổi script (form `#open-form` chuyển vào Welcome nhưng `#doc-path`
+    + `#quick-view-btn` giữ nguyên — click programmatic trên element ẩn vẫn chạy handler).
+  - License gate GREEN: `tauri-plugin-dialog 2.x` + `@tauri-apps/plugin-dialog 2.8.3` (MIT/Apache).
+  - NSOpenPanel không automate được → wiring dialog phủ bằng cùng chain openPath mà row-probe bắn;
+    panel interaction = manual ceiling (TEST A01 TC-A01-05) — trung thực theo evidence-discipline.
+
+---
+
+## 2026-10-13 · T-051: Nhắc licensing & third-party notices khi bundle AGPL trong installer (PH-4)
 ## 2026-10-13 · T-051: Nhắc licensing & third-party notices khi bundle AGPL trong installer (PH-4)
 
 - **Nhiệm vụ:** Đảm bảo tuân thủ đầy đủ GNU AGPL v3.0 và Section 7 khi phân phối installer / application bundle có nhúng x2t sidecar (theo `harness/rules/licensing.md` và `docs/vision.md` QĐ1).

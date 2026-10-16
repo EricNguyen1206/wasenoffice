@@ -15,7 +15,7 @@ type: design
 | Owner | Eric Nguyen |
 | Cập nhật gần nhất | 2026-10-17 |
 | TEST tương ứng | [`TEST.md`](TEST.md) |
-| Thuật ngữ | [`GLOSSARY.md`](../../GLOSSARY.md) — Startpage, Welcome, Recents, Recovers, Lối mở, Open dialog, Create-new, Template blank, Untitled, Save As |
+| Thuật ngữ | [`GLOSSARY.md`](../../../GLOSSARY.md) — Startpage, Welcome, Recents, Recovers, Lối mở, Open dialog, Create-new, Template blank, Untitled, Save As |
 
 ## 1. Tổng quan
 
@@ -65,11 +65,13 @@ Ngôn ngữ UI: VI/EN theo `navigator.language`, fallback EN (Q6/Q12 — chỉ S
 - **Open dialog:** `tauri-plugin-dialog` (open + save); filter `.docx/.xlsx/.pptx/.pdf`. Lý do chọn
   plugin thay vì `<input type="file">`: WKWebView trả `File` blob **không kèm đường dẫn đĩa**,
   trong khi `open_document` cần path thật (contract gates 9/13) — xem §9.
-- **Recents:** 3 Tauri command riêng (`recents_list` / `recents_add` / `recents_remove`), store
-  **JSON ở app-data dir** (Q10 — giải câu hỏi mở cũ §10: JSON, không SQLite). Ghi nhận khi open
-  **thành công** từ cả ba lối mở. KHÔNG đi qua bridge `AscDesktopEditor` nhóm `LocalFileRecents`
-  (Startpage là own-UI đi invoke trực tiếp; bridge chỉ đáng khi engine loginpage tái dùng — §9).
-  Đường dẫn file KHÔNG bao giờ vào URL engine — registry fileId hiện có giữ nguyên vai trò.
+- **Recents:** store **JSON ở app-data dir** (Q10 — giải câu hỏi mở cũ §10: JSON, không SQLite);
+  JS chỉ đọc qua `recents_list` (+cờ `exists` tính tươi) và gỡ qua `recents_remove` — việc **ghi
+  nhận là nội bộ Rust-side** tại mỗi open **thành công** (`open_document` / `viewer_view` /
+  `wasen_light_view` / `wasen_light_reopen`), JS không bao giờ báo open. KHÔNG đi qua bridge
+  `AscDesktopEditor` nhóm `LocalFileRecents` (Startpage là own-UI đi invoke trực tiếp; bridge chỉ
+  đáng khi engine loginpage tái dùng — §9). Đường dẫn file KHÔNG bao giờ vào URL engine — registry
+  fileId hiện có giữ nguyên vai trò. `WASEN_OFFICE_RECENTS_FILE` đè đường store cho test/gate.
 - **Create-new:** 3 **Template blank** (docx/xlsx/pptx) sinh lúc dev bằng thư viện MIT
   (openpyxl / python-pptx — cùng pattern fixture `harness/fixtures/make_docx_*.py`), bundle vào
   app; bấm nút = copy template ra vùng làm việc Untitled → mở qua pipeline open hiện có.
@@ -132,3 +134,4 @@ grill 17.10 và chốt ở §4/§5/§9. Provenance Template blank ghi trong comm
 | 2026-09-26 | DD draft đầu tiên (spec định hướng trước khi code) | — |
 | 2026-09-27 | Mã hóa màn hình: startpage → A01; tham chiếu editor → D01, settings → X01 | — |
 | 2026-10-17 | **v1 ratified** (grill-with-docs 2 rounds): Welcome + Open dialog (plugin-dialog) + Recents (JSON app-data, 3 command riêng) + Create-new (Template blank ×3, MIT-generated) + Untitled/Save As seam + i18n VI/EN Startpage; Recovers ĐÌNH CHỈ; câu hỏi mở §10 giải hết | — |
+| 2026-10-17 | §4/§5/§9/§11 cập nhật theo code T-A38 (c5ab47b): recents = 2 command (`recents_list`/`recents_remove`) + record nội bộ Rust-side tại 4 lối mở (JS không bao giờ báo open — add command không cần); gate 17 thường trụ verify.sh; gotcha mktemp + link GLOSSARY 3 cấp | c5ab47b |
