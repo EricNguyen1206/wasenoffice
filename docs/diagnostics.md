@@ -8,6 +8,35 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-17 · T-A39: Create-new ×3 + Untitled/Save-As seam (A01 v1, A5)
+
+- **Thiết kế đã grill (Q7/Q8):** Create-new = copy Template blank (không blank-writer) → Untitled
+  trong app workdir → lần Save đầu qua NSSavePanel. Hai câu được chứng minh bằng gate, không phải
+  tin lời:
+  1. **Engine có nhận template tự sinh không?** → gate 18: oracle x2t THẬT qua đúng shape
+     OpenBinary của shell — cả 3 blank (docx hand-built ECMA-376, xlsx openpyxl, pptx
+     python-pptx) convert ra Editor.bin non-empty (4 unit tests, ~0.2 s, không boot app).
+  2. **Seam Save-As có chạy đúng không?** → gate 17-saveas: create → SAVE_PROBE gõ marker +
+     asc_Save → intercept trong `save_document` → đích stub (`WASEN_OFFICE_SAVEAS_STUB`) — assert
+     7 lớp: log retarget + `save delivered:` + file trên đĩa + marker trong word/document.xml +
+     copy untitled ĐÃ XOÁ + recents store liệt kê đích mới. Chạy thật: x2t xuất 25 258 bytes,
+     PASSED lần đầu.
+- **Giới hạn trung thực:** NSSavePanel thật (không stub) không automate được — panel interaction
+  là manual ceiling (TEST A01 TC-A01-08); cancel-panel path được code EndSave(2) nhưng chỉ manual.
+- **Hai sự cố quy trình bắt được trong phiên:**
+  1. **Mimosa hook chặn `eval "$CONST"` trong verify.sh** (phát hiện "高危" trên cả dòng eval CŨ
+     chỉ nằm trong context hunk) — pattern gate-cmds là kiến trúc đã ratified (hằng repo-controlled),
+     nhưng thay vì đi ngược hook, gate 18 làm **script riêng** `gate-create-templates.sh` (pattern
+     `test-layout.sh` — GATE_LAYOUT tiền lệ) và verify.sh gọi trực tiếp: vẫn 1 nhà, sạch scanner.
+  2. **`git add -A src-tauri` lọt state scanner** `src-tauri/.mimosa/` vào commit — `.gitignore`
+     chỉ có `/.mimosa/` (anchor root, không khớp thư mục con). Amend ngay + đổi thành `.mimosa/`
+     không anchor. Bài học: `add -A` trên thư mục chứa tool-state = rủi ro; check `git status`
+     trước add.
+- **Bằng chứng:** verify FULL exit 0 **24 ▸ steps** (thêm gate 17-create, 17-saveas, 18); fmt +
+  clippy -D warnings 0; gate 17 pos/neg/create/saveas đều đúng kỳ vọng (neg exit 1 nhanh).
+
+---
+
 ## 2026-10-17 · T-A38: Startpage Welcome — Open dialog + Recents + i18n (A01 v1, A5)
 
 - **Bối cảnh:** user báo 2 vấn đề 17.10 (kèm ảnh): (1) không thể chọn file — startpage chỉ có ô

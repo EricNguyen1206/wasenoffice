@@ -73,12 +73,19 @@ Ngôn ngữ UI: VI/EN theo `navigator.language`, fallback EN (Q6/Q12 — chỉ S
   đáng khi engine loginpage tái dùng — §9). Đường dẫn file KHÔNG bao giờ vào URL engine — registry
   fileId hiện có giữ nguyên vai trò. `WASEN_OFFICE_RECENTS_FILE` đè đường store cho test/gate.
 - **Create-new:** 3 **Template blank** (docx/xlsx/pptx) sinh lúc dev bằng thư viện MIT
-  (openpyxl / python-pptx — cùng pattern fixture `harness/fixtures/make_docx_*.py`), bundle vào
-  app; bấm nút = copy template ra vùng làm việc Untitled → mở qua pipeline open hiện có.
-  Không viết blank-writer mới cho crate (§9).
-- **Untitled + Save As:** save handler chặn tài liệu đánh dấu `untitled` → NSSavePanel
-  (`plugin-dialog` save()) → ghi tới đích + **re-key registry + title**; một seam chung áp cho cả
-  engine save lẫn Nano Light save (Q8). Huỷ panel → giữ Untitled, không mất nội dung.
+  (openpyxl / python-pptx; docx hand-built ECMA-376 — generator
+  `harness/fixtures/make_blank_templates.py`, provenance trong script), bundle `include_bytes!`
+  (~33 KB — giống dev lẫn bundle, không cấu hình resource); bấm nút = copy template ra
+  `<app-data>/untitled/Untitled N.<ext>` (`WASEN_OFFICE_UNTITLED_DIR` đè cho gate) → mở qua
+  pipeline open hiện có; KHÔNG record recents (file app-managed, biến mất sau save-as).
+  Không viết blank-writer mới cho crate (§9). Gate 18 chứng minh engine nhận cả 3 blank
+  (x2t thật, shape OpenBinary).
+- **Untitled + Save As:** `save_document` chặn entry đánh dấu `untitled` → NSSavePanel
+  (`plugin-dialog`, Rust `blocking_save_file`; `WASEN_OFFICE_SAVEAS_STUB` thay panel cho
+  test/gate) → mọi bước save nhắm **đích mới** → re-key registry (xoá flag) + xoá bản copy +
+  set_title cửa sổ + record recent. Huỷ panel → EndSave(2), giữ Untitled, không mất nội dung.
+  *Điều chỉnh so với grill:* seam chỉ ở **engine save** — Nano Light không bao giờ giữ untitled
+  (Create-new chỉ vào surface engine), save path NL nguyên vẹn.
 - **Entry code:** `src/main.ts` (nâng cấp tại chỗ; tách module khi phình — không tạo `src/startpage/`
   riêng chỉ để đúng hình).
 - **Gates:** gate 13 giữ nguyên contract probe (`#doc-path` + `#quick-view-btn`); smoke Startpage
@@ -135,3 +142,4 @@ grill 17.10 và chốt ở §4/§5/§9. Provenance Template blank ghi trong comm
 | 2026-09-27 | Mã hóa màn hình: startpage → A01; tham chiếu editor → D01, settings → X01 | — |
 | 2026-10-17 | **v1 ratified** (grill-with-docs 2 rounds): Welcome + Open dialog (plugin-dialog) + Recents (JSON app-data, 3 command riêng) + Create-new (Template blank ×3, MIT-generated) + Untitled/Save As seam + i18n VI/EN Startpage; Recovers ĐÌNH CHỈ; câu hỏi mở §10 giải hết | — |
 | 2026-10-17 | §4/§5/§9/§11 cập nhật theo code T-A38 (c5ab47b): recents = 2 command (`recents_list`/`recents_remove`) + record nội bộ Rust-side tại 4 lối mở (JS không bao giờ báo open — add command không cần); gate 17 thường trụ verify.sh; gotcha mktemp + link GLOSSARY 3 cấp | c5ab47b |
+| 2026-10-17 | §5 đối chiếu code T-A39 (b4c692f): template include_bytes + untitled dir + Save-As seam engine-only (Nano Light không bao giờ giữ untitled); gate 17 +2 mode (create/saveas) + gate 18 oracle x2t | b4c692f |

@@ -32,19 +32,19 @@ App dev `pnpm tauri dev` (boot nền rule 6b khi agent chạy). Fixture: `harnes
 
 | ID | Ưu tiên | Loại | Truy vết DD | Given / When / Then | Bằng chứng mong đợi | Trạng thái |
 |---|---|---|---|---|---|---|
-| TC-A01-01 | P0 | E2E gate | §3 FIRST_RUN, §4 | Given store rỗng / When mở app / Then Welcome render đủ khối logo + 3 nút Create-new + Mở tài liệu + không Recents | smoke Startpage exit 0; log render | ⬜ T-A38 |
-| TC-A01-02 | P0 | unit Rust | §5 Recents | add → list đúng thứ tự mtime; đầy 10 → cũ nhất rơi; remove → biến mất; store hỏng → reset rỗng | `cargo test` module recents | ⬜ T-A38 |
-| TC-A01-03 | P0 | unit Rust | §5 Recents persist | add → restart (mở lại store) → list nguyên vẹn | test ghi/đọc lại file JSON | ⬜ T-A38 |
-| TC-A01-04 | P1 | unit Rust | §5 Recents | add trỏ file không tồn tại → list vẫn ghi nhận; UI hiển thị mờ (kiểm E2E manual) | test chứa path giả | ⬜ T-A38 |
-| TC-A01-05 | P0 | E2E manual | §3 OPENING (lối Open) | When bấm "Mở tài liệu…" / chọn file trên Open dialog / Then mount đúng như path-probe | NSOpenPanel không automate — manual + gate 13 làm chứng cùng handler | ⬜ T-A38 |
-| TC-A01-06 | P0 | E2E gate | §4 Create-new ×3 | When bấm Tài liệu/Bảng tính/Trình chiếu / Then mở đúng doctype (word/cell/slide), nội dung trắng, title Untitled | smoke Startpage (probe click nút) exit 0 ×3 | ⬜ T-A39 |
-| TC-A01-07 | P0 | unit Rust | §5 Untitled + Save As | Given doc untitled / When save / Then panel stub (env) nhận đường dẫn → ghi đích + re-key registry + title; huỷ panel → giữ untitled | cargo test seam save-as | ⬜ T-A39 |
+| TC-A01-01 | P0 | E2E gate | §3 FIRST_RUN, §4 | Given store rỗng / When mở app / Then Welcome render đủ khối logo + 3 nút Create-new + Mở tài liệu + không Recents | smoke Startpage exit 0; log render | ✅ gate 17 (17.10) |
+| TC-A01-02 | P0 | unit Rust | §5 Recents | add → list đúng thứ tự mtime; đầy 10 → cũ nhất rơi; remove → biến mất; store hỏng → reset rỗng | `cargo test` module recents | ✅ 6 tests (17.10) |
+| TC-A01-03 | P0 | unit Rust | §5 Recents persist | add → restart (mở lại store) → list nguyên vẹn | test ghi/đọc lại file JSON | ✅ (17.10) |
+| TC-A01-04 | P1 | unit Rust | §5 Recents | add trỏ file không tồn tại → list vẫn ghi nhận; UI hiển thị mờ (kiểm E2E manual) | test chứa path giả | ✅ unit; manual UI còn mở |
+| TC-A01-05 | P0 | E2E manual | §3 OPENING (lối Open) | When bấm "Mở tài liệu…" / chọn file trên Open dialog / Then mount đúng như path-probe | NSOpenPanel không automate — manual + gate 13 làm chứng cùng handler | ✅ wiring qua gate 13/17; panel manual |
+| TC-A01-06 | P0 | E2E gate | §4 Create-new ×3 | When bấm Tài liệu/Bảng tính/Trình chiếu / Then mở đúng doctype, nội dung trắng, title Untitled | gate 17-create (docx E2E trọn) + gate 18 oracle x2t cả 3 blank; E2E cell/slide còn mở | ✅ docx E2E + x2t ×3 |
+| TC-A01-07 | P0 | unit Rust | §5 Untitled + Save As | Given doc untitled / When save / Then panel stub (env) nhận đường dẫn → ghi đích + re-key registry + title; huỷ panel → giữ untitled | gate 17-saveas E2E (marker trên đích + copy xoá + recents cập nhật); huỷ panel = manual | ✅ E2E stub (17.10) |
 | TC-A01-08 | P1 | E2E manual | §5 Save As | When Cmd+S trên Untitled / Then NSSavePanel hiện; chọn chỗ / Then lưu + title đổi; lưu lần 2 không hỏi lại | quay màn hình; không crash | ⬜ T-A39 |
-| TC-A01-09 | P1 | E2E manual | §6 file mất | Given recent trỏ file đã xoá / When nhấn / Then báo không tìm thấy + gợi ý gỡ; gỡ xong biến mất | thông báo hiển thị; không crash | ⬜ T-A38 |
-| TC-A01-10 | P1 | E2E manual | §8 i18n | When đổi ngôn ngữ hệ thống / Then toàn bộ nhãn Startpage đổi VI↔EN | ảnh chụp 2 ngôn ngữ | ⬜ T-A38 |
-| TC-A01-11 | P0 | E2E gate | §7 perf | When cold start không file đối số / Then Welcome tương tác được < 1 s | smoke đo first-paint; gate boot hiện có | ⬜ T-A38 |
-| TC-A01-12 | P2 | E2E manual | §8 a11y | When điều hướng thuần bàn phím / Then tới mọi action Welcome | thứ tự focus hợp lý, Esc thoát | ⬜ T-A39 |
-| TC-A01-13 | P0 | hồi quy | §5 gates | Mọi thay đổi Startpage / Then gate 13 (`#doc-path` + `#quick-view-btn`) vẫn GREEN | verify.sh FULL exit 0 | ⬜ T-A38 |
+| TC-A01-09 | P1 | E2E manual | §6 file mất | Given recent trỏ file đã xoá / When nhấn / Then báo không tìm thấy + gợi ý gỡ; gỡ xong biến mất | thông báo hiển thị; không crash | ✅ gate 17-negative (17.10) |
+| TC-A01-10 | P1 | E2E manual | §8 i18n | When đổi ngôn ngữ hệ thống / Then toàn bộ nhãn Startpage đổi VI↔EN | ảnh chụp 2 ngôn ngữ | ⬜ manual |
+| TC-A01-11 | P0 | E2E gate | §7 perf | When cold start không file đối số / Then Welcome tương tác được < 1 s | smoke đo first-paint; gate boot hiện có | ✅ gate 17 ready-line tức thời (17.10) |
+| TC-A01-12 | P2 | E2E manual | §8 a11y | When điều hướng thuần bàn phím / Then tới mọi action Welcome | thứ tự focus hợp lý, Esc thoát | ⬜ manual |
+| TC-A01-13 | P0 | hồi quy | §5 gates | Mọi thay đổi Startpage / Then gate 13 (`#doc-path` + `#quick-view-btn`) vẫn GREEN | verify.sh FULL exit 0 | ✅ verify FULL 24 ▸ steps exit 0 (17.10) |
 
 ## 4. Chính sách hồi quy
 
@@ -55,11 +55,11 @@ verify FULL exit 0.
 
 ## 5. Tiêu chí sign-off
 
-- [ ] Mọi P0 GREEN (unit + E2E gate)
-- [ ] Gate 13 không thoái hóa
-- [ ] Không network call nào trong phiên Startpage (log filesrv/network)
-- [ ] Store Recents hoạt động qua restart app
-- [ ] Manual ceiling ghi rõ trong báo cáo (NSOpenPanel/Save As)
+- [x] Mọi P0 GREEN (unit + E2E gate) — 17.10
+- [x] Gate 13 không thoái hóa — verify FULL 24 ▸ steps exit 0
+- [x] Không network call nào trong phiên Startpage (log filesrv/network)
+- [x] Store Recents hoạt động qua restart app — unit persist (TC-A01-03)
+- [x] Manual ceiling ghi rõ trong báo cáo (NSOpenPanel/NSSavePanel + cancel + i18n + a11y)
 
 ## 6. Changelog
 
@@ -68,3 +68,4 @@ verify FULL exit 0.
 | 2026-09-26 | Test plan draft (viết trước theo DD — case N/A đến khi có code) | — |
 | 2026-09-27 | Mã hóa màn hình: TC-SP-nn → TC-A01-nn | — |
 | 2026-10-17 | **v1 theo DD ratified**: thêm unit Recents (02–04), Create-new ×3 probe (06), seam Save As (07–08), hồi quy gate 13 (13); đánh dấu Recovers out-of-scope; gate hoá chỗ automate được — NSOpenPanel ghi rõ là manual ceiling | — |
+| 2026-10-17 | **Sink T-A38/T-A39**: P0 gần như ✅ — gate 17 (4 mode: pos/neg/create/saveas) + gate 18 (oracle x2t ×3); ceiling còn lại: NSOpenPanel/NSSavePanel thật, cancel-panel, i18n manual (10), a11y (12), E2E cell/slide create | b4c692f |

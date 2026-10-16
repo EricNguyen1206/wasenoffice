@@ -19,7 +19,9 @@ engines/*
 /docs/media/
 # pycache từ fixture generators (import docxgen_common khi gate chạy)
 __pycache__/
-/.mimosa/
+# scanner/hook state — mọi độ sâu (root + src-tauri/...; 17.10: state suýt
+# lọt commit T-A39 vì pattern /.mimosa/ chỉ khớp root)
+.mimosa/
 
 # local agent-tool artifacts
 /.zcodeignore
