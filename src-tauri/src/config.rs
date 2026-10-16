@@ -43,6 +43,12 @@ pub struct AppConfig {
     /// Recents store override (`WASEN_OFFICE_RECENTS_FILE`) — tests/gates so
     /// verify never touches the user's real recents (A01 T-A38).
     pub recents_file: Option<String>,
+    /// Save-As panel stub (`WASEN_OFFICE_SAVEAS_STUB`) — path used instead of
+    /// the native NSSavePanel, which is not scriptable (A01 T-A39).
+    pub saveas_stub: Option<String>,
+    /// Untitled-dir override (`WASEN_OFFICE_UNTITLED_DIR`) — tests/gates so
+    /// Create-new never writes into the user's real untitled dir (A01 T-A39).
+    pub untitled_dir: Option<String>,
 }
 
 impl AppConfig {
@@ -85,6 +91,8 @@ impl AppConfig {
         let qv_hittest = lookup("WASEN_OFFICE_QV_HITTEST").is_some_and(|v| !v.is_empty());
         let startpage_probe = non_empty("WASEN_OFFICE_STARTPAGE_PROBE");
         let recents_file = non_empty("WASEN_OFFICE_RECENTS_FILE");
+        let saveas_stub = non_empty("WASEN_OFFICE_SAVEAS_STUB");
+        let untitled_dir = non_empty("WASEN_OFFICE_UNTITLED_DIR");
 
         Self {
             background,
@@ -98,6 +106,8 @@ impl AppConfig {
             qv_hittest,
             startpage_probe,
             recents_file,
+            saveas_stub,
+            untitled_dir,
         }
     }
 
@@ -168,6 +178,8 @@ mod tests {
         assert!(!cfg.qv_hittest);
         assert_eq!(cfg.startpage_probe, None);
         assert_eq!(cfg.recents_file, None);
+        assert_eq!(cfg.saveas_stub, None);
+        assert_eq!(cfg.untitled_dir, None);
     }
 
     #[test]

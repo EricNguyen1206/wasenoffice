@@ -51,6 +51,8 @@
 #            ← src/main.ts renderRecents/activateRecent (driver
 #            WASEN_OFFICE_STARTPAGE_PROBE, store WASEN_OFFICE_RECENTS_FILE;
 #            open_document/editor booting là dòng có sẵn của chain open)
+#            T-A39 thêm mode CREATE: `create_document:` (emit
+#            src-tauri/src/untitled.rs) + boot dòng Untitled (cùng consumer)
 set -u
 
 SMOKE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -98,6 +100,8 @@ SMOKE_RE_SP_NOTFOUND='ERROR: file not found: '
 SMOKE_RE_SP_WEB_ERROR='\[web\] ERROR:'
 SMOKE_RE_SP_BOOTING='editor booting .word.: '
 SMOKE_RE_OPEN_DOC='open_document: '
+SMOKE_RE_SP_CREATE='create_document: docx → '
+SMOKE_RE_SP_CREATE_BOOT='editor booting .word.: Untitled 1.docx'
 
 # ── Trạng thái dùng chung (consumer đọc, không ghi trực tiếp khi không cần) ──
 SMOKE_APP_PID=""     # PID process-group của app (smoke_boot đặt)

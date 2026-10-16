@@ -250,6 +250,19 @@ pub fn save_document(app: &tauri::AppHandle, registry: &FileRegistry, payload: &
         Ok(id_disk) => id_disk,
         Err(note) => return finish(app, None, false, 2, &note),
     };
+    // A01 T-A39 (Q8): the FIRST save of an untitled (Create-new) document
+    // routes through Save-As — the panel (or WASEN_OFFICE_SAVEAS_STUB) picks
+    // the real destination and every step below simply targets it. Cancel
+    // aborts the save; the untitled copy stays (nothing is lost).
+    let was_untitled = registry.is_untitled(id);
+    let (untitled_old, disk) = if was_untitled {
+        match crate::untitled::save_as_target(app, &disk) {
+            Ok(target) => (Some(disk), target),
+            Err(note) => return finish(app, None, false, 2, &note),
+        }
+    } else {
+        (None, disk)
+    };
     let args = payload
         .get("args")
         .and_then(Value::as_array)
@@ -337,6 +350,28 @@ pub fn save_document(app: &tauri::AppHandle, registry: &FileRegistry, payload: &
         Ok(len) => len,
         Err(e) => return finish(app, Some(&disk), false, 2, &e),
     };
+    // A01 T-A39: the untitled copy is consumed by this save — re-key the
+    // registry to the chosen path, drop the copy, refresh the window title
+    // and let the saved file enter Recents like any other open.
+    if let Some(old_copy) = &untitled_old {
+        if let Some(owner) = registry.retarget(id, &disk) {
+            let _ = std::fs::remove_file(old_copy);
+            if let Some(win) = app.get_webview_window(&owner) {
+                let name = disk
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "document".into());
+                let _ = win.set_title(&format!("WasenOffice — {name}"));
+            }
+        }
+        if let Some(recents) = app.try_state::<std::sync::Arc<crate::recents::RecentsStore>>() {
+            recents.record(&disk);
+        }
+        log::info!(
+            "save: untitled document saved as {} (copy removed)",
+            disk.display()
+        );
+    }
     // gate 10 (harness/scripts/smoke-save.sh) greps `save delivered:` — keep
     // verbatim (log contract, change in the same commit as the gate).
     log::info!(

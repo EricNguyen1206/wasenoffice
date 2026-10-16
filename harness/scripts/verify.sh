@@ -65,6 +65,15 @@ harness/scripts/smoke-quick-view-ui.sh || fail=1
 echo "▸ smoke startpage Welcome + recents wiring E2E (gate 17: welcome render + recents row → open — T-A38)"
 harness/scripts/smoke-startpage.sh || fail=1
 
+echo "▸ smoke startpage Create-new E2E (gate 17-create: template → register → engine — T-A39)"
+STARTPAGE_CREATE=1 harness/scripts/smoke-startpage.sh || fail=1
+
+echo "▸ smoke startpage Save-As E2E (gate 17-saveas: create → first save qua stub panel → đích mới — T-A39)"
+STARTPAGE_SAVEAS=1 harness/scripts/smoke-startpage.sh || fail=1
+
+echo "▸ create-new templates unit + real-x2t oracle (gate 18: blank ×3 mở được bằng engine — T-A39)"
+harness/scripts/gate-create-templates.sh || fail=1
+
 echo "▸ smoke Nano Light editor round-trip (gate 15: edit → save write_docx → parse-back → reopen — T-A27)"
 harness/scripts/smoke-nano-light.sh || fail=1
 

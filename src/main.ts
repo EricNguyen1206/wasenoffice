@@ -51,6 +51,9 @@ const FILE_FORMATS: Record<string, { filetype: string; doctype: string; isForm?:
 const STRINGS = {
   en: {
     tagline: 'Local-first office suite — your documents never leave this machine.',
+    newDocument: 'Document',
+    newSpreadsheet: 'Spreadsheet',
+    newPresentation: 'Presentation',
     openDocument: 'Open document…',
     quickView: 'Quick view…',
     nanoLight: 'Nano Light…',
@@ -62,6 +65,9 @@ const STRINGS = {
   },
   vi: {
     tagline: 'Bộ văn phòng local-first — tài liệu không bao giờ rời máy bạn.',
+    newDocument: 'Tài liệu',
+    newSpreadsheet: 'Bảng tính',
+    newPresentation: 'Trình chiếu',
     openDocument: 'Mở tài liệu…',
     quickView: 'Xem nhanh…',
     nanoLight: 'Nano Light…',
@@ -140,6 +146,21 @@ async function openPath(path: string): Promise<void> {
   logLine(`opening ${path}`);
   try {
     const doc = await invoke<OpenedDoc>('open_document', { path });
+    mountEditor(doc);
+  } catch (err) {
+    logLine(`ERROR: ${err}`);
+  }
+}
+
+/**
+ * Create-new (A01 T-A39): copies a bundled Template blank into the app-managed
+ * untitled dir and opens it — a real file, so the whole open pipeline works
+ * unchanged. The FIRST save later routes through Save-As (Rust-side seam).
+ */
+async function createDocument(kind: 'docx' | 'xlsx' | 'pptx'): Promise<void> {
+  logLine(`create: ${kind}`);
+  try {
+    const doc = await invoke<OpenedDoc>('create_document', { kind });
     mountEditor(doc);
   } catch (err) {
     logLine(`ERROR: ${err}`);
@@ -269,16 +290,23 @@ async function renderRecents(): Promise<void> {
   return runStartpageProbe(rows);
 }
 
-/** Gate 17 driver (WASEN_OFFICE_STARTPAGE_PROBE, pattern UX_PROBE): click the
- * Nth REAL recents row — the genuine handler chain runs. No env → nothing. */
+/** Gate 17 driver (WASEN_OFFICE_STARTPAGE_PROBE, pattern UX_PROBE): click a
+ * REAL recents row (`recent:N`) or create button (`create:docx|xlsx|pptx`) —
+ * the genuine handler chain runs. No env → nothing. */
 function runStartpageProbe(rows: RecentRow[]): void {
   const probe = (window as unknown as { __WASEN_OFFICE_STARTPAGE_PROBE__?: string })
     .__WASEN_OFFICE_STARTPAGE_PROBE__;
-  const match = probe?.match(/^recent:(\d+)$/);
-  if (!match) return;
-  const row = rows[Number(match[1]) - 1];
-  if (row) activateRecent(row);
-  else logLine(`ERROR: startpage probe: no recents row #${match[1]}`);
+  const recent = probe?.match(/^recent:(\d+)$/);
+  if (recent) {
+    const row = rows[Number(recent[1]) - 1];
+    if (row) activateRecent(row);
+    else logLine(`ERROR: startpage probe: no recents row #${recent[1]}`);
+    return;
+  }
+  const create = probe?.match(/^create:(docx|xlsx|pptx)$/);
+  if (create) {
+    document.getElementById(`create-${create[1]}`)!.click();
+  }
 }
 
 const log: HTMLDivElement = document.createElement('div');
@@ -303,6 +331,11 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <img src="/logo.png" alt="WasenOffice" class="h-16 w-16 rounded-xl object-contain" />
         <h1 class="m-0 text-[2em] font-semibold tracking-tight">WasenOffice</h1>
         <p class="m-0 max-w-md text-[0.9em] text-fg/60">${t.tagline}</p>
+      </div>
+      <div class="flex flex-wrap items-center justify-center gap-2.5">
+        <button type="button" id="create-docx" class="cursor-pointer ${CONTROL_SKIN}">${t.newDocument}</button>
+        <button type="button" id="create-xlsx" class="cursor-pointer ${CONTROL_SKIN}">${t.newSpreadsheet}</button>
+        <button type="button" id="create-pptx" class="cursor-pointer ${CONTROL_SKIN}">${t.newPresentation}</button>
       </div>
       <div class="flex flex-wrap items-center justify-center gap-2.5">
         <button type="button" id="welcome-open" class="cursor-pointer rounded-panel border border-accent bg-accent px-5 py-2 text-[0.95em] font-semibold text-white shadow-sm outline-none transition-[filter] duration-150 hover:brightness-110 focus:border-accent">${t.openDocument}</button>
@@ -356,6 +389,11 @@ document.querySelector<HTMLButtonElement>('#welcome-open')!.addEventListener('cl
   const path = await pickPath();
   if (path) void openPath(path);
 });
+for (const kind of ['docx', 'xlsx', 'pptx'] as const) {
+  document.getElementById(`create-${kind}`)!.addEventListener('click', () => {
+    void createDocument(kind);
+  });
+}
 document.querySelector<HTMLButtonElement>('#welcome-quick')!.addEventListener('click', async () => {
   const path = await pickPath();
   if (path) void quickView(path);

@@ -21,6 +21,7 @@ mod protocol;
 mod recents;
 mod sidecar;
 pub(crate) mod storage;
+mod untitled;
 mod viewer;
 mod window;
 
@@ -47,18 +48,16 @@ const DELIVERY_JS: &str = include_str!("../../src/shim/delivery.js");
 /// reaches JS). See protocol::filesrv for the rationale. T-059: the entry is
 /// owned by the calling window's label; every later engine call for this
 /// document (delivery/save) must carry the returned `fileId` explicitly.
-#[tauri::command]
-fn open_document(
-    window: tauri::WebviewWindow,
-    path: String,
-    registry: State<'_, Arc<FileRegistry>>,
-    recents: State<'_, Arc<recents::RecentsStore>>,
+/// Register a disk path for `window` and build the engine-facing document
+/// URL — the one open contract shared by `open_document` (user opens) and
+/// `create_document` (Create-new; skips the recents record, T-A39).
+pub(crate) fn register_and_url(
+    window: &tauri::WebviewWindow,
+    path: &str,
+    registry: &State<'_, Arc<FileRegistry>>,
 ) -> Result<OpenedDocument, String> {
-    log::info!("open_document: {path}");
-    let id = registry.register(window.label(), std::path::Path::new(&path))?;
-    // A01: successful open = a recent. Best-effort — never blocks the open.
-    recents.record(std::path::Path::new(&path));
-    let disk = registry_path(&registry, id);
+    let id = registry.register(window.label(), std::path::Path::new(path))?;
+    let disk = registry_path(registry, id);
     let name = disk
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
@@ -72,6 +71,20 @@ fn open_document(
         name,
         file_id: id,
     })
+}
+
+#[tauri::command]
+fn open_document(
+    window: tauri::WebviewWindow,
+    path: String,
+    registry: State<'_, Arc<FileRegistry>>,
+    recents: State<'_, Arc<recents::RecentsStore>>,
+) -> Result<OpenedDocument, String> {
+    log::info!("open_document: {path}");
+    let doc = register_and_url(&window, &path, &registry)?;
+    // A01: successful open = a recent. Best-effort — never blocks the open.
+    recents.record(std::path::Path::new(&path));
+    Ok(doc)
 }
 
 fn registry_path(registry: &State<Arc<FileRegistry>>, id: u32) -> std::path::PathBuf {
@@ -305,6 +318,7 @@ pub fn run() {
             viewer::viewer_view,
             recents::recents_list,
             recents::recents_remove,
+            untitled::create_document,
             editor::wasen_light_view,
             editor::wasen_light_reopen,
             editor::wasen_light_open,

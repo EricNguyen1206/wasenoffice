@@ -11,3 +11,6 @@ GATE_BUILD='pnpm build --logLevel error'
 GATE_LAYOUT='./harness/scripts/test-layout.sh'
 # T-049 gate 16: multi-format save round-trip via real x2t (no app boot).
 GATE_SAVE_MULTIFORMAT='(cd src-tauri && cargo test --quiet save_multiformat_)'
+# T-A39 gate 18 (Create-new templates, real-x2t oracle) lives in its own
+# script home harness/scripts/gate-create-templates.sh — same shape as
+# GATE_LAYOUT/test-layout.sh; verify.sh + dev-check.sh call the script directly.

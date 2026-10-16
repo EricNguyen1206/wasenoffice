@@ -49,6 +49,9 @@ pub struct FileRegistry {
 struct Entry {
     disk: PathBuf,
     owner: String,
+    /// A01 T-A39: Create-new documents live in the app-managed untitled dir
+    /// until the first Save routes through the Save-As panel (Q8).
+    untitled: bool,
 }
 
 impl FileRegistry {
@@ -68,6 +71,7 @@ impl FileRegistry {
                 Entry {
                     disk: canonical,
                     owner: owner.to_string(),
+                    untitled: false,
                 },
             );
         Ok(id)
@@ -75,6 +79,33 @@ impl FileRegistry {
 
     pub fn get(&self, id: u32) -> Option<PathBuf> {
         self.entries.lock().ok()?.get(&id).map(|e| e.disk.clone())
+    }
+
+    /// A01 T-A39: mark a freshly created (Create-new) entry as untitled.
+    pub fn mark_untitled(&self, id: u32) {
+        if let Ok(mut entries) = self.entries.lock() {
+            if let Some(entry) = entries.get_mut(&id) {
+                entry.untitled = true;
+            }
+        }
+    }
+
+    pub fn is_untitled(&self, id: u32) -> bool {
+        match self.entries.lock() {
+            Ok(entries) => entries.get(&id).is_some_and(|e| e.untitled),
+            Err(_) => false,
+        }
+    }
+
+    /// A01 T-A39: first save of an untitled document — point the entry at the
+    /// Save-As target and clear the marker. Returns the owning window label
+    /// so the caller can refresh the title.
+    pub fn retarget(&self, id: u32, new_path: &Path) -> Option<String> {
+        let mut entries = self.entries.lock().ok()?;
+        let entry = entries.get_mut(&id)?;
+        entry.disk = new_path.to_path_buf();
+        entry.untitled = false;
+        Some(entry.owner.clone())
     }
 
     /// Drop every entry registered by `owner` (window close cleanup).
