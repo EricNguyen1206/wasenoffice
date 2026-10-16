@@ -50,7 +50,7 @@ Ngoài `docs/`: contract cho agent = `AGENTS.md` (root) · luật bắt buộc =
 | `docs/design/viewer-a3/` | DD viewer Rust đọc-only "quick view" A3 — mã V01 (Track A, T-A25; component-level — không phải màn UI) |
 | `docs/design/editor-a4/` | DD editor core A4 "Nano Light" — mã L01 (Track A, T-A27; component-level — không phải màn UI) |
 | `docs/design/editor-ui-a5/` | DD UI editor riêng A5 — mã U01 (Track A, T-A33; component-level — thay web-apps) |
-| `docs/design/A01-startpage/` | DD + TEST trang bắt đầu (draft, PH-2) |
+| `docs/design/A01-startpage/` | DD + TEST trang bắt đầu — **active v1 (A5, T-A38/T-A39)**: Welcome + Open dialog + Recents + Create-new + i18n; Recovers đình chỉ |
 | `docs/design/A02-about/` · `docs/design/C01-print-preview/` · `docs/design/X01-settings/` | stub màn kế hoạch (planned) |
 | `docs/techstack-analysis.md` | research Bun/Go/Rust 26.09 (untracked theo QĐ stack) |
 
