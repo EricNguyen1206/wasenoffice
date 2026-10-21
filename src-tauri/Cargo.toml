@@ -1,6 +1,6 @@
 [package]
 name = "wasenoffice"
-version = "0.1.0"
+version = "0.2.0"
 description = "WasenOffice — Rust + Tauri shell around the ONLYOFFICE editing engine"
 authors = ["WasenOffice contributors"]
 edition = "2021"
