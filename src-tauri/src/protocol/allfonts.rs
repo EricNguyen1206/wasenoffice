@@ -56,9 +56,12 @@ pub(crate) fn font_root_disk(url_root: &str) -> Option<PathBuf> {
 }
 
 /// Locate `engines/` without hardcoding disk layout: `$WASEN_OFFICE_ENGINES`,
-/// else walk up from the current dir looking for `engines/editors/sdkjs`.
-/// (T-054: moved from protocol/mod.rs — the font bundle root and the engine
-/// assets share this discovery; mod.rs/filesrv now import it from here.)
+/// else walk up looking for `engines/editors/sdkjs` — exe-dir ancestors FIRST
+/// (the installed app's `Contents/MacOS/engines`, mirroring sidecar x2t
+/// discovery), then cwd ancestors (the repo dev layout; a Finder-launched app
+/// has cwd `/` so cwd alone never finds anything). (T-054: moved from
+/// protocol/mod.rs — the font bundle root and the engine assets share this
+/// discovery; mod.rs/filesrv now import it from here.)
 pub(crate) fn engines_root() -> Option<PathBuf> {
     if let Ok(dir) = std::env::var("WASEN_OFFICE_ENGINES") {
         let p = PathBuf::from(dir);
@@ -66,13 +69,22 @@ pub(crate) fn engines_root() -> Option<PathBuf> {
             return Some(p);
         }
     }
-    let mut cwd = std::env::current_dir().ok()?;
-    for _ in 0..6 {
-        if cwd.join("engines/editors/sdkjs").is_dir() {
-            return Some(cwd.join("engines"));
-        }
-        if !cwd.pop() {
-            break;
+    let mut roots: Vec<PathBuf> = Vec::new();
+    if let Ok(exe) = std::env::current_exe() {
+        roots.extend(exe.ancestors().skip(1).map(Path::to_path_buf));
+    }
+    if let Ok(cwd) = std::env::current_dir() {
+        roots.extend(cwd.ancestors().map(Path::to_path_buf));
+    }
+    engines_root_in(&roots)
+}
+
+/// The walk behind [`engines_root`], over explicit roots — unit-testable
+/// without touching process cwd/exe (same shape as sidecar find_bundled_x2t_in).
+fn engines_root_in(roots: &[PathBuf]) -> Option<PathBuf> {
+    for root in roots {
+        if root.join("engines/editors/sdkjs").is_dir() {
+            return Some(root.join("engines"));
         }
     }
     None
@@ -924,6 +936,18 @@ mod tests {
         assert_eq!(base64(b"foob"), "Zm9vYg==");
         assert_eq!(base64(b"fooba"), "Zm9vYmE=");
         assert_eq!(base64(b"foobar"), "Zm9vYmFy");
+    }
+
+    #[test]
+    fn engines_root_walks_roots_in_order() {
+        let base = std::env::temp_dir().join(format!("wasen-engines-walk-{}", std::process::id()));
+        let good = base.join("app/engines");
+        std::fs::create_dir_all(good.join("editors/sdkjs")).unwrap();
+        // Miss first, hit second — root order is the contract (exe before cwd).
+        let roots = vec![base.join("nowhere"), base.join("app")];
+        assert_eq!(engines_root_in(&roots), Some(base.join("app/engines")));
+        assert_eq!(engines_root_in(&[base.join("nowhere")]), None);
+        std::fs::remove_dir_all(&base).unwrap();
     }
 
     #[test]

@@ -383,6 +383,71 @@ pub fn save_document(app: &tauri::AppHandle, registry: &FileRegistry, payload: &
     finish(app, Some(&disk), true, 0, "")
 }
 
+/// PDF local-save via `localSaveToDrawingFormat` / `localSaveToDrawingFormat2`.
+/// Decodes the base64 payload from the engine and writes directly to disk atomically.
+pub fn save_pdf_drawing(
+    app: &tauri::AppHandle,
+    registry: &FileRegistry,
+    payload: &Value,
+) -> Result<Value, BridgeError> {
+    use base64::Engine as _;
+    let (_id, disk) = flow_file_id(registry, payload).map_err(BridgeError::Runtime)?;
+    let args = payload
+        .get("args")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    // In localSaveToDrawingFormat2: args[3] = changes base64, args[4] = native binary base64
+    // In localSaveToDrawingFormat: args[3] = base64Data
+    let base64_str = if args.len() >= 5 && args[4].as_str().is_some_and(|s| !s.is_empty()) {
+        args[4].as_str().unwrap_or("")
+    } else if args.len() >= 4 {
+        args[3].as_str().unwrap_or("")
+    } else {
+        ""
+    };
+
+    if base64_str.is_empty() {
+        finish(
+            app,
+            Some(&disk),
+            false,
+            2,
+            "save_pdf_drawing: empty payload",
+        );
+        return Err(BridgeError::Runtime("empty pdf payload".into()));
+    }
+
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(base64_str)
+        .map_err(|e| {
+            finish(app, Some(&disk), false, 2, &format!("decode base64: {e}"));
+            BridgeError::Runtime(format!("decode base64: {e}"))
+        })?;
+
+    let len =
+        crate::storage::atomic_write_bytes(&disk, &bytes, "wasenoffice-pdf-save").map_err(|e| {
+            finish(app, Some(&disk), false, 2, &e);
+            BridgeError::Runtime(e)
+        })?;
+
+    log::info!(
+        "save delivered: {} ({} bytes) [pdf-drawing]",
+        disk.display(),
+        len
+    );
+
+    let window = app.get_webview_window("main");
+    if let Some(win) = window {
+        let js = "window.__wasenoffice_delivery && window.__wasenoffice_delivery.pdfSaveEnd && window.__wasenoffice_delivery.pdfSaveEnd(0);";
+        let _ = win.eval(js);
+    }
+
+    finish(app, Some(&disk), true, 0, "");
+    Ok(serde_json::json!(0))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -405,6 +470,8 @@ mod tests {
         let id_a = registry.register("main", &a).unwrap();
         let id_b = registry.register("quickview-1", &b).unwrap();
         assert!(id_a < id_b);
+        let _ = std::fs::remove_dir_all(DocWorkdir::new(id_a).root());
+        let _ = std::fs::remove_dir_all(DocWorkdir::new(id_b).root());
 
         // deltas for A land in A's workdir, even though B registered later
         let payload = serde_json::json!({ "fileId": id_a, "args": ["10;AAAA", 0, 1] });

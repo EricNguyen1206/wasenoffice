@@ -105,8 +105,86 @@ Theo phân tích `docs/techstack-analysis.md`, hướng thiết kế chốt là 
 - **Slice 1 (T-A34 ✅):** Start page migration sang own-UI layout + theme Graphite neutral-minimal.
 - **Slice 2 (T-A35 ✅):** Quick View chrome sang own-UI layout + theme Graphite.
 - **Slice 3 (T-A36 ✅):** Floating Contextual Toolbar (Zen Minimalist / Zinc minimal) cho Nano Light: Bold/Italic/Underline, phím tắt Cmd-B/Cmd-I, neo vị trí theo caret selection, mutation verb Format trong Rust.
-- **Slice 4 (Task T-A37 hiện tại):** Multi-document Tab Bar (Zinc minimal) cho Nano Light: thanh tab chuyển đổi tài liệu, mở/đóng tab, session keying theo tab.
+- **Slice 4 (T-A37 ✅):** Multi-document Tab Bar (Zinc minimal) cho Nano Light: thanh tab chuyển đổi tài liệu, mở/đóng tab, session keying theo tab.
 - **Slice 5 (Seed):** Tab bar mở rộng đa cửa sổ & kéo thả tabs.
+- **Slice 6 (T-A40 🔨 hiện tại):** Compact chrome **cửa sổ ENGINE** (chế độ nâng cao — D1).
+
+### Slice 6 — compact chrome cửa sổ ENGINE (design 17.10, TRƯỚC code)
+
+> User chỉ thị 17.10 (ảnh `test_haita.pdf`): chrome editor engine cồng kềnh — hàng 1 brand
+> (đã 1 hàng mỏng theo fix), hàng 2 toolbar engine (save/print/undo + tên file + username),
+> hàng 3 tabs engine (File/Home/Comment/Collaboration/View). Yêu cầu: **1 component header**
+> gồm [menu trái · tên file giữa · tài khoản phải] + **component liền sau = tools box**
+> gồm tool tương ứng menu đang chọn.
+
+**Ranh giới upstream (QĐ9):** hàng tab + toolbar ngữ cảnh là DOM của web-apps trong iframe —
+KHÔNG sửa upstream; mọi thao tác qua 2 seam được phép: (1) shim `desktopEditor.js`
+monkey-patch `DocsAPI.DocEditor` (seam blessed theo AGENTS "shim, monkey-patch qua config
+API") để truyền config customization; (2) cùng-origin giữa khung app khung iframe → driver
+sự kiện qua NotificationCenter-trigger.
+
+**Bằng chứng upstream (mã đọc qua, không đoán):**
+| Chức năng | Chuỗi bạn dẫn | Nguồn |
+|---|---|---|
+| `toolbarNoTabs` = ĐỔI STYLE tabs ('line'), KHÔNG ẩn — deprecated (console.log Obsolete) | TabStyler.js đọc `toolbarNoTabs` → style 'line' | `upstream/web-apps/apps/common/main/lib/controller/TabStyler.js:63-75` |
+| **CẤM `toolbarNoTabs` trong engine artifact của mình (root-cause 17.10):** api.js đọc `customization.toolbarNoTabs` → đổi iframe src sang **`index_loader.html`** (splash-loader variant) — artifact engines không có asset dev của variant này → boot CHẾT (3 GET rồi im lặng; counterfactual không có cờ → `index.html` đầy đủ, contentReady ✓) | api.js `getAppPath` chọn index theo cờ | `engines/editors/web-apps/apps/api/documents/api.js:1175-1178` (mirror upstream cùng dòng) |
+| Placeholder load lúc `toolbarNoTabs` | Main.js kiểm tra config | `upstream/web-apps/apps/documenteditor/main/controller/Main.js:593` |
+| Đổi tab ngữ cảnh (tool box đổi theo menu) | event `tab:set-active` → `toolbar.setTab(action)` + unfold | `upstream/web-apps/apps/documenteditor/main/app/controller/Toolbar.js:254-257` |
+| Trigger mẫu `tab:set-active` | `trigger('tab:set-active', 'view', true)` | `upstream/web-apps/apps/documenteditor/main/app/controller/ViewTab.js:292` |
+| FILE tab mở/đóng QUA NotificationCenter | `menu:show` → `onFileMenu('show')` → `setTab('file')` · `menu:hide` → `setTab()` | `upstream/web-apps/apps/documenteditor/main/app/controller/Toolbar.js:124-129,4191-4199` |
+| FILE menu panel hiển thị cùng event | LeftMenu `menu:show` → `menuFilesShowHide('show')` | `upstream/web-apps/apps/documenteditor/main/app/controller/LeftMenu.js:93` |
+| Kho tab engine (edit): file/home/ins/layout/links + addTab: review(Collaboration)/draw/headerfooter/charttab/forms/view | tabs view + addTab controller | `upstream/web-apps/apps/documenteditor/main/app/view/Toolbar.js:179-186` + `controller/Toolbar.js:3934-4075` |
+| Boot config engine | boot page upstream desktop tạo `editorConfig` từ URL params — KHÔNG có passthrough customization | `upstream/web-apps/apps/api/documents/index.html.desktop:52-67,105-120` (_desktop` ≡ artifact engines — byte-identical đã diff) |
+
+**Kênh driver chốt (100% NotificationCenter từ app frame — KHÔNG DOM-click):**
+- Tab thường: `Common.NotificationCenter.trigger('tab:set-active', <action>)` với
+  action ∈ `home · ins · layout · links · review (Collaboration) · view` (+ draw/forms/
+  headerfooter/charttab khi engine bật).
+- FILE: `trigger('menu:show')` mở (tab file + panel trái cùng lúc), `trigger('menu:hide')` đóng.
+- Ẩn hàng tabs engine: **CSS trong shim app frame khi app ready**:
+  `#toolbar .tabs { display: none !important; }` — strip element thuần nhìn, Backbone
+  state vẫn chạy (setTab hoạt động bình thường, panels đổi theo). KHÔNG truyền
+  `toolbarNoTabs` (root-cause boot-dead — bảng bằng chứng trên).
+- **SPIKE KẾT QUẢ (17.10, criterion 1 ĐÓNG — POSITIVE):** probe 3 frame ×2 thời điểm —
+  app frame (`documenteditor/main/index.html`) logs `common=object nc=object` ở cả t=2s
+  lẫn t=6s; boot frame + main frame `undefined` (đúng thiết kế — chỉ app frame cần).
+  Bằng chứng: `/tmp/ta40-spike2.log` (tab-probe t=2s/t=6s + asc_onDocumentContentReady).
+
+**Cấu trúc DOM (khung app — `src/main.ts`):**
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ Header (1 hàng, ours): [File Home Comment Collab View]  tên-file   │
+│   iCloud-like avatar account phải                                  │
+├────────────────────────────────────────────────────────────────────┤
+│ Tools box (engine giữ nguyên): toolbar ngữ cảnh engine, phản ứng    │
+│ tab:set-active/menus engine (không thay đổi — không dán nhãn)       │
+├────────────────────────────────────────────────────────────────────┤
+│ Engine iframe (canvas tài liệu)                                     │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+**Kênh driver (shim ↔ app frame):**
+- Shim ẩn strip `#toolbar .tabs` bằng CSS khi app frame ready (poll `#toolbar`, cap 12s).
+- Menu tabs của mình (`src/main.ts`) click → postMessage `{type:'__wasenoffice_tab',
+  action, state?}` xuống frame chain (shim mỗi frame relay xuống con) → frame có
+  `Common.NotificationCenter` thực thi trigger (tab thường / `menu:show|hide` cho FILE).
+
+**Phạm vi v1 (slice này):**
+- Header: tabs Home/Comment/Collaboration/View + tên file + account; FILE tab mở menu
+  qua `menu:show`.
+- Engine: `toolbarNoTabs` (hàng tab engine ẩn).
+- Nakhov: account = initials từ `username` param đã có (`'WasenOffice User'`).
+- KHÔNG: dựng lại từng nút tools (toolbar engine giữ nguyên nội dung/nội dung nói được
+  mọi tính năng nâng cao D1) — ribbon-parity là slice sau (T-A4-ribbon seed).
+
+**KIỂM ĐỊNH (slice criterion):**
+1. SPIKE rule trên: log probe chỉ ra `common=object nc=object` (hoặc fall về fallback
+   thiết kế ceiling được ghi diagnostics).
+2. Pixel: boot release → chụp screencapture — 2 hàng chrome (header + tools) thay cho
+   3 hàng, không có hàng tabs engine.
+3. Gate chính bằng pixel + `frontend_log`; verify FULL exit 0; tsc sạch.
+4. Không đụng layout.ts / viewer.ts / editor (gio) — parity-view + gate 14/15 nguyên
+   trạng (regression net).
 ---
 
 ## 6. Kế hoạch Kiểm thử & An toàn
@@ -123,6 +201,25 @@ Theo phân tích `docs/techstack-analysis.md`, hướng thiết kế chốt là 
 
 ## 7. Changelog
 
+## 8. PIVOT 18.10 — về native chrome + multitab (T-A43→T-A45), user chốt
+
+**Bằng chứng kiến trúc ONLYOFFICE Desktop** (repo `DesktopEditors` — cấu trúc submodule,
+github.com/ONLYOFFICE/DesktopEditors + `desktop-sdk`):
+```
+DesktopEditors = Qt shell (desktop-apps) + CEF wrapper (desktop-sdk) + engine submodules
+shell KHÔNG vẽ chrome soạn thảo — chỉ: window · TAB BAR đa tài liệu · hội nhập OS
+menu tabs/toolbar/panels = 100% engine (web-apps; desktop dùng web-apps-PRO → PDF có
+Forms/Redact/Plugins/AI; artifact engines/ của mình lấy từ app cài = pro build)
+```
+**Quyết:** compact chrome (slice 6) **default OFF** — engine vẽ chrome native đúng doctype;
+sauce A5 chuyển sang: T-A43 revert · T-A44 tab bar + iframe pool (brand tab = Startpage) ·
+T-A45 per-tab fileId keying (T-059 rework). T-A40/T-A41 code giữ nguyên, ngủ sau flag
+(`WASEN_OFFICE_COMPACT_CHROME=1` bật lại). Keytip reveal/keymap đi qua shim — không phụ
+thuộc chrome, sống độc lập. PDF-dialog investigation (18.10): 5/5 flow synthetic sạch trên
+`test_haita.pdf`, engine byte-identical ONLYOFFICE — treo chờ real-input test của user;
+T-A43 loại thêm 1 biến số.
+
 | Ngày | Nội dung | Commit |
 | :--- | :--- | :--- |
 | 2026-10-11 | Khởi tạo DD U01 mở màn Milestone A5 (T-A33) | *commit DD* |
+| 2026-10-18 | §8 PIVOT: native chrome + multitab (T-A43→A45); compact chrome default OFF | *commit pivot* |

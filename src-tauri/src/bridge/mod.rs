@@ -54,9 +54,10 @@ impl BridgeCmd {
             "getEngineVersion" => Ok(Value::String(env!("CARGO_PKG_VERSION").into())),
             "GetEncryptedHeader" => Ok(Value::String("ENCRYPTED;".into())),
             "CheckUserId" => Ok(Value::String("wasenoffice-ph0".into())),
-            "GetInstallPlugins" => Ok(Value::String(
-                r#"[{"url":"","pluginsData":[]},{"url":"","pluginsData":[]}]"#.into(),
-            )),
+            "GetInstallPlugins" => {
+                const PLUGINS_JSON: &str = include_str!("../../../src/shim/plugins.json");
+                Ok(Value::String(PLUGINS_JSON.into()))
+            }
             "isSupportPlugins" | "isSupportMacroses" => Ok(Value::Bool(true)),
             "IsSignaturesSupport" => Ok(Value::Bool(false)),
             "SetDocumentName" => {
@@ -110,8 +111,12 @@ impl BridgeCmd {
                 save::save_document(app, registry, &payload);
                 Ok(Value::Null)
             }
+            "localSaveToDrawingFormat" | "localSaveToDrawingFormat2" => {
+                save::save_pdf_drawing(app, registry, &payload)
+            }
             // save-finished ack (engine fires it before LocalFileSave)
             "OnSave" => Ok(Value::Null),
+            "emulateCloudPrinting" => Ok(Value::Null),
             // legacy wheel-compat hook (sync `false ===` compared by the engine)
             "CheckNeedWheel" => Ok(Value::Bool(true)),
             // crypto-mode property surface — PH-3 = off (shim answers the same)

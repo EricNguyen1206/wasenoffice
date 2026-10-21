@@ -1,10 +1,17 @@
 /**
  * Open-delivery chain (T-045, review candidate C3) — the named module for the
  * desktop open contract: the engine asks for the document (LocalStartOpen,
- * relayed by desktopEditor.js) → the MAIN frame fetches the converted bytes
- * (Rust `get_document_for_delivery`) → the bytes travel DOWN the frame chain
- * → the ENGINE frame calls window.DesktopOfflineAppDocumentEndLoad
- * (desktop-sdk client_renderer_wrapper.cpp "onlocaldocument_loadend").
+ * relayed by desktopEditor.js) → the MAIN frame calls Rust
+ * `get_document_for_delivery` (metadata only: folder/name/docUrl/size) →
+ * payload travels DOWN the frame chain → the ENGINE frame fetches the bytes
+ * from the same-origin filesrv URL (`/delivery/<id>/<name>`, T-067 — the old
+ * b64/IPC byte lane scaled peak RAM ~7–8× the file size and thrashed the
+ * machine on 1GB+ documents) → the engine calls
+ * window.DesktopOfflineAppDocumentEndLoad with `binary_content://<fileId>`
+ * and pulls the bytes through window.AscDesktopEditor.GetOpenedFile
+ * (upstream/sdkjs/common/Local/common.js:184-197 — the streaming branch of
+ * the same contract; desktop-sdk client_renderer_wrapper.cpp
+ * "onlocaldocument_loadend").
  *
  * Plain script (no imports/exports), same double-duty as desktopEditor.js:
  *   1. Tauri initialization script injected into ALL frames
@@ -248,7 +255,9 @@
   /** Engine frame only: consume the delivered document via the engine's own
    *  offline-open entry (defined by sdk-all.js). The engine must pass
    *  engineReadiness() first (the real desktop app delivers late — after file
-   *  conversion) — retry until ready. */
+   *  conversion) — retry until ready. T-067: the readiness loop is followed
+   *  by a same-origin fetch of the document bytes (the payload carries a
+   *  docUrl, no bytes — the b64/IPC lane is gone, see the header). */
   function consumeDeliveredDocument(deliver) {
     var ready = engineReadiness();
     if (!ready.ready) {
@@ -266,13 +275,48 @@
       setTimeout(function () { consumeDeliveredDocument(deliver); }, RETRY_INTERVAL_MS);
       return;
     }
+    if (deliver.docUrl) {
+      // T-067 (DD open-streaming D1): fetch the bytes HERE (engine frame,
+      // filesrv same-origin) → stash → the engine pulls them back through
+      // window.AscDesktopEditor.GetOpenedFile when EndLoad gets the
+      // binary_content:// tag (upstream/sdkjs/common/Local/common.js:190).
+      fetch(deliver.docUrl)
+        .then(function (resp) {
+          if (!resp.ok) throw new Error('HTTP ' + resp.status + ' for ' + deliver.docUrl);
+          return resp.arrayBuffer();
+        })
+        .then(function (buf) {
+          openedFileStash = buf;
+          callDesktopEndLoad(deliver, buf);
+        })
+        .catch(function (err) {
+          forwardLog('error', 'document fetch failed: ' + deliver.docUrl + ' — ' + err);
+        });
+      return;
+    }
+    forwardLog('error', 'delivery payload has no docUrl — the streaming contract (T-067) is broken');
+  }
+
+  /** ArrayBuffer stashed by consumeDeliveredDocument (engine frame only).
+   *  Single slot: one delivery is in flight per window — GetOpenedFile (the
+   *  binary_content:// consumer) answers from here. Consumed via
+   *  window.__wasenoffice_delivery.getOpenedFile. */
+  var openedFileStash = null;
+
+  /** The offline-open call itself, split from the readiness/fetch plumbing
+   *  (T-067). v%-contract notes carried over verbatim: EndLoad(folder, data,
+   *  decodedLen) + loadend sequence. The head/probe log shape is FROZEN
+   *  (gate 9 consumers) — bytes now come from the stashed ArrayBuffer. */
+  function callDesktopEndLoad(deliver, buf) {
     try {
-      // EndLoad expects the file as a BASE64 string + decoded byte length
-      // (its $$ helper is AscCommon.zP.decode(b64, false, len)). The head
-      // bytes below are only for the PH-0 evidence log.
-      var bin = atob(deliver.b64);
-      var decodedLen = bin.length;
-      var head = [bin.charCodeAt(0), bin.charCodeAt(1), bin.charCodeAt(2), bin.charCodeAt(3)];
+      // EndLoad expects (folder, data, decodedByteLength). data =
+      // binary_content://<fileId> → the engine asks GetOpenedFile() for the
+      // bytes (upstream Local/common.js:190). The head bytes below are only
+      // for the PH-0 evidence log (byte-equality with the old atob probe).
+      var bytes = new Uint8Array(buf, 0, Math.min(4, buf.byteLength || 0));
+      var decodedLen = buf.byteLength;
+      var head = [];
+      for (var i = 0; i < 4; i++) head.push(i < bytes.length ? bytes[i] : 0);
       var src = deliver.src || (deliver.folder + '/' + deliver.name);
       window.AscDesktopEditor.LocalFileRecoverFolder(deliver.folder);
       window.AscDesktopEditor.LocalFileSetSourcePath(src);
@@ -281,10 +325,10 @@
         + ' (' + decodedLen + ' bytes, head ' + head.join(',') + ')');
       if (probesEnabled()) {
         try {
-          var probe = AscCommon.zP.decode(deliver.b64, false, decodedLen);
+          var probe = new Uint8Array(buf.slice(0, 4));
           forwardLog('info', 'probe decode: type=' + (probe && probe.constructor && probe.constructor.name)
-            + ' len=' + (probe && probe.length)
-            + ' head=' + (probe ? [probe[0], probe[1], probe[2], probe[3]].join(',') : '?'));
+            + ' len=' + decodedLen
+            + ' head=' + Array.prototype.slice.call(probe).join(','));
         } catch (dbgErr) {
           forwardLog('error', 'probe decode failed: ' + dbgErr);
         }
@@ -338,13 +382,14 @@
           forwardLog('error', 'DocInfo probe failed: ' + dbgErr);
         }
       }
-      // THE open call itself (desktop-sdk client_renderer_wrapper.cpp:6480):
-      // window.DesktopOfflineAppDocumentEndLoad("<folder>", "<base64>", <decodedLen>).
-      // Everything above this line is probe/hook setup only — the engine
-      // learns about the document HERE and nowhere else.
-      window.DesktopOfflineAppDocumentEndLoad(deliver.folder, deliver.b64, decodedLen);
+      // THE open call (client_renderer_wrapper.cpp:6480 shape; T-067: the
+      // byte payload now travels through GetOpenedFile instead of a base64
+      // string — the streaming branch of the SAME upstream entry, see
+      // upstream/sdkjs/common/Local/common.js:184-197).
+      window.DesktopOfflineAppDocumentEndLoad(deliver.folder,
+        'binary_content://' + deliver.fileId, decodedLen);
       forwardLog('info', 'DesktopOfflineAppDocumentEndLoad executed');
-      // The shell's loadend sequence continues with the signatures hook
+      // The loadend sequence continues with the signatures hook
       // (wrapper cpp fires it unconditionally right after EndLoad).
       if (typeof window.DesktopOfflineAppDocumentSignatures === 'function') {
         window.DesktopOfflineAppDocumentSignatures('');
@@ -373,12 +418,16 @@
     if (!probesEnabled() || !probeText) return;
     setTimeout(function () {
       try {
-        if (typeof ed.asc_AddText !== 'function') {
-          forwardLog('error', 'save probe: asc_AddText unavailable');
+        if (typeof ed.asc_AddText === 'function') {
+          ed.asc_AddText(probeText);
+          forwardLog('info', 'save probe: text inserted (' + probeText.length + ' chars)');
+        } else if (typeof ed.AddFreeTextAnnot === 'function') {
+          ed.AddFreeTextAnnot(0);
+          forwardLog('info', 'save probe: AddFreeTextAnnot called for pdf');
+        } else {
+          forwardLog('error', 'save probe: neither asc_AddText nor AddFreeTextAnnot available');
           return;
         }
-        ed.asc_AddText(probeText);
-        forwardLog('info', 'save probe: text inserted (' + probeText.length + ' chars)');
         setTimeout(function () {
           try {
             ed.asc_Save();
@@ -386,7 +435,7 @@
           } catch (e) {
             forwardLog('error', 'save probe: asc_Save failed: ' + e);
           }
-        }, 800);
+        }, 1500);
       } catch (e) {
         forwardLog('error', 'save probe failed: ' + e);
       }
@@ -428,6 +477,21 @@
         }
         return;
       }
+      if (data.pdfSaveEnd != null) {
+        if ((data.__hop || 0) > HOP_GUARD) return;
+        var ed = window.editor || (window.Asc && window.Asc.editor);
+        if (ed && typeof ed.onLocalSaveToDrawingFormat === 'function') {
+          try {
+            ed.onLocalSaveToDrawingFormat(data.pdfSaveEnd);
+            forwardLog('info', 'pdf-save-end delivered to editor: code=' + data.pdfSaveEnd);
+          } catch (e) {
+            forwardLog('error', 'onLocalSaveToDrawingFormat failed: ' + e);
+          }
+        } else {
+          postDown(data);
+        }
+        return;
+      }
       if (!data.deliver) return;
 
       if ((data.__hop || 0) > HOP_GUARD) return; // loop guard
@@ -451,5 +515,9 @@
   window.__wasenoffice_delivery = {
     deliverDocument: deliverDocument,
     saveEnd: function (info) { postDown({ type: DOWN_TYPE, saveEnd: info }); },
+    pdfSaveEnd: function (code) { postDown({ type: DOWN_TYPE, pdfSaveEnd: code }); },
+    // binary_content:// stash consumer (desktopEditor.js LOCAL_TRUTH
+    // GetOpenedFile reads this — T-067).
+    getOpenedFile: function () { return openedFileStash; },
   };
 })(window);

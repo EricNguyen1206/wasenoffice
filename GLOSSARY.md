@@ -56,3 +56,41 @@ _Avoid_: temp file, unsaved doc, draft.
 Lần lưu đầu của Untitled: chọn nơi lưu qua hộp thoại hệ điều hành, rồi mới ghi. Các lần lưu sau
 ghi thẳng vào đích đã chọn, không hỏi lại.
 _Avoid_: save dialog (chung chung), export.
+
+## Chrome cửa sổ soạn thảo
+
+**Chrome**:
+Bộ UI do app tự vẽ bao quanh vùng tài liệu trong cửa sổ soạn thảo — header, menu tabs, khối
+tài khoản. Khác với UI của engine (toolbar ngữ cảnh, panel trái) sống bên trong canvas engine.
+_Avoid_: toolbar (dành cho Tools box), ribbon (khái niệm của MS/engine, không phải của mình).
+
+**Menu tabs**:
+Hàng tab bên trái Chrome (File, Home, Insert…) — điều khiển Tools box đang hiển thị. Không chứa
+công cụ trực tiếp, chỉ là điều hướng.
+_Avoid_: tab bar (dành cho multi-document tabs — slice A5 khác), ribbon tabs.
+
+**Tools box**:
+Thanh công cụ ngữ cảnh ngay dưới Chrome, hiển thị đúng bộ công cụ cho Menu tab đang chọn.
+Của engine, điều khiển gián tiếp qua event công khai của engine.
+_Avoid_: toolbar riêng lẻ không ngữ cảnh, ribbon.
+
+## Phím tắt
+
+**Keymap** (Bộ phím tắt):
+Toàn bộ ánh xạ tổ hợp phím → hành động của app, là **một nguồn chân lý duy nhất** cho cả hai
+nhóm: lệnh soạn thảo (bold, undo, save…) và hành động app (mở file, tab mới, Quick view…).
+Mặc định tương thích MS Office; người dùng gán đè tổ hợp đã có thì phải xác nhận, gán mới
+thắng và gán cũ rơi về mặc định.
+_Avoid_: hotkey list, keybindings.json, shortcut profile (chỉ có một Keymap cho cả app).
+
+**Key hint** (Gợi ý phím):
+Chữ/tổ hợp phím hiển thị ngay trên nút để người dùng biết phím không cần đoán. Hiện theo cơ
+chế **reveal**: giữ phím reveal là mọi nút sáng lên kèm hint, thả ra là mất — nghỉ thì UI
+không chiếm chỗ. Luôn đọc từ Keymap — đổi gán là đổi hint, không bao giờ hiển thị phím đã
+lỗi thời.
+_Avoid_: badge thường trực, tooltip (chỉ hiện khi hover), placeholder.
+
+**Cheat-sheet** (Bảng phím):
+Khung xem toàn bộ Keymap hiện hành nhóm theo nhóm hành động, mở từ Settings — nơi tra cứu
+khi Key hint không đủ.
+_Avoid_: help page, manual.

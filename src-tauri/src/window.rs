@@ -66,6 +66,11 @@ pub fn create_boot_window(
             if let Some((x, y)) = bg_pos {
                 win = win.decorations(false).position(x, y);
             }
+            // Dev knob (WASEN_OFFICE_WIN_POS): deterministic on-screen frame
+            // for real-input automation runs — overrides everything else.
+            if let Some((x, y, w, h)) = config.win_frame {
+                win = win.decorations(false).position(x, y).inner_size(w, h);
+            }
 
             for script in config.normal_probe_scripts() {
                 if !script.is_empty() {
@@ -80,7 +85,8 @@ pub fn create_boot_window(
             }
 
             let win = win.build()?;
-            #[cfg(debug_assertions)]
+            #[cfg(target_os = "macos")]
+            crate::touchbar::init_touchbar(&win);
             if config.devtools {
                 win.open_devtools();
             }
@@ -97,6 +103,7 @@ pub(crate) fn open_surface_window(
     html: &str,
     title: String,
     tag: &str,
+    focused: bool,
 ) -> Result<(), String> {
     use std::sync::Arc;
     use tauri::Manager;
@@ -105,7 +112,7 @@ pub(crate) fn open_surface_window(
         .title(title)
         .inner_size(1000.0, 700.0)
         .visible(true)
-        .focused(false);
+        .focused(focused);
     if let Some(config) = app.try_state::<Arc<AppConfig>>() {
         if let Some((x, y)) = config.bg_sliver_position(app) {
             b = b.decorations(false).position(x, y);

@@ -48,6 +48,7 @@ async bridge không thay thế được — call-sites dùng trong `if` / lúc l
 | `getEngineVersion` | web-apps Desktop.js | DONE (pkg version) |
 | `GetEncryptedHeader` | editorscommon.js:12380 (sync lúc load sdk-all) | **DONE** ("ENCRYPTED;" = fallback engine) |
 | `CheckUserId` | sdk-all EndLoad path, gọi không điều kiện | **DONE** ("wasenoffice-ph0") |
+| `GetOpenedFile` | `upstream/sdkjs/common/Local/common.js:190` — EndLoad nhận `data` dạng `binary_content://` thì gọi method này để LẤY BYTES (CEF shell trả native buffer); null → engine tự bắn `ConvertationOpenError` Critical (`common.js:192-196`) | **DONE-PH1** (T-067: shim-local truth — trả ArrayBuffer stash do `src/shim/delivery.js` fetch từ filesrv `/delivery/<id>/<name>` đặt trước mỗi EndLoad; bytes không đi qua IPC/base64 — DD `open-streaming` D1) |
 | `GetInstallPlugins` | apiBase_plugins.js:1691,1745 (`JSON.parse` → `[system,user]`, mỗi cái `pluginsData[]`) | **DONE** (2 entries `pluginsData:[]` — tránh crash `a[0]`) |
 | `isSupportPlugins` / `isSupportMacroses` | apiBase_plugins.js | DONE (true) |
 | `SetDocumentName` | apiBase.js:701 | DONE (ack + log) |
@@ -87,6 +88,23 @@ Chuỗi mở file local của shell thật — WasenOffice tái tạo trong shim
 `client_renderer_wrapper.cpp:6480` — `window.DesktopOfflineAppDocumentEndLoad("<folder>",
 "<base64>", <decodedLen>)`, ngay sau đó cpp:6483 bắn `DesktopOfflineAppDocumentSignatures("")`
 (empty string được engine xử lý đúng — nhánh `""!=a`).
+
+**Streaming branch (T-067, 17.10 — clean-room, bằng chứng nguồn):** EndLoad nhận `'binary_content://…'`
+để tránh base64-chủ-toàn-bộ — `upstream/sdkjs/common/Local/common.js:184-197`:
+`_data.indexOf("binary_content://") === 0` → `window["AscDesktopEditor"]["GetOpenedFile"](_data)`
+→ `new Uint8Array(bufferArray)` (view N-copy). CEF shell thật dùng cùng hook cho file lớn.
+WasenOffice: filesrv route `/delivery/<id>/<name>` (filesrv.rs, stream + Range, name-mismatch
+→ 403) + shim stash ArrayBuffer (`delivery.js`) — WasenOffice trả N=1 bản JS thay vì ~7–8×
+qua chuỗi `fs::read → base64 → serde JSON → IPC → atob → engine decode` (đo trước 17.10:
+tree peak 5.5GB trên file 1.09GB — diagnostics 17.10 T-067).
+
+**customization.toolbarNoTabs — CẤM trong engine artifact của mình (T-A40, 17.10, oracle-obs + bằng chứng nguồn):**
+api.js đọc `config.editorConfig.customization.toolbarNoTabs` để chọn iframe src:
+`index = "/index_loader.html"` khi cờ bật (`engines/editors/web-apps/apps/api/documents/api.js:1175-1178`,
+mirror upstream cùng dòng). Variant `index_loader.html` trong artifact engines không có asset
+dev tương ứng (loader fetch xong im lặng — 3 GET rồi chết; counterfactual không cờ →
+`index.html` đầy đủ + `asc_onDocumentContentReady`). Nên ẩn tabs engine = CSS shim
+(`#toolbar .tabs { display:none }`) KHÔNG truyền customization (DD U01 slice 6).
 
 ## Desktop open contract — MULTI-FORMAT (mới 29.09, T-048)
 
@@ -372,7 +390,7 @@ và `<m_sFileFrom>` trỏ vào thư mục chứa `changes/`.
 | Nhóm | Method | Call-sites tiêu biểu | Trạng thái WasenOffice |
 |---|---|---|---|
 | File | `OpenFilenameDialog` (20), `LocalFileGetImageUrl` (22), `LocalFileSaveDialog`, `loadLocalFile`, `GetDropFiles`, `convertFile`, `startExternalConvertation`, `ResaveFile` | `sdkjs/common/apiBase.js` | STUB (PH-1+; riêng `LocalFileSave` + `LocalFileSaveChanges` đã DONE-PH1 — xem bảng trên) |
-| Print | `Print`, `Print_Start/Page/End`, `IsFilePrinting`, `emulateCloudPrinting` (apiBase.js:5684), `localSaveToDrawingFormat` (:5698) | apiBase.js | STUB (PH-2) |
+| Print | `Print`, `Print_Start/Page/End`, `IsFilePrinting`, `emulateCloudPrinting` (apiBase.js:5684), `localSaveToDrawingFormat` (:5698), `localSaveToDrawingFormat2` (word/api.js:9359) | apiBase.js | STUB (PH-2) |
 | Fonts/media | `LoadFontBase`, `GetImageBase`, `GetImageFormat`, `GetImageOriginalSize`, `MediaStart` (:3495), `CallMediaPlayerCommand`, `AddVideo/Audio` | apiBase.js | STUB (PH-2) |
 | Spell | `SpellCheck` (:2385,2391,2466), `getDictionariesPath` | apiBase.js | STUB (spell.wasm có sẵn — khả năng không cần native) |
 | Clipboard | `asc_desktop_copypaste` | `sdkjs/common/clipboard_base.js:1943` | STUB (PH-2) |

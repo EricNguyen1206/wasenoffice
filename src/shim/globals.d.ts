@@ -46,6 +46,13 @@ declare global {
     DocsAPI: {
       DocEditor: new (placeholder: string, config: DocsApiConfig) => unknown;
     };
+    /** Shared shim plumbing published by src/shim/desktopEditor.js (T-A40:
+     *  main frame uses forwardLog for tab-drive evidence lines). */
+    __wasenoffice_shim: {
+      tauriInvoke: <T = unknown>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
+      forwardLog: (level: 'info' | 'warn' | 'error', message: string) => void;
+      detectFontVariant: (family: string, bold: boolean, italic: boolean) => string;
+    };
   }
 }
 
