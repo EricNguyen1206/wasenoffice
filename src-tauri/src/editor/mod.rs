@@ -256,31 +256,43 @@ pub(crate) use crate::window::SurfaceHandoff;
 /// Window-label sequence for UI-opened Nano Light windows ("main" = env boot).
 static WINDOW_SEQ: AtomicU32 = AtomicU32::new(0);
 
-/// Shared open-a-window body of the two view commands (the window build
-/// itself lives in `viewer::open_surface_window`, T-060 C2).
-fn open_window(
-    app: &tauri::AppHandle,
+/// The window-free half of the two view commands: validate, mint the window
+/// label, stash the path under it, record the recent. The Tauri wrappers open
+/// a native window on the label; the web bridge (T-068, DD W01) hands it to a
+/// browser tab — `wasen_light_open` resolves it the same way for both.
+pub(crate) fn prepare_view(
     handoff: &SurfaceHandoff,
-    path: String,
-) -> Result<(), String> {
+    recents: &crate::recents::RecentsStore,
+    path: &str,
+) -> Result<String, String> {
+    if !std::path::Path::new(path).is_file() {
+        return Err(format!("nano light: no such file: {path}"));
+    }
     let label = format!(
         "nanolight-{}",
         WINDOW_SEQ.fetch_add(1, Ordering::Relaxed) + 1
     );
-    let name = std::path::Path::new(&path)
-        .file_name()
-        .map(|f| f.to_string_lossy().into_owned())
-        .unwrap_or_else(|| path.clone());
-    handoff.stash(&label, path.clone());
+    handoff.stash(&label, path.to_string());
+    // A01: successful open = a recent (best-effort, same as engine opens).
+    recents.record(std::path::Path::new(path));
+    log::info!("nano light view: {path} (window {label})");
+    Ok(label)
+}
+
+/// Shared open-a-window body of the two view commands (the window build
+/// itself lives in `viewer::open_surface_window`, T-060 C2).
+fn open_window(app: &tauri::AppHandle, label: &str, path: &str) -> Result<(), String> {
     crate::viewer::open_surface_window(
         app,
-        &label,
+        label,
         "editor.html",
-        format!("WasenOffice — Nano Light: {name}"),
+        format!(
+            "WasenOffice — Nano Light: {}",
+            crate::viewer::file_name(path)
+        ),
         "nano light",
-    )?;
-    log::info!("nano light view: {path} (window {label})");
-    Ok(())
+        false,
+    )
 }
 
 /// UI wiring (pattern V5 `viewer_view`): validate the path, stash it and open
@@ -293,13 +305,8 @@ pub fn wasen_light_view(
     recents: State<'_, Arc<crate::recents::RecentsStore>>,
     path: String,
 ) -> Result<(), String> {
-    if !std::path::Path::new(&path).is_file() {
-        return Err(format!("nano light: no such file: {path}"));
-    }
-    open_window(&app, handoff.inner(), path.clone())?;
-    // A01: successful open = a recent (best-effort, same as engine opens).
-    recents.record(std::path::Path::new(&path));
-    Ok(())
+    let label = prepare_view(&handoff, &recents, &path)?;
+    open_window(&app, &label, &path)
 }
 
 /// Reopen THIS session's document in a new Nano Light window (reads the file
@@ -312,11 +319,21 @@ pub fn wasen_light_reopen(
     sessions: State<'_, Arc<EditorSessions>>,
     window: tauri::WebviewWindow,
 ) -> Result<(), String> {
-    let path = sessions.with_session(window.label(), |s| Ok(s.path.clone()))?;
-    open_window(&app, handoff.inner(), path.display().to_string())?;
-    // A01: a reopen refreshes the recency timestamp too.
-    recents.record(&path);
-    Ok(())
+    let (label, path) = prepare_reopen(&handoff, &recents, &sessions, window.label())?;
+    open_window(&app, &label, &path)
+}
+
+/// `wasen_light_reopen` minus the window: the session's own path, re-stashed
+/// under a fresh label (a reopen refreshes the recency timestamp too, A01).
+pub(crate) fn prepare_reopen(
+    handoff: &SurfaceHandoff,
+    recents: &crate::recents::RecentsStore,
+    sessions: &EditorSessions,
+    label: &str,
+) -> Result<(String, String), String> {
+    let path = sessions.with_session(label, |s| Ok(s.path.display().to_string()))?;
+    let new_label = prepare_view(handoff, recents, &path)?;
+    Ok((new_label, path))
 }
 
 /// The Nano Light payload — same shape as the viewer's `QuickView` (the two
@@ -347,10 +364,30 @@ pub fn wasen_light_open(
     tab_id: Option<u32>,
     doc_path: Option<String>,
 ) -> Result<NanoLightDoc, String> {
+    wasen_light_open_impl(
+        &registry,
+        &handoff,
+        &sessions,
+        window.label(),
+        tab_id,
+        doc_path,
+    )
+}
+
+/// `wasen_light_open` keyed by an explicit window label (Tauri: the calling
+/// window's; web bridge: the label in the tab URL — DD W01).
+pub(crate) fn wasen_light_open_impl(
+    registry: &FileRegistry,
+    handoff: &SurfaceHandoff,
+    sessions: &EditorSessions,
+    label: &str,
+    tab_id: Option<u32>,
+    doc_path: Option<String>,
+) -> Result<NanoLightDoc, String> {
     let path = match doc_path {
         Some(p) if !p.is_empty() => p,
         _ => handoff
-            .take(window.label())
+            .take(label)
             .or_else(|| {
                 std::env::var("WASEN_OFFICE_NANO_LIGHT")
                     .ok()
@@ -360,22 +397,14 @@ pub fn wasen_light_open(
                 "nano light: no source (UI action or WASEN_OFFICE_NANO_LIGHT)".to_string()
             })?,
     };
-    let p = render_payload(
-        registry.inner().as_ref(),
-        window.label(),
-        &path,
-        "nano light",
-    )?;
+    let p = render_payload(registry, label, &path, "nano light")?;
     // Refuse-warn (OQ-L01-2 closed: open + warn, never refuse — D1 keeps the
     // engine as the advanced mode for everything the model drops on save).
     let warnings = wasenoffice_ooxml::detect_save_losses(&p.bytes);
     if !warnings.is_empty() {
         log::warn!("nano light warn: save will drop: {}", warnings.join(", "));
     }
-    let name = std::path::Path::new(&path)
-        .file_name()
-        .map(|f| f.to_string_lossy().into_owned())
-        .unwrap_or_else(|| path.clone());
+    let name = crate::viewer::file_name(&path);
     let caret = Caret {
         para: 0,
         run: 0,
@@ -397,11 +426,10 @@ pub fn wasen_light_open(
         .0
         .lock()
         .map_err(|_| "nano light: sessions poisoned".to_string())?
-        .insert(EditorSessions::session_key(window.label(), tab_id), session);
+        .insert(EditorSessions::session_key(label, tab_id), session);
     log::info!(
-        "nano light: opened {path} in {:.1} ms (window {})",
-        p.parse_ms,
-        window.label()
+        "nano light: opened {path} in {:.1} ms (window {label})",
+        p.parse_ms
     );
     Ok(NanoLightDoc {
         parse_ms: p.parse_ms,
@@ -516,7 +544,16 @@ pub fn wasen_light_edit(
     cmd: EditCmd,
     tab_id: Option<u32>,
 ) -> Result<EditOutcome, String> {
-    let key = EditorSessions::session_key(window.label(), tab_id);
+    wasen_light_edit_impl(&sessions, window.label(), cmd, tab_id)
+}
+
+pub(crate) fn wasen_light_edit_impl(
+    sessions: &EditorSessions,
+    window_label: &str,
+    cmd: EditCmd,
+    tab_id: Option<u32>,
+) -> Result<EditOutcome, String> {
+    let key = EditorSessions::session_key(window_label, tab_id);
     let label = cmd.label();
     let (caret, dirty, undo_len, sel, render) = sessions.with_session(&key, |s| {
         let caret = s.apply(cmd)?;
@@ -552,7 +589,15 @@ pub fn wasen_light_save(
     window: tauri::WebviewWindow,
     tab_id: Option<u32>,
 ) -> Result<(), String> {
-    let key = EditorSessions::session_key(window.label(), tab_id);
+    wasen_light_save_impl(&sessions, window.label(), tab_id)
+}
+
+pub(crate) fn wasen_light_save_impl(
+    sessions: &EditorSessions,
+    label: &str,
+    tab_id: Option<u32>,
+) -> Result<(), String> {
+    let key = EditorSessions::session_key(label, tab_id);
     sessions.with_session(&key, save_session)
 }
 
@@ -562,7 +607,15 @@ pub fn wasen_light_close_tab(
     window: tauri::WebviewWindow,
     tab_id: u32,
 ) -> Result<(), String> {
-    let key = EditorSessions::session_key(window.label(), Some(tab_id));
+    wasen_light_close_tab_impl(&sessions, window.label(), tab_id)
+}
+
+pub(crate) fn wasen_light_close_tab_impl(
+    sessions: &EditorSessions,
+    label: &str,
+    tab_id: u32,
+) -> Result<(), String> {
+    let key = EditorSessions::session_key(label, Some(tab_id));
     let mut map = sessions
         .0
         .lock()

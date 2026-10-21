@@ -53,6 +53,16 @@
 #            open_document/editor booting là dòng có sẵn của chain open)
 #            T-A39 thêm mode CREATE: `create_document:` (emit
 #            src-tauri/src/untitled.rs) + boot dòng Untitled (cùng consumer)
+#   gate 19 · open guard (T-067 — file vượt cap từ chối TRƯỚC engine; consumer
+#            harness/scripts/smoke-open-guard.sh)
+#            ← src-tauri/src/config.rs ensure_openable_size_lookup (dòng
+#            `open guard: …` nổi lên qua open_document → main.ts forwardLog
+#            thành `[web] ERROR: …`; cùng commit khi đổi chuỗi)
+#   gate 21 · loopback file server on 127.0.0.1:<port> + web bridge: listening
+#            (T-068 — web dev mode HTTP bridge; consumer
+#            harness/scripts/smoke-web-bridge.sh — gate lấy port từ dòng 1,
+#            chờ dòng 2 rồi curl POST /invoke; cùng commit khi đổi chuỗi)
+#            ← src-tauri/src/protocol/filesrv.rs spawn
 set -u
 
 SMOKE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -100,8 +110,26 @@ SMOKE_RE_SP_NOTFOUND='ERROR: file not found: '
 SMOKE_RE_SP_WEB_ERROR='\[web\] ERROR:'
 SMOKE_RE_SP_BOOTING='editor booting .word.: '
 SMOKE_RE_OPEN_DOC='open_document: '
+# gate 17-settings (T-A46) — settings view mở qua probe, keymap + MCP tải OK
+# (BRE: plain grep — `[0-9]+` KHÔNG phải meta, phải dùng `[0-9][0-9]*`)
+SMOKE_RE_SP_SETTINGS='settings view: keymap=[0-9][0-9]* rows mcp=ok'
 SMOKE_RE_SP_CREATE='create_document: docx → '
 SMOKE_RE_SP_CREATE_BOOT='editor booting .word.: Untitled 1.docx'
+# gate 17-settings (T-A46 — settings view in startpage; consumer
+# harness/scripts/smoke-startpage.sh STARTPAGE_SETTINGS=1)
+# ← src/settings-view.ts show() (dòng ADDITIVE `settings view: …`; cùng commit
+# khi đổi chuỗi)
+# gate 19 (open guard, T-067) — dòng duy nhất của config.rs ensure_openable_size
+# (refuse file vượt cap trước khi tới engine/registry).
+SMOKE_RE_OPEN_GUARD='open guard: file too large to open'
+# gate 20 (keymap native apply + reveal, T-A41/DD K02) — dòng ADDITIVE của
+# src/shim/desktopEditor.js (km-apply / km-probe; cùng commit khi đổi).
+SMOKE_RE_KM_APPLY='km-apply: engine='
+SMOKE_RE_KM_PROBE='km-probe: editor=object unlocked='
+# gate 21 (web dev mode bridge, T-068) — 2 dòng của filesrv::spawn: port thật
+# của loopback server (prefix, số theo sau) + bridge đã bật.
+SMOKE_RE_FILESRV='loopback file server on 127.0.0.1:'
+SMOKE_RE_WEB_BRIDGE='web bridge: listening'
 
 # ── Trạng thái dùng chung (consumer đọc, không ghi trực tiếp khi không cần) ──
 SMOKE_APP_PID=""     # PID process-group của app (smoke_boot đặt)

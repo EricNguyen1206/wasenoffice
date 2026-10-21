@@ -20,19 +20,18 @@
 @source '../index.html';
 @source '../viewer.html';
 @source '../editor.html';
-@source './main.ts';
-@source './editor.ts';
+@source './**/*.ts';
 
 /* `static`: emit every slot even without a live utility user yet
  * (--color-accent currently has none — the start page grew no anchors) —
  * keeps the A5 slot contract greppable in dist. */
 @theme static {
-  --color-bg: #f4f4f5; /* page background (zinc-100) */
-  --color-fg: #18181b; /* default ink (zinc-900) */
+  --color-bg: #252525; /* dark sidebar & app background (ONLYOFFICE dark theme) */
+  --color-fg: #f4f4f5; /* default ink (zinc-100) */
   --color-accent: #2563eb; /* interactive accent (blue-600) */
-  --color-panel: #ffffff; /* control surface (input/button) */
-  --color-panel-active: #e4e4e7; /* control pressed (zinc-200) */
-  --color-edge: #d4d4d8; /* control border (zinc-300) */
+  --color-panel: #333333; /* main content surface */
+  --color-panel-active: #383838; /* active/hover surface */
+  --color-edge: #3c3c3c; /* control border */
   --color-paper: #ffffff; /* viewer document surface */
   --radius-panel: 6px; /* control corner */
   /* spacing: Tailwind default 4px scale — the only scale this UI uses */
@@ -42,6 +41,7 @@
   :root {
     color: var(--color-fg);
     background-color: var(--color-bg);
+    color-scheme: dark;
   }
 
   /* Start-page document look — scoped to #app, NOT :root: the viewer page

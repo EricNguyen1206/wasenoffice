@@ -23,6 +23,7 @@ type: registry
 | **V** | Viewer Rust Track A (kiến trúc component — KHÔNG phải màn UI) | V01 | cấp 03.10 (T-A25) — folder đặt `viewer-a3/` theo handoff (tiền lệ K01) |
 | **L** | Editor core Track A "Nano Light" (kiến trúc component — KHÔNG phải màn UI) | L01 | cấp 03.10 (T-A27) — folder đặt `editor-a4/` theo handoff (tiền lệ K01/V01) |
 | **U** | UI editor riêng Track A (kiến trúc component UI — thay web-apps) | U01 | cấp 11.10 (T-A33) — folder đặt `editor-ui-a5/` (tiền lệ K01/V01/L01) |
+| **W** | Web dev mode / harness bridge (kiến trúc dev-infra — KHÔNG phải màn UI) | W01 | cấp 20.10 (T-068) — folder đặt `web-dev-mode/` (tiền lệ K01/V01/L01/U01) |
 | **M** | Editor Markdown (kiểu Obsidian) | — | ngoài roadmap hiện tại — giữ namespace |
 | **T** | Editor txt (kiểu Notepad++) | — | ngoài roadmap hiện tại — giữ namespace |
 | **X** | Cài đặt | X01 | |
@@ -38,11 +39,12 @@ type: registry
 | E01 | Cửa sổ soạn thảo bảng tính (editor XLSX) | — | 🟨 in-development | PH-1 | [DD](E01-editor-xlsx/DD.md) | [TEST](E01-editor-xlsx/TEST.md) | `src/main.ts` (FILE_FORMATS), `src/shim/` |
 | P01 | Cửa sổ soạn thảo bài trình bày (editor PPTX) | — | 🟨 in-development | PH-1 | [DD](P01-editor-pptx/DD.md) | [TEST](P01-editor-pptx/TEST.md) | `src/main.ts` (FILE_FORMATS), `src/shim/` |
 | F01 | Cửa sổ xem/soạn PDF (editor PDF) | — | 🟨 in-development | PH-1 | [DD](F01-editor-pdf/DD.md) | [TEST](F01-editor-pdf/TEST.md) | `src/main.ts` (FILE_FORMATS), `src/shim/` |
-| X01 | Cài đặt (settings) | — | ⬜ planned | chưa có QĐ | [stub](X01-settings/DD.md) | — | — |
+| X01 | Cài đặt (settings) — **view trong start page** (T-A46, K02-Q3 amended) | A01 | 🟨 in-development | Track A (A5) | [DD](X01-settings/DD.md) | gate 17-settings (kiểm thử trong DD §4) | `src/settings-view.ts`, `src/main.ts` |
 | K01 | Converter core A2 — Rust thay x2t (Track A) | — | 🟦 draft | Track A (A2) | [DD](converter-a2/DD.md) | — (parity plan trong DD §7) | `src-tauri/crates/wasenoffice-ooxml` |
 | V01 | Viewer Rust đọc-only "quick view" A3 (Track A) | — | 🟦 draft | Track A (A3) | [DD](viewer-a3/DD.md) | — (kiểm thử trong DD §7) | `src-tauri/src/viewer.rs`, `src/viewer.html`, `src/viewer.ts` |
 | L01 | Editor core A4 "Nano Light" (Track A) | — | 🟦 draft | Track A (A4) | [DD](editor-a4/DD.md) | — (kiểm thử trong DD §7) | `src-tauri/src/editor.rs`, `editor.html`, `src/editor.ts` |
 | U01 | UI editor riêng A5 — chrome + framework (Track A) | — | 🟦 draft | Track A (A5) | [DD](editor-ui-a5/DD.md) | — (kiểm thử trong DD §7) | `src/editor.html`, `src/editor.ts`, `src/viewer/surface.ts` |
+| W01 | Web dev mode — HTTP invoke bridge (dev-infra, T-068) | — | 🟦 draft | META | [DD](web-dev-mode/DD.md) | — (gate 21 + E2E trong DD §6) | `src-tauri/src/web_bridge.rs`, `src-tauri/src/protocol/filesrv.rs`, `src/web/tauri-polyfill.js`, `harness/scripts/smoke-web-bridge.sh` |
 
 ## Vòng đời trạng thái
 

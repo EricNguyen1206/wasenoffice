@@ -50,6 +50,9 @@ Ngoài `docs/`: contract cho agent = `AGENTS.md` (root) · luật bắt buộc =
 | `docs/design/viewer-a3/` | DD viewer Rust đọc-only "quick view" A3 — mã V01 (Track A, T-A25; component-level — không phải màn UI) |
 | `docs/design/editor-a4/` | DD editor core A4 "Nano Light" — mã L01 (Track A, T-A27; component-level — không phải màn UI) |
 | `docs/design/editor-ui-a5/` | DD UI editor riêng A5 — mã U01 (Track A, T-A33; component-level — thay web-apps) |
+| `docs/design/keymap-a5/` | DD Keymap + Keytip reveal + Settings — mã K02 (Track A, T-A41; grill 17.10) |
+| `docs/design/open-streaming/` | DD T-067 open-delivery streaming + size cap — delivery qua `/delivery/<id>/<name>` + `binary_content://` thay b64 IPC (perf, T-067; component-level — không phải màn UI) |
+| `docs/design/web-dev-mode/` | DD T-068 web dev mode — HTTP invoke bridge dev-only (`POST /invoke` trên loopback filesrv + polyfill Tauri IPC + label = identity) để browser-use test full own-UI (dev-infra, T-068; component-level — không phải màn UI) |
 | `docs/design/A01-startpage/` | DD + TEST trang bắt đầu — **active v1 (A5, T-A38/T-A39)**: Welcome + Open dialog + Recents + Create-new + i18n; Recovers đình chỉ |
 | `docs/design/A02-about/` · `docs/design/C01-print-preview/` · `docs/design/X01-settings/` | stub màn kế hoạch (planned) |
 | `docs/techstack-analysis.md` | research Bun/Go/Rust 26.09 (untracked theo QĐ stack) |

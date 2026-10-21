@@ -71,11 +71,23 @@ STARTPAGE_CREATE=1 harness/scripts/smoke-startpage.sh || fail=1
 echo "▸ smoke startpage Save-As E2E (gate 17-saveas: create → first save qua stub panel → đích mới — T-A39)"
 STARTPAGE_SAVEAS=1 harness/scripts/smoke-startpage.sh || fail=1
 
+echo "▸ smoke settings view in startpage (gate 17-settings: probe → keymap rows + MCP status — T-A46)"
+STARTPAGE_SETTINGS=1 harness/scripts/smoke-startpage.sh || fail=1
+
 echo "▸ create-new templates unit + real-x2t oracle (gate 18: blank ×3 mở được bằng engine — T-A39)"
 harness/scripts/gate-create-templates.sh || fail=1
 
 echo "▸ smoke Nano Light editor round-trip (gate 15: edit → save write_docx → parse-back → reopen — T-A27)"
 harness/scripts/smoke-nano-light.sh || fail=1
+
+echo "▸ smoke open guard + streaming delivery (gate 19: refuse over-cap + counterfactual uncapped + green path — T-067)"
+harness/scripts/smoke-open-guard.sh || fail=1
+
+echo "▸ smoke keymap native apply + reveal (gate 20: strikeout=⌘⇧X via sdkjs API + fail-soft store — T-A41)"
+harness/scripts/smoke-keymap.sh || fail=1
+
+echo "▸ smoke web dev mode HTTP bridge (gate 21: POST /invoke → label hand-off → viewer_open · engine refused · foreign origin 403 — T-068)"
+harness/scripts/smoke-web-bridge.sh || fail=1
 
 echo "▸ upstream submodules clean?"
 if [ -n "$(git submodule status | grep '^[+MU]')" ]; then

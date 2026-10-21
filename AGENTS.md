@@ -67,6 +67,10 @@ wasenoffice/
 7. **Thuật ngữ chuyên nghiệp:** Thang Track A gọi là **Milestone A0–A6** (hoặc Chặng/Nấc A0–A6),
    tuyệt đối không dùng từ 'rung'. Giữ nguyên các thuật ngữ kỹ thuật tiếng Anh chuẩn (`Commit`,
    `Refactor`, `Seam`, `Patch`, `Build`, `Runtime`, `Interface`).
+8. **UI Atomic Components.** Mọi tính năng UI mới hoặc chỉnh sửa giao diện BẮT BUỘC tái sử dụng
+   các components trong `src/components/` (Switch, Button, SettingRow, TabBar, CopyBox...). Tuyệt đối
+   không tự viết lại mã HTML/Tailwind switch hoặc button thô để tránh hồi quy và phát sinh lỗi.
+   Tra cứu danh mục tại `src/components/CATALOG.md`.
 
 ## Progress snapshot (cập nhật khi hoàn thành phase)
 

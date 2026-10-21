@@ -19,6 +19,10 @@ use super::FileRegistry;
 
 pub const DEFAULT_PORT: u16 = 14321;
 
+/// Largest `POST /invoke` body accepted (keymap overrides are ~KBs; a paste of
+/// a whole document through `wasen_light_edit` stays far below this).
+const MAX_INVOKE_BODY: usize = 1 << 20;
+
 static BOUND_PORT: std::sync::OnceLock<u16> = std::sync::OnceLock::new();
 
 /// Port the loopback file server actually bound (DEFAULT_PORT when free).
@@ -27,19 +31,28 @@ pub fn bound_port() -> u16 {
 }
 
 /// Start serving `registry` on 127.0.0.1. Returns the port actually bound.
-pub fn spawn(registry: Arc<FileRegistry>) -> Result<u16, String> {
+/// `bridge` = the app handle when web dev mode is on (T-068): the server then
+/// also answers `POST /invoke/<cmd>` (`crate::web_bridge`); `None` = 404.
+pub fn spawn(registry: Arc<FileRegistry>, bridge: Option<tauri::AppHandle>) -> Result<u16, String> {
     let listener = TcpListener::bind(("127.0.0.1", DEFAULT_PORT))
         .or_else(|_| TcpListener::bind(("127.0.0.1", 0)))
         .map_err(|e| format!("cannot bind loopback file server: {e}"))?;
     let port = listener.local_addr().map_err(|e| e.to_string())?.port();
     let _ = BOUND_PORT.set(port);
     log::info!("loopback file server on 127.0.0.1:{port}");
+    if bridge.is_some() {
+        log::info!(
+            "web bridge: listening (origins: {})",
+            crate::web_bridge::ALLOWED_ORIGINS.join(", ")
+        );
+    }
     std::thread::spawn(move || {
         for stream in listener.incoming() {
             match stream {
                 Ok(stream) => {
                     let registry = Arc::clone(&registry);
-                    std::thread::spawn(move || handle(stream, registry));
+                    let bridge = bridge.clone();
+                    std::thread::spawn(move || handle(stream, registry, bridge));
                 }
                 Err(e) => log::warn!("file server accept error: {e}"),
             }
@@ -48,7 +61,7 @@ pub fn spawn(registry: Arc<FileRegistry>) -> Result<u16, String> {
     Ok(port)
 }
 
-fn handle(mut stream: TcpStream, registry: Arc<FileRegistry>) {
+fn handle(mut stream: TcpStream, registry: Arc<FileRegistry>, bridge: Option<tauri::AppHandle>) {
     let mut reader = BufReader::new(&stream);
     let mut request_line = String::new();
     if reader.read_line(&mut request_line).is_err() {
@@ -59,14 +72,30 @@ fn handle(mut stream: TcpStream, registry: Arc<FileRegistry>) {
     let target = parts.next().unwrap_or("");
     log::info!("file server ← {method} {target}");
     if method == "OPTIONS" {
-        // CORS preflight (the engine's XHR carries non-simple headers).
+        // CORS preflight (the engine's XHR carries non-simple headers; the web
+        // bridge POSTs JSON with its window-label header).
         let resp = "HTTP/1.1 204 No Content\r\n\
             Access-Control-Allow-Origin: *\r\n\
-            Access-Control-Allow-Methods: GET, HEAD, OPTIONS\r\n\
-            Access-Control-Allow-Headers: Range, Authorization, Content-Type\r\n\
+            Access-Control-Allow-Methods: GET, HEAD, POST, OPTIONS\r\n\
+            Access-Control-Allow-Headers: Range, Authorization, Content-Type, X-Wasen-Window\r\n\
             Access-Control-Max-Age: 600\r\n\
             Content-Length: 0\r\n\r\n";
         let _ = std::io::Write::write_all(&mut stream, resp.as_bytes());
+        return;
+    }
+    if method == "POST" {
+        let cmd = target
+            .split('?')
+            .next()
+            .and_then(|p| p.strip_prefix("/invoke/"))
+            .map(super::percent_decode)
+            .filter(|c| !c.is_empty());
+        match (cmd, bridge) {
+            (Some(cmd), Some(app)) => handle_invoke(&mut reader, &app, &cmd),
+            // web dev mode OFF (the default) — the route does not exist
+            (Some(_), None) => respond(&mut stream, 404, &[], &[], false),
+            (None, _) => respond(&mut stream, 405, &[], &[], false),
+        }
         return;
     }
     if method != "GET" && method != "HEAD" {
@@ -180,6 +209,59 @@ fn handle(mut stream: TcpStream, registry: Arc<FileRegistry>) {
         return;
     }
 
+    // T-067 D2: open-delivery streaming route — the bytes of the DELIVERED
+    // artifact (Editor.bin for convert-flavor, copied original for pdf) that
+    // the ENGINE frame fetches itself (shim delivery.js) instead of receiving
+    // them through the IPC/base64 lane (DD open-streaming D1). Same shape as
+    // /media: opaque fileId in the URL; the name must MATCH the artifact name
+    // that format's open flavor is expected to deliver — anything else
+    // (traversal included) is refused with 403 before any disk read.
+    if let Some(rest) = path.strip_prefix("/delivery/") {
+        let Some((id_s, name)) = rest.split_once('/') else {
+            respond(&mut stream, 404, &[], &[], false);
+            return;
+        };
+        let Ok(id) = id_s.parse::<u32>() else {
+            respond(&mut stream, 404, &[], &[], false);
+            return;
+        };
+        let Some(disk) = registry.get(id) else {
+            log::warn!("file server 404: unknown fileId {id}");
+            respond(&mut stream, 404, &[], &[], false);
+            return;
+        };
+        if name.split('/').any(|seg| seg == "..") || name.contains('\\') {
+            log::warn!("file server 403: delivery name {name:?} looks like traversal");
+            respond(&mut stream, 403, &[], &[], false);
+            return;
+        }
+        let ext = disk
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let flavor = crate::formats::by_ext(&ext)
+            .map(|f| f.open)
+            .unwrap_or(crate::formats::OpenFlavor::Convert);
+        let work = crate::formats::DocWorkdir::new(id);
+        match work.delivered_name(flavor, &disk) {
+            Ok(expected) if expected == name => serve(
+                &mut stream,
+                &work.root().join(name),
+                range_header.as_deref(),
+                method == "HEAD",
+            ),
+            other => {
+                log::warn!(
+                    "file server 403: delivery name {name:?} != expected {:?}",
+                    other.ok()
+                );
+                respond(&mut stream, 403, &[], &[], false);
+            }
+        }
+        return;
+    }
+
     let Some(rest) = path.strip_prefix("/file/") else {
         respond(&mut stream, 404, &[], &[], false);
         return;
@@ -228,13 +310,6 @@ fn serve(stream: &mut TcpStream, disk: &PathBuf, range: Option<&str>, head_only:
     } else {
         (range.end - range.start + 1) as usize
     };
-    let mut body = vec![0u8; length];
-    if length > 0 {
-        use std::io::Seek;
-        if file.seek(std::io::SeekFrom::Start(range.start)).is_ok() {
-            let _ = file.read_exact(&mut body);
-        }
-    }
 
     let mut headers = format!(
         "HTTP/1.1 {} {}\r\nContent-Type: {mime}\r\nAccept-Ranges: bytes\r\n\
@@ -254,18 +329,115 @@ fn serve(stream: &mut TcpStream, disk: &PathBuf, range: Option<&str>, head_only:
             range.start, range.end, total
         ));
     }
-    headers.push_str(&format!("Content-Length: {}\r\n\r\n", body.len()));
+    headers.push_str(&format!("Content-Length: {}\r\n\r\n", length));
 
     let _ = std::io::Write::write_all(stream, headers.as_bytes());
-    if !head_only {
-        let _ = std::io::Write::write_all(stream, &body);
+    if head_only || length == 0 {
+        return;
+    }
+    // T-067 D3: stream in chunks — the whole-file `vec![0; len]` buffer here
+    // made the server thread hold N bytes for every delivery (the multiplier
+    // that thrashed near-open RAM on big documents). Headers above are
+    // unchanged, so the wire output is identical.
+    use std::io::{Read, Seek};
+    if file.seek(std::io::SeekFrom::Start(range.start)).is_err() {
+        return;
+    }
+    let mut buf = [0u8; 64 * 1024];
+    let mut remaining = length as u64;
+    while remaining > 0 {
+        let want = remaining.min(buf.len() as u64) as usize;
+        match file.read(&mut buf[..want]) {
+            Ok(0) => break,
+            Ok(n) => {
+                if std::io::Write::write_all(stream, &buf[..n]).is_err() {
+                    return;
+                }
+                remaining -= n as u64;
+            }
+            Err(_) => break,
+        }
     }
 }
 
-fn respond(stream: &mut TcpStream, code: u16, _headers: &[(&str, &str)], _body: &[u8], head: bool) {
+/// `POST /invoke/<cmd>` (web dev mode, T-068): headers → origin gate → JSON
+/// body → `web_bridge::dispatch`. App-level failures travel as HTTP 200
+/// `{"ok":false,"error"}` so the browser-side polyfill rejects exactly like
+/// Tauri's `invoke`; only transport problems (origin, size, syntax) use 4xx.
+/// Writes through the reader's own `&TcpStream` (std: `Write for &TcpStream`).
+fn handle_invoke(reader: &mut BufReader<&TcpStream>, app: &tauri::AppHandle, cmd: &str) {
+    let mut out: &TcpStream = reader.get_ref();
+    let (mut origin, mut label, mut len) = (None, None, 0usize);
+    for line in reader
+        .by_ref()
+        .lines()
+        .map_while(Result::ok)
+        .take_while(|l| !l.is_empty())
+    {
+        if let Some((k, v)) = line.split_once(':') {
+            let v = v.trim();
+            match k.to_ascii_lowercase().as_str() {
+                "origin" => origin = Some(v.to_string()),
+                "x-wasen-window" => label = Some(v.to_string()),
+                "content-length" => len = v.parse().unwrap_or(0),
+                _ => {}
+            }
+        }
+    }
+    if !crate::web_bridge::origin_allowed(origin.as_deref()) {
+        log::warn!("web bridge: refused origin {origin:?} for {cmd}");
+        respond(&mut out, 403, &[], &[], false);
+        return;
+    }
+    if len > MAX_INVOKE_BODY {
+        respond(&mut out, 413, &[], &[], false);
+        return;
+    }
+    let mut body = vec![0u8; len];
+    if reader.read_exact(&mut body).is_err() {
+        respond(&mut out, 400, &[], &[], false);
+        return;
+    }
+    let args: serde_json::Value = if body.is_empty() {
+        serde_json::json!({})
+    } else {
+        match serde_json::from_slice(&body) {
+            Ok(v) => v,
+            Err(_) => {
+                respond(&mut out, 400, &[], &[], false);
+                return;
+            }
+        }
+    };
+    let label = label.unwrap_or_else(|| "web".to_string());
+    let reply = match crate::web_bridge::dispatch(app, &label, cmd, args) {
+        Ok(result) => serde_json::json!({ "ok": true, "result": result }),
+        Err(error) => serde_json::json!({ "ok": false, "error": error }),
+    };
+    let body = reply.to_string();
+    let resp = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\n\
+         Access-Control-Allow-Origin: {}\r\nContent-Length: {}\r\n\r\n",
+        origin.unwrap_or_default(),
+        body.len()
+    );
+    let _ = std::io::Write::write_all(&mut out, resp.as_bytes());
+    let _ = std::io::Write::write_all(&mut out, body.as_bytes());
+}
+
+fn respond<W: std::io::Write>(
+    stream: &mut W,
+    code: u16,
+    _headers: &[(&str, &str)],
+    _body: &[u8],
+    head: bool,
+) {
     let status = match code {
+        400 => "Bad Request",
+        403 => "Forbidden",
         404 => "Not Found",
         405 => "Method Not Allowed",
+        413 => "Payload Too Large",
         _ => "OK",
     };
     let resp = format!("HTTP/1.1 {code} {status}\r\nContent-Length: 0\r\n\r\n");
@@ -325,20 +497,22 @@ mod tests {
     }
 
     /// One shared server per test binary; tests register their own files.
+    /// Bridge OFF — the production default; the ON path is gate 21's job
+    /// (needs a running app handle).
     fn server() -> (u16, Arc<FileRegistry>) {
         static SERVER: std::sync::OnceLock<(u16, Arc<FileRegistry>)> = std::sync::OnceLock::new();
         SERVER
             .get_or_init(|| {
                 let registry = Arc::new(FileRegistry::default());
-                let port = spawn(Arc::clone(&registry)).expect("bind test filesrv");
+                let port = spawn(Arc::clone(&registry), None).expect("bind test filesrv");
                 (port, registry)
             })
             .clone()
     }
 
-    fn get(port: u16, target: &str) -> (u16, Vec<u8>) {
+    fn request(port: u16, raw: &str) -> (u16, Vec<u8>) {
         let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).expect("connect");
-        write!(s, "GET {target} HTTP/1.1\r\nHost: t\r\n\r\n").expect("write request");
+        s.write_all(raw.as_bytes()).expect("write request");
         let mut buf = Vec::new();
         s.read_to_end(&mut buf).expect("read response");
         let head = String::from_utf8_lossy(&buf);
@@ -353,6 +527,33 @@ mod tests {
             None => Vec::new(),
         };
         (status, body)
+    }
+
+    fn get(port: u16, target: &str) -> (u16, Vec<u8>) {
+        request(port, &format!("GET {target} HTTP/1.1\r\nHost: t\r\n\r\n"))
+    }
+
+    /// T-068 release safety: without `WASEN_OFFICE_WEB_BRIDGE` the invoke
+    /// route does not exist (404) even from an allowed origin, and POST
+    /// anywhere else stays 405 — the GET surface is untouched.
+    #[test]
+    fn invoke_route_is_absent_when_bridge_off() {
+        let (port, _) = server();
+        let body = r#"{"path":"/x.docx"}"#;
+        let (status, _) = request(
+            port,
+            &format!(
+                "POST /invoke/recents_list HTTP/1.1\r\nHost: t\r\nOrigin: http://127.0.0.1:1420\r\n\
+                 X-Wasen-Window: web-test\r\nContent-Type: application/json\r\n\
+                 Content-Length: {}\r\n\r\n{body}",
+                body.len()
+            ),
+        );
+        assert_eq!(status, 404);
+        let (status, _) = request(port, "POST /media/1/x HTTP/1.1\r\nHost: t\r\n\r\n");
+        assert_eq!(status, 405);
+        let (status, _) = request(port, "POST /invoke/ HTTP/1.1\r\nHost: t\r\n\r\n");
+        assert_eq!(status, 405, "empty command name is not a route");
     }
 
     #[test]
@@ -382,6 +583,46 @@ mod tests {
         let (status, body) = get(port, &format!("/media/{id}/word/document.xml"));
         assert_eq!(status, 200);
         assert!(!body.is_empty());
+    }
+
+    #[test]
+    fn delivery_route_serves_only_the_expected_artifact() {
+        let (port, registry) = server();
+        let id = registry
+            .register("test", std::path::Path::new(media_fixture()))
+            .unwrap();
+        // docx → Convert flavor → the delivered artifact is exactly Editor.bin
+        let work = crate::formats::DocWorkdir::new(id);
+        std::fs::create_dir_all(work.root()).unwrap();
+        let body: &[u8] = b"FAKE-DOCY-BIN";
+        std::fs::write(work.editor_bin(), body).unwrap();
+
+        // exact artifact name → byte-exact body
+        let (status, got) = get(port, &format!("/delivery/{id}/Editor.bin"));
+        assert_eq!(status, 200);
+        assert_eq!(
+            got,
+            body.to_vec(),
+            "delivery must stream Editor.bin byte-exact"
+        );
+
+        // mismatched name (wrong artifact/flavor) → 403 before any disk read
+        let (status, _) = get(port, &format!("/delivery/{id}/whatever.pdf"));
+        assert_eq!(
+            status, 403,
+            "flavor-mismatched delivery name must be refused"
+        );
+        // traversal-literal and percent-encoded → 403
+        let (status, _) = get(port, &format!("/delivery/{id}/../secret"));
+        assert_eq!(status, 403);
+        // unknown fileId → 404
+        let (status, _) = get(port, "/delivery/777777/Editor.bin");
+        assert_eq!(status, 404);
+        // no name in the URL → 404
+        let (status, _) = get(port, &format!("/delivery/{id}"));
+        assert_eq!(status, 404);
+
+        std::fs::remove_dir_all(work.root()).ok();
     }
 
     #[test]

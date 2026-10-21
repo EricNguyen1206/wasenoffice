@@ -28,29 +28,47 @@ pub fn viewer_view(
     recents: State<'_, Arc<crate::recents::RecentsStore>>,
     path: String,
 ) -> Result<(), String> {
-    if !std::path::Path::new(&path).is_file() {
+    let label = prepare_quick_view(&quick, &recents, &path)?;
+    open_surface_window(
+        &app,
+        &label,
+        "viewer.html",
+        format!("WasenOffice — Quick View: {}", file_name(&path)),
+        "viewer",
+        false,
+    )
+}
+
+/// The window-free half of `viewer_view`: validate, mint the window label,
+/// stash the path under it and record the recent. The Tauri command opens a
+/// native window on that label; the web bridge (T-068, DD W01) hands the
+/// label to a browser tab instead — `viewer_open` then resolves it the same
+/// way for both.
+pub(crate) fn prepare_quick_view(
+    quick: &SurfaceHandoff,
+    recents: &crate::recents::RecentsStore,
+    path: &str,
+) -> Result<String, String> {
+    if !std::path::Path::new(path).is_file() {
         return Err(format!("viewer: no such file: {path}"));
     }
     let label = format!(
         "quickview-{}",
         WINDOW_SEQ.fetch_add(1, Ordering::Relaxed) + 1
     );
-    let name = std::path::Path::new(&path)
+    quick.stash(&label, path.to_string());
+    // A01: successful open = a recent (best-effort, same as engine opens).
+    recents.record(std::path::Path::new(path));
+    log::info!("viewer view: {path} (window {label})");
+    Ok(label)
+}
+
+/// Last path segment for window titles / payload names (`path` when it has none).
+pub(crate) fn file_name(path: &str) -> String {
+    std::path::Path::new(path)
         .file_name()
         .map(|f| f.to_string_lossy().into_owned())
-        .unwrap_or_else(|| path.clone());
-    quick.stash(&label, path.clone());
-    open_surface_window(
-        &app,
-        &label,
-        "viewer.html",
-        format!("WasenOffice — Quick View: {name}"),
-        "viewer",
-    )?;
-    // A01: successful open = a recent (best-effort, same as engine opens).
-    recents.record(std::path::Path::new(&path));
-    log::info!("viewer view: {path} (window {label})");
-    Ok(())
+        .unwrap_or_else(|| path.to_string())
 }
 
 /// Window-label sequence for UI-opened quick views ("main" = the env boot).
@@ -86,6 +104,11 @@ pub(crate) fn render_payload(
     tag: &str,
 ) -> Result<RenderPayload, String> {
     let started = std::time::Instant::now();
+    // T-067 D5: Quick view and Nano Light both parse the whole file through
+    // this one seam — refuse over-cap files here instead of building a tree
+    // that would exhaust RAM (DD open-streaming D4).
+    crate::config::ensure_openable_size(std::path::Path::new(path))
+        .map_err(|e| format!("{tag}: {e}"))?;
     let bytes = std::fs::read(path).map_err(|e| format!("{tag}: read {path}: {e}"))?;
     let doc =
         wasenoffice_ooxml::parse_docx(&bytes).map_err(|e| format!("{tag}: parse {path}: {e}"))?;
@@ -128,10 +151,21 @@ pub fn viewer_open(
     quick: State<'_, Arc<SurfaceHandoff>>,
     window: tauri::WebviewWindow,
 ) -> Result<QuickView, String> {
+    viewer_open_impl(&registry, &quick, window.label())
+}
+
+/// `viewer_open` keyed by an explicit window label — the Tauri command passes
+/// its window's label, the web bridge (DD W01) the label the browser tab
+/// carries in its URL. Everything below is identical for both.
+pub(crate) fn viewer_open_impl(
+    registry: &FileRegistry,
+    quick: &SurfaceHandoff,
+    label: &str,
+) -> Result<QuickView, String> {
     // V5: the UI path stashes the path and the window consumes it; the env
     // stays as the dev/gate-12 trigger (DD §3.1/§4).
     let path = quick
-        .take(window.label())
+        .take(label)
         .or_else(|| {
             std::env::var("WASEN_OFFICE_QUICK_VIEW")
                 .ok()
@@ -140,19 +174,15 @@ pub fn viewer_open(
         .ok_or_else(|| {
             "viewer: no quick-view source (UI action or WASEN_OFFICE_QUICK_VIEW)".to_string()
         })?;
-    let p = render_payload(registry.inner().as_ref(), window.label(), &path, "viewer")?;
+    let p = render_payload(registry, label, &path, "viewer")?;
     log::info!(
         "viewer: parsed {path} ({} bytes) in {:.1} ms, {} families with OS/2 metrics",
         p.bytes.len(),
         p.parse_ms,
         p.fonts.len()
     );
-    let name = std::path::Path::new(&path)
-        .file_name()
-        .map(|f| f.to_string_lossy().into_owned())
-        .unwrap_or_else(|| path.clone());
     Ok(QuickView {
-        name,
+        name: file_name(&path),
         parse_ms: p.parse_ms,
         doc: p.render,
         fonts: p.fonts,

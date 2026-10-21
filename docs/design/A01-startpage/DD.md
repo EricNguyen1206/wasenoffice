@@ -62,7 +62,11 @@ Ngôn ngữ UI: VI/EN theo `navigator.language`, fallback EN (Q6/Q12 — chỉ S
 
 ## 5. Thiết kế kỹ thuật
 
-- **Open dialog:** `tauri-plugin-dialog` (open + save); filter `.docx/.xlsx/.pptx/.pdf`. Lý do chọn
+- **Open dialog:** `tauri-plugin-dialog` (open + save); **filter theo nút** — `Mở tài liệu`
+  `.docx/.xlsx/.pptx/.pdf`, còn `Xem nhanh` + `Nano Light` chỉ `.docx`: hai surface này
+  docx-only (DD V01/L01) và guard JS của chúng chỉ kịp log vào log-strip đáy window —
+  picker phải chặn từ đầu (bug 17.10: chọn .pdf ở Quick view → không có gì hiển thị).
+  Lý do chọn
   plugin thay vì `<input type="file">`: WKWebView trả `File` blob **không kèm đường dẫn đĩa**,
   trong khi `open_document` cần path thật (contract gates 9/13) — xem §9.
 - **Recents:** store **JSON ở app-data dir** (Q10 — giải câu hỏi mở cũ §10: JSON, không SQLite);
@@ -143,3 +147,6 @@ grill 17.10 và chốt ở §4/§5/§9. Provenance Template blank ghi trong comm
 | 2026-10-17 | **v1 ratified** (grill-with-docs 2 rounds): Welcome + Open dialog (plugin-dialog) + Recents (JSON app-data, 3 command riêng) + Create-new (Template blank ×3, MIT-generated) + Untitled/Save As seam + i18n VI/EN Startpage; Recovers ĐÌNH CHỈ; câu hỏi mở §10 giải hết | — |
 | 2026-10-17 | §4/§5/§9/§11 cập nhật theo code T-A38 (c5ab47b): recents = 2 command (`recents_list`/`recents_remove`) + record nội bộ Rust-side tại 4 lối mở (JS không bao giờ báo open — add command không cần); gate 17 thường trụ verify.sh; gotcha mktemp + link GLOSSARY 3 cấp | c5ab47b |
 | 2026-10-17 | §5 đối chiếu code T-A39 (b4c692f): template include_bytes + untitled dir + Save-As seam engine-only (Nano Light không bao giờ giữ untitled); gate 17 +2 mode (create/saveas) + gate 18 oracle x2t | b4c692f |
+| 2026-10-17 | §5 filter theo nút: Quick view + Nano Light lọc `.docx` trong picker (bug 17.10 — .pdf chọn ở Quick view im lặng vì guard chỉ vào log strip; TC-A01-14) | — |
+| 2026-10-17 | §3 OPENING exit sửa: `welcome.hidden` attribute → class `hidden` — `.flex` đè `[hidden]` khi preflight off (T-058) → split-screen editor/welcome (pixel-confirmed bằng screencapture; diagnostics 17.10) | — |
+| 2026-10-21 | **§4 mở rộng — 3 view trong sidebar (T-A46, K02-Q3 amended):** Home · Settings (`X01` — view trong start page thay cửa sổ riêng) · AI agent (`AI Agent & MCP Tools`); setActiveView home·settings·ai, sidebar active state theo view; ô "or paste a path…" + Quick view/Nano Light giữ nguyên ở Home; gate 17 +mode `settings` (log `settings view: keymap=N rows mcp=ok`) | — |

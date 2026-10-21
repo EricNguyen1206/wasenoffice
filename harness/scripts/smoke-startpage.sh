@@ -44,7 +44,10 @@ ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 . "$ROOT/harness/scripts/smoke-lib.sh"
 
-TIMEOUT="${SMOKE_STARTPAGE_TIMEOUT:-240}"
+# 360s: a cold Rust relink after edits eats ~4 min (measured 20.10 — the app
+# booted at t=240s+0.2 and the evidence line missed the deadline by a hair;
+# same rationale as gate 15's 360 default).
+TIMEOUT="${SMOKE_STARTPAGE_TIMEOUT:-360}"
 FIXTURE=/tmp/wasenoffice-startpage.docx
 # BSD mktemp: X's MUST trail the template (bắt được 17.10: template đuôi
 # .json → lần 2 fail "File exists" → var rỗng → gate lặng lẽ đọc/ghi store
@@ -69,6 +72,10 @@ elif [ "${STARTPAGE_SAVEAS:-0}" = "1" ]; then
   TARGET="/tmp/wasenoffice-saveas-target-$$.docx"
   MARKER="T-SAVEAS-$RANDOM-SAVED-BY-WASENOFFICE"
   echo "smoke: stub target=$TARGET marker=$MARKER"
+elif [ "${STARTPAGE_SETTINGS:-0}" = "1" ]; then
+  echo "smoke: SETTINGS — probe opens the in-page settings view (T-A46: keymap rows + MCP status)"
+  PROBE_ROW="settings"
+  MODE="settings"
 else
   echo "smoke: positive — real recents row #2 must open through the genuine chain"
   PROBE_ROW="recent:2"
@@ -125,6 +132,9 @@ startpage_signals() {
     if [ -e "$UNTITLED_DIR/Untitled 1.docx" ]; then SMOKE_SUMMARY="untitled copy not removed after save-as"; SMOKE_ABORT=1; return 1; fi
     if ! grep -qF "$TARGET" "$RECENTS_JSON" 2>/dev/null; then SMOKE_SUMMARY="recents store does not list the saved-as path"; SMOKE_ABORT=1; return 1; fi
     SMOKE_SUMMARY="save-as OK: create → first save → stub target (marker on disk) → copy removed → recents updated"
+  elif [ "$MODE" = "settings" ]; then
+    grep -q "$SMOKE_RE_SP_SETTINGS" "$LOG" 2>/dev/null || { SMOKE_SUMMARY="ready seen, settings view evidence line not yet"; return 1; }
+    SMOKE_SUMMARY="settings view OK: probe → sidebar Settings → keymap rows + MCP status"
   else
     grep -q 'recents=2 missing=1' "$LOG" 2>/dev/null || { SMOKE_SUMMARY="ready line without the seeded recents=2 missing=1"; return 1; }
     grep -q "$SMOKE_RE_OPEN_DOC" "$LOG" 2>/dev/null || { SMOKE_SUMMARY="ready seen, open_document not fired yet"; return 1; }
@@ -147,6 +157,8 @@ if smoke_poll "$TIMEOUT" startpage_signals "startpage wiring evidence"; then
     grep -m1 -F "untitled document saved as $TARGET" "$LOG" | sed 's/^/smoke:   /' | cut -c1-160
     grep -m1 -F "save delivered: $TARGET" "$LOG" | sed 's/^/smoke:   /' | cut -c1-160
     echo "smoke:   on-disk: stub target carries the marker · untitled copy removed · recents lists $TARGET"
+  elif [ "$MODE" = "settings" ]; then
+    grep -m1 "$SMOKE_RE_SP_SETTINGS" "$LOG" | sed 's/^/smoke:   /' | cut -c1-160
   else
     grep -m1 "$SMOKE_RE_OPEN_DOC" "$LOG" | sed 's/^/smoke:   /' | cut -c1-160
     grep -m1 "$SMOKE_RE_SP_BOOTING" "$LOG" | sed 's/^/smoke:   /' | cut -c1-160

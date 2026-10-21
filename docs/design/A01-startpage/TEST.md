@@ -45,6 +45,9 @@ App dev `pnpm tauri dev` (boot nền rule 6b khi agent chạy). Fixture: `harnes
 | TC-A01-11 | P0 | E2E gate | §7 perf | When cold start không file đối số / Then Welcome tương tác được < 1 s | smoke đo first-paint; gate boot hiện có | ✅ gate 17 ready-line tức thời (17.10) |
 | TC-A01-12 | P2 | E2E manual | §8 a11y | When điều hướng thuần bàn phím / Then tới mọi action Welcome | thứ tự focus hợp lý, Esc thoát | ⬜ manual |
 | TC-A01-13 | P0 | hồi quy | §5 gates | Mọi thay đổi Startpage / Then gate 13 (`#doc-path` + `#quick-view-btn`) vẫn GREEN | verify.sh FULL exit 0 | ✅ verify FULL 24 ▸ steps exit 0 (17.10) |
+| TC-A01-14 | P0 | E2E manual | §5 Open dialog | When bấm "Xem nhanh…"/"Nano Light…" / Then panel chỉ offering .docx; bấm "Mở tài liệu…" / Then đủ 4 định dạng; .pdf mở được qua Open (engine) | panel filter nhìn thấy được; .pdf 26 MB (Downloads/123.pdf) contentReady ~3 s qua `WASEN_OFFICE_OPEN` (17.10) | ✅ filter code + PDF open GREEN; panel manual ceiling |
+| TC-A01-15 | P0 | E2E gate | §4 Settings view (X01, T-A46) | When bấm sidebar Settings (hoặc ⌘,/gear) / Then main area chuyển sang view Phím tắt — 13 hàng keymap + capture chord (Esc hủy) + MCP status; Home/Settings active state đổi đúng; ✕ Đóng/Esc → về Home | gate 17-settings (probe `STARTPAGE_PROBE=settings` → log `settings view: keymap=N rows mcp=ok`) + browser-use E2E 21.10 (capture ⌘K, ✕ Đóng) | ✅ gate 17-settings + E2E (21.10) |
+| TC-A01-16 | P1 | E2E manual | §4 AI view | When bấm sidebar "AI agent" / Then view "AI Agent & MCP Tools" (MCP chuyển từ Settings — 21.10); toggle client + copy config hoạt động | view render; toggle optimer qua `mcp_get_status` | ⬜ manual (toggle đã wired — K02/T-A41) |
 
 ## 4. Chính sách hồi quy
 
@@ -69,3 +72,4 @@ verify FULL exit 0.
 | 2026-09-27 | Mã hóa màn hình: TC-SP-nn → TC-A01-nn | — |
 | 2026-10-17 | **v1 theo DD ratified**: thêm unit Recents (02–04), Create-new ×3 probe (06), seam Save As (07–08), hồi quy gate 13 (13); đánh dấu Recovers out-of-scope; gate hoá chỗ automate được — NSOpenPanel ghi rõ là manual ceiling | — |
 | 2026-10-17 | **Sink T-A38/T-A39**: P0 gần như ✅ — gate 17 (4 mode: pos/neg/create/saveas) + gate 18 (oracle x2t ×3); ceiling còn lại: NSOpenPanel/NSSavePanel thật, cancel-panel, i18n manual (10), a11y (12), E2E cell/slide create | b4c692f |
+| 2026-10-21 | **T-A46**: +TC-A01-15 (Settings view — gate 17-settings mode thứ 5) + TC-A01-16 (AI view manual); cửa sổ Settings riêng + 2 tab giả Agents/Agent Names xoá (K02-Q3 amended) | — |

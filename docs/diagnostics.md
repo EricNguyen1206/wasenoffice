@@ -8,6 +8,242 @@ Quy tắc: mỗi entry ghi thời điểm, triệu chứng, bằng chứng, tr�
 
 ---
 
+## 2026-10-20 · T-A46 — Đảo QĐ K02-Q3: Settings thành view trong start page; cắt UI giả Agents/Agent Names/Chat; inventory nút chết sidebar
+
+- **Quyết định user (20.10, kèm ảnh ONLYOFFICE):** "sửa lại giao diện tham khảo ONLYOFFICE, thay vì
+  tạo 1 màn hình trắng riêng như hiện tại, nên implement trong giao diện khi bấm vào menu bên
+  sidebar luôn để đồng bộ UI system" → **K02-Q3 "Settings window riêng" ĐẢO** thành "Settings =
+  view trong start page (A01); cửa sổ riêng + settings.html + settings.ts xoá; command
+  `open_settings` xoá" (G1: ghi TRƯỚC code — entry này là bằng chứng).
+- **Lý do:** settings.html theme trắng ("pen.dev styled") lệch hẳn UI system Graphite; 2 điểm
+  chuyển view (sidebar + ⌘,) thay vì cửa sổ tách bấc; pattern ONLYOFFICE = sidebar item → main
+  area đổi nội dung.
+- **UI giả bị cắt (kèm quyết định user "ok"):** tab **Agents** (3 agent giả gắn badge "Hoạt động"
+  — WasenOffice KHÔNG có built-in agent; đi ngược grill AI-native 03.10 = agent nằm HỆ NGOÀI qua
+  MCP), tab **Agent Names** (input không lưu đâu — 0 listener 0 store), tab **Chat** (badge "Bật
+  mặc định" cho switch không tồn tại). `settings.ts` grep "agent" = 0 dòng logic; DD K02 không có
+  2 tab này trong phạm vi.
+- **Inventory nút chết sidebar start page (ghi nhận, không sửa hết trong T-A46):**
+  `#sidebar-ai-btn` (AI agent) — 0 handler → T-A46 wire sang Settings tab MCP (trung thực: agent
+  ngoài cắm qua MCP); `#sidebar-templates-btn` (Templates) — 0 handler; Clouds "+" — 0 handler
+  (3 nút chết = việc riêng khi A01 v2).
+- **Hành vi giữ nguyên khi port:** keymap 13 hàng + capture chord + confirm "Đè" + reset ↺ +
+  reset-all + Esc hủy capture; MCP status + 7 toggle + copy config; VI-only (K02 §123); refresh
+  keymap mỗi lần mở (mirror on-focus reload cũ); Esc không-capture = về Home.
+- **Khác biệt có chủ đích:** theme trắng → Graphite dark (token start page); view ẩn/hiện trong
+  main-area của `#welcome` (sidebar đứng yên); ⌘, chỉ ăn khi main-frame focus (như cũ — engine
+  sở hữu phím khi soạn thảo); Log ADDITIVE mới `settings view: keymap=N rows mcp=ok` (gate
+  17-settings; hằng SMOKE_RE_SP_SETTINGS cùng commit).
+- **Phiên song song tiến hóa tiếp (21.10, sau gate pass 00:24):** `settings-view.ts`/`main.ts`
+  được sửa lúc 13:40–13:44 — tab **MCP tách khỏi Settings** thành **view thứ ba "AI agent"**
+  (`src/ai-view.ts` — "AI Agent & MCP Tools") + nút **✕ Đóng** trong view + `setActiveView:
+  'home'|'settings'|'ai'`. Theo protocol phiên song song: KHÔNG đụng, docs (K02/X01/A01) ghi
+  theo kiến trúc 3 view hiện hành; gate 17-settings vẫn hợp lệ (chỉ bám dòng log, format giữ
+  nguyên — `mcp=ok` giờ từ `mcp_get_status` thuần).
+- **Bẫy mới (T-A46):**
+  (a) **BRE regex:** hằng gate `SMOKE_RE_SP_SETTINGS` viết `[0-9]+` → plain `grep` (BRE) coi
+  `+` là ký tự thường → pattern KHÔNG BAO GIỜ khớp → gate timeout dù dòng bằng chứng nằm
+  nguyên trong log (4 lần chạy). Fix `[0-9][0-9]*` + ghi comment tại hằng. Các hằng cũ đều
+  literal nên chưa vấp;
+  (b) **cargo lock chờ mồ côi:** `pkill -f "pnpm tauri dev"` giết pnpm nhưng CARGO CON SÓNG —
+  continue build dở và ôm lock `target/` → gate sau chờ 4–6 phút vô hình (log chỉ hiện
+  `Finished in 0.46s` khi xong). Dọn bằng cách chờ orphan xong hoặc kill đúng cargo; boot gate
+  sau cleanup = vài giây;
+  (c) `classList.toggle('a b')` nhiều token ném `InvalidCharacterError` (gate bắt ngay lần
+  đầu — negative proof ăn thật) → luôn mảng token + spread;
+  (d) gate startpage timeout 240→360s: cold relink sau sửa Rust ~4 phút, app boot ở
+  t=240s+0.2 trượt deadline đúng chân (cùng lý do gate 15 dùng 360).
+
+---
+
+## 2026-10-20 · T-068 — Web dev mode: HTTP invoke bridge; frontend đã nói HTTP từ trước; 2 điểm crash top-level; IAB click/screenshot flakiness
+
+- **Bối cảnh:** user muốn browser-use (ZCode in-app browser, Chromium) test được full
+  chức năng. Khảo sát + probe thực tế qua `pnpm dev` :1420 (không Tauri):
+- **Phát hiện 1 — frontend ĐÃ nói HTTP với Rust cho mọi thứ trừ invoke + cửa sổ:**
+  engine/fonts/media/tài liệu serve từ loopback `http://127.0.0.1:14321`
+  (`get_engine_base` lib.rs:298, `mediaBase` viewer.rs:103, route `/file` `/delivery`
+  `/media` trong filesrv.rs). Custom scheme `wasenoffice-engine://`/`-file://` chỉ còn
+  trong comment (main.ts:108,110) — **nhận định cũ "engine cần custom scheme" SAI**.
+- **Phát hiện 2 — chỉ 2 điểm crash không-Tauri:** `viewer.ts:38` + `editor.ts:119`
+  (`const {invoke} = window.__TAURI__.core` top-level → TypeError lúc load, canvas
+  kẹt 300×150). Mọi nơi khác đọc `__TAURI_INTERNALS__.invoke` lazily (core.js:202);
+  shim `tauriInvoke()` null-safe. Fix = polyfill tiêm trước module script, **0 sửa
+  call-site**.
+- **Thiết kế landed (DD W01):** `POST /invoke/<cmd>` trong filesrv (`WASEN_OFFICE_WEB_BRIDGE=1`,
+  default OFF → 404; Origin allowlist Vite; body cap 1 MiB) + polyfill
+  `src/web/tauri-polyfill.js` (vite `apply:'serve'`, dist sạch — counterfactual grep 0) +
+  vite proxy `/invoke`. Seam duy nhất: **window label = identity param**
+  (`*_impl(label)` ×5 + `prepare_*` ×3); browser tab = "cửa sổ" (`?win=`/`web-<uuid>`).
+- **Gate 21** `smoke-web-bridge.sh`: positive exit 0 (recents → viewer_view ra nhãn
+  quickview-1 → viewer_open theo nhãn ra mediaBase+parseMs — hand-off KHÔNG cần cửa sổ;
+  open_document refuse đúng message; version; unknown; 403 origin) ×2 chạy; negative
+  `disabled` → 404 exit 1, `origin` → 403 exit 1.
+- **E2E browser-use (bằng chứng):** start page 0 ERROR + `WasenOffice v0.1.0` + 10
+  recents thật; Quick view first-draw 42.8 ms (inked 9440, layout 5 dòng đúng hợp đồng
+  gate 12); Nano Light gõ 14 ký tự (dirty=true) → Save → **`NL-WEB-MARKER` trong
+  `word/document.xml` trên đĩa**, save 3.8 ms; Settings tab `?win=settings` không lỗi;
+  "Open local file" → message trần picker. `window.open` bị IAB chặn popup → fallback
+  `location.assign` cùng tab (đúng thiết kế).
+- **Drive-by đã sửa (1 dòng):** `logLine` không tự cuộn → `log.scrollTop =
+  log.scrollHeight` — lỗi mới nhất từng bị khuất dưới nếp gấp 4.5em (3 lần user không
+  thấy ERROR settings trong phiên phân tích 20.10).
+- **Bẫy mới ghi nhận:**
+  (a) IAB surface flaky — Playwright click trên element hiển thị rõ vẫn timeout
+  (x2: settings-btn, paste-toggle lần 2) nhưng click VẪN được gửi (log nhận dòng
+  mới); screenshot surface timeout liên tục (3 lần) → thay bằng assert DOM/log/pixel
+  (`getImageData` đếm mực) hoặc `.click()` phía trang (đúng triết lý probe);
+  (b) tauri-driven vite bind `localhost` (IPv6 ::1) — `curl 127.0.0.1:1420` refused
+  trong khi server sống; dùng `http://localhost:1420/`;
+  (c) vite proxy trong `pnpm tauri dev` bị RESTART khi vite.config.ts đổi
+  ("Re-optimizing dependencies") — không lỗi, chỉ chờ;
+  (d) chạy nền trong subshell `( cmd & )` của Bash tool bị kill khi lệnh kết thúc —
+  boot dài hạn dùng `run_in_background`.
+- **Đụng file phiên trước (minh bạch):** `cargo fmt --all` reformat 3 file dirty
+  của phiên 17–19.10 (`bridge/save.rs`, `mcp.rs`, `touchbar.rs` — chỉ format, gate
+  fmt vốn sẽ fail); `mcp.rs:580` `push_str("\n")` → `push('\n')` (clippy -D warnings
+  đã fail TRƯỚC khi T-068 đụng — dev-check không thể xanh nếu không sửa).
+- **Race test-isolation có SẴN (không phải T-068, reproduce 3/3):** `cargo test
+  --workspace` song song → `untitled::tests::test_untitled_templates_open_via_x2t`
+  fail "x2t … stderr: boom" (3/3), chạy ĐƠN thì pass (2/2). Root cause: test
+  `sidecar/mod.rs:340-370` set/remove env process-wide `WASEN_OFFICE_X2T` +
+  `WASEN_OFFICE_NO_APP_FALLBACK`, test khác (sidecar.rs:418) viết stub
+  `#!/bin/sh\necho boom>&2; exit 3` — cùng test binary với `untitled::tests`
+  (chạy x2t THẬT) → thread untitled lia trúng env stub. verify.sh KHÔNG chạy full
+  cargo test (chỉ filter `save_multiformat_`) nên không chặn. Ứng viên fix: khoá
+  mutex chung cho nhóm test đụng env, hoặc stub x2t per-test-dir qua param thay env.
+
+---
+
+## 2026-10-17 · T-A40 — `toolbarNoTabs` giết boot engine; Common.NotificationCenter reachable (spike)
+
+- **SpiKE context (DD U01 slice 6):** compact chrome cửa sổ engine — header 1 hàng của mình
+  [menu | tên file | tài khoản] thay hàng tabs engine; menu tabs điều khiển tools box
+  (toolbar ngữ cảnh) qua NotificationCenter.
+- **Phát hiện 1 — `customization.toolbarNoTabs` = boot chết trong artifact của mình:**
+  truyền cờ qua DocsAPI config → api.js **đổi iframe src sang `index_loader.html`**
+  (`api.js:1175-1178`) — variant splash-loader không có asset trong engines (3 GET rồi
+  im lặng, không bao giờ tới Editor.bin). Counterfactual không cờ → `index.html` đầy đủ +
+  `asc_onDocumentContentReady`. **Fix:** KHÔNG truyền customization — ẩn tabs = CSS shim
+  `#toolbar .tabs { display:none !important }` (Backbone state vẫn chạy, setTab bình thường).
+  Bài học: mọi "cờ customization vô hại" phải probe boot thật trước khi tin — api.js dùng
+  cờ TƯNG CHỮA để chọn loader variant.
+- **Phát hiện 2 — spike POSITIVE:** `window.Common.NotificationCenter` **reachable từ shim**
+  trong app frame (`documenteditor/main/index.html`) — `common=object nc=object` ở t=2s lẫn
+  t=6s; boot frame + main frame `undefined` (đúng thiết kế). Driver v1:
+  postMessage `{type:'__wasenoffice_tab', action, state?}` relay xuống frame chain → frame
+  có NC thực thi: tab thường `tab:set-active` (Toolbar.js:254-257), FILE `menu:show|hide`
+  (Toolbar.js:124-129 + LeftMenu.js:93). Evidence: `/tmp/ta40-spike*.log`,
+  log `compact chrome: tabs strip hidden (app frame)`.
+- **Vite HMR bẩn spike:** sửa `src/shim/desktopEditor.js` giữa chừng → vite reload main
+  frame giữa boot → log chỉ nửa vời. Mọi lần đo spike/gate phải chạy SAU khi xong hết edit.
+
+## 2026-10-17 · T-067 — RAM open-file 4.5GB trừ → 131MB shell (stream b64-IPC) + size cap
+
+- **Triệu chứng (user 17.10):** mở app/file tốn ~4.5GB RAM + lag máy. Repro đo: open
+  `test-upload-1gb.pdf` (1.09GB) → tree peak **5457 MB** (shell 3378 + WebContent 5041),
+  start page độc lập ~180 MB.
+- **Nguyên nhân (confirmed bằng code + đo):** lane delivery OLD —
+  `get_document_for_delivery` (lib.rs) `fs::read` cả file → base64 (×1.37) → serde JSON →
+  Tauri IPC (UTF-16 copy) → JS `atob` (×1.37) → engine decode ≈ 7–8× dung lượng file qua
+  shell process. Start page sạch, chỉ open là phình.
+- **Đường ra (T-067, D1–D7 — DD `open-streaming`):** Rust giờ trả metadata
+  `{folder,name,docUrl,size}` → JS fetch same-origin `/delivery/<id>/<name>` (route mới —
+  filesrv, stream 64KB + Range, name từ `delivered_name` mọi name khác 403) → ArrayBuffer
+  stash → `EndLoad('binary_content://<fileId>')` (branch stream có sẵn trong engine,
+  common.js:184-197) → engine nhận file qua `GetOpenedFile` (shim trả stash). Size cap
+  `WASEN_OFFICE_MAX_OPEN_MB` (default 250, 0=unlimited) chặn ở mọi entry seam
+  (`register_and_url`/`get_document_for_delivery`/viewer render) — refuse trước engine,
+  message có hướng dẫn raise/unlimited.
+- **Bằng chứng sau-fix:**
+  - shell peak RSS **3378 → 131 MB** (phẳng kể cả khi fetch 1GB −96%); tree peak open
+    **5457 → ~2463 MB** (≤½ X) — số đo bảng §6 DD.
+  - **Ceiling engine (đo thật):** engine wasm parse cả file 1GB vẫn
+    `RuntimeError: Out of bounds memory access` + `asc_onError −82` — tree giữ ~2.4GB ở
+    error state (ngoài lane shell T-067; PDF page-range là việc riêng). Với user thường:
+    default cap 250 chặn file >250MB — máy không cạn RAM.
+  - Gate 19 mới `smoke-open-guard.sh` thường trụ (3 arm: refusal 300MB sparse trên cap
+    default · counterfactual cap=0 guard phải vắng · green path fixture nhỏ contentReady).
+  - verify FULL **exit 0, 25 steps** (19 ▸ shell gates + submodules + stage checks).
+- **Tác dụng phụ (pre-existing, khắc phục trong lúc verify):** rebrand 13.10 còn forking
+  4 fixture docx crate (nanooffice-*) so với tên test (wasenoffice-*) — `git mv` + regenerate
+  bằng generator cho khớp (parse.rs trước đó fail từ 13.10, verify net không chạy cargo test).
+- **Vite dev server:** release binary còn load URL dev (`localhost:1420`) — boot release
+  cần `pnpm dev` đang chạy trước (không có là page_load không bao giờ nổ) — đo release
+  memory cần nền đó.
+
+---
+
+## 2026-10-17 · App cài /Applications trắng editor — engines discovery chỉ walk cwd (+ fixture rebrand lệch tên)
+
+- **Triệu chứng:** sau fix welcome-hidden, app cài ở `/Applications` vẫn không xem được tài
+  liệu — iframe engine trắng vĩnh viễn khi launch từ Finder.
+- **Nguyên nhân (confirmed):** `engines_root()` (protocol/allfonts.rs) chỉ walk-up từ cwd —
+  Finder launch GUI app với cwd=`/` → không bao giờ tìm thấy `engines/editors` (x2t discovery
+  thì đã walk exe-ancestors từ trước → hai resolver lệch nhau). x2t thoát nhờ fallback
+  ONLYOFFICE; sdkjs/web-apps/fonts không có fallback → 404 trắng.
+- **Fix:** `engines_root()` walk **exe-ancestors trước, cwd-ancestors sau** (đồng bộ discovery
+  order của sidecar; helper `engines_root_in` test-được + unit test thứ tự roots). Máy dev:
+  bản cài `/Applications` sống bằng symlink `Contents/MacOS/engines` → repo engines
+  (machine-local, không ship). Bài test quyết định: boot binary `/Applications` với cwd=/
+  (mô phỏng Finder) → GET /editors/... 200 + contentReady + pixel chụp fullscreen PDF 87 trang.
+- **Phát hiện phụ (lỗ hổng verify net):** `verify.sh` không chạy `cargo test` → mẻ rebrand
+  13.10 sed đổi tham chiếu fixture trong filesrv.rs sang `wasenoffice-media-fixture.docx`
+  nhưng không `git mv` file binary (vẫn `nanooffice-media-fixture.docx`) → 2 test media gãy
+  từ 13.10, im lặng. Fix: `git mv` đúng tên test cần. Flake đã biết:
+  `resolution_order_env_bundled_strict` (env process-global, parallel — pass khi chạy lẻ).
+- **Nợ còn lại:** T-066 (PH-4, đã lên TODO) — bundle engines thật vào `.app`/DMG; symlink chỉ
+  là unblock máy dev, distribution thật phải tự chứa engines sau trim.
+
+---
+
+## 2026-10-17 · Welcome không ẩn khi mở tài liệu — split-screen editor (pixel-confirmed)
+
+- **Triệu chứng (user 17.10, ảnh chụp):** mở `test_haita.pdf` bằng Open document → nửa trên
+  window trắng (iframe engine đang load), **Welcome vẫn chiếm nửa dưới** — app "không hiển thị
+  được" tài liệu.
+- **Điều tra:** log-side mọi đường đã GREEN (contentReady +3 s cho đúng file 26 MB) → phải
+  kiểm chứng **pixel-side**: boot release + `screencapture -l <CGWindowID>` (window id qua
+  `swift -e` CGWindowList — pyobjc không có trên máy). Ảnh chụp kết tội: editor render ĐẦY ĐỦ
+  (toolbar, Page 1 of 87) nhưng Welcome vẫn nằm dưới — split-screen thật, không phải engine hỏng.
+- **Nguyên nhân (confirmed):** `welcome.hidden = true` (DOM attribute) thua class Tailwind
+  `.flex { display:flex }` — Tailwind v4 build của dự án **đã loại preflight** (T-058) nên
+  không có `[hidden]{display:none!important}` cứu; UA `[hidden]` (specificity ngang `.flex`,
+  thua theo thứ tự) bị đè. Landed cùng T-A38 (c5ab47b), không gate nào thấy vì gate chỉ grep
+  log, không nhìn pixel.
+- **Fix:** `welcome.classList.add('hidden')` — nhất quán class-Tailwind như mọi element khác
+  (`topBar`/`editorRoot`/`recents-box`); grep xác nhận đây là chỗ dùng `hidden` attribute
+  cuối cùng trong `src/`. **Bài học dự án: với preflight-off, `[hidden]` attribute vô dụng
+  trên element có display utility — luôn dùng class `hidden`.**
+- **Verify:** tsc sạch; boot lại binary MỚI build (`pnpm tauri build` 03:07 — binary nhúng
+  `dist/` lúc compile, `pnpm build` một mình KHÔNG vào binary cũ) + chụp pixel lần 2: editor
+  fullscreen, Welcome biến mất, PDF 87 trang render trọn; verify FULL exit 0.
+
+---
+
+## 2026-10-17 · Quick view "im lặng" với non-docx (A01 welcome) — REPRO + FIX
+
+- **Triệu chứng (user 17.10):** "chọn được file nhưng không view được" — hộp thoại mở được,
+  chọn file xong không có gì hiển thị.
+- **Điều tra (diagnosing-bugs, loop trước giả thuyết):** gate 13 dev GREEN (probe gõ path +
+  nút thật, first-draw 23 ms) → release binary cùng probe GREEN → mở engine `123.pdf` qua
+  `WASEN_OFFICE_OPEN` GREEN (contentReady ~3 s, bridge chạy) → **RED khi Quick view đúng
+  file của user** (`WASEN_OFFICE_UX_PROBE=~/Downloads/123.pdf`, release): duy nhất một dòng
+  `[web] ERROR: quick view supports .docx (got ".pdf") — use Open for the editor` trong log
+  strip đáy window, không window nào mở. `recents.json` (app-data) cho vệt thật: 123.pdf
+  02:20 — recents ghi Rust-side ở cả 4 lối mở nên không phân biệt nút (không cần).
+- **Nguyên nhân (confirmed):** design gap A01 — `DOC_FILTERS` 4 định dạng dùng chung cho cả
+  3 nút Welcome, trong khi Quick view (A3, docx-only) + Nano Light (L01, docx-only) có guard
+  JS chỉ kịp `logLine` vào strip bé → picker cho chọn file mà surface sẽ từ chối im lặng.
+  Hộp thoại NSOpenPanel là manual ceiling (TEST A01) nên không gate nào bắt được.
+- **Fix:** `pickPath(filters)` — `Mở tài liệu` giữ 4 định dạng; `Xem nhanh` + `Nano Light`
+  lọc `.docx` (i18n `docxFilter` VI/EN); guard JS giữ lại làm backstop cho form dán path ẩn
+  + probe gates. DD A01 §5 + changelog + TC-A01-14 đồng bộ. Hạn chế trung thực: panel filter
+  không automate được — fix được chứng minh bằng repro RED → code-path + tsc + verify FULL
+  exit 0 (24 ▸ steps, gate 13 hồi quy GREEN — đường probe không đổi).
+
+---
+
 ## 2026-10-17 · T-A39: Create-new ×3 + Untitled/Save-As seam (A01 v1, A5)
 
 - **Thiết kế đã grill (Q7/Q8):** Create-new = copy Template blank (không blank-writer) → Untitled

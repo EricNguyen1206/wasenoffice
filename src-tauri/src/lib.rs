@@ -8,6 +8,8 @@
 //! - `viewer`   : quick-view command layer (V01 — parse-only, no engine)
 //! - `editor`   : Nano Light editor command layer (L01 — sessions, mutations,
 //!   save straight through the A2 crate; no Editor.bin, no x2t on that path)
+//! - `web_bridge`: dev-only `POST /invoke/<cmd>` on the loopback server so the
+//!   Vite frontend in a plain browser drives the same commands (T-068, DD W01)
 //!
 //! Shim JS injected into every frame (in this order, see `run`): probe flag →
 //! `BRIDGE_JS` (desktopEditor.js — bridge + relay) → `DELIVERY_JS`
@@ -17,13 +19,18 @@ mod bridge;
 mod config;
 mod editor;
 mod formats;
+mod keymap;
+pub mod mcp;
 mod protocol;
 mod recents;
 mod sidecar;
 pub(crate) mod storage;
+pub(crate) mod touchbar;
 mod untitled;
 mod viewer;
+mod web_bridge;
 mod window;
+pub use mcp::run_mcp_server;
 
 use config::AppConfig;
 use serde::Serialize;
@@ -56,6 +63,9 @@ pub(crate) fn register_and_url(
     path: &str,
     registry: &State<'_, Arc<FileRegistry>>,
 ) -> Result<OpenedDocument, String> {
+    // T-067 D4: over-cap files never reach the engine path — the entry seam
+    // refuses BEFORE registration (no registry entry, no recents record).
+    config::ensure_openable_size(std::path::Path::new(path))?;
     let id = registry.register(window.label(), std::path::Path::new(path))?;
     let disk = registry_path(registry, id);
     let name = disk
@@ -86,6 +96,10 @@ fn open_document(
     recents.record(std::path::Path::new(&path));
     Ok(doc)
 }
+
+// Settings moved INSIDE the start page (T-A46 — K02-Q3 amended): the old
+// `open_settings` window command is gone; the sidebar / ⌘, / gear toggle the
+// in-page view (`src/settings-view.ts`) instead.
 
 fn registry_path(registry: &State<Arc<FileRegistry>>, id: u32) -> std::path::PathBuf {
     registry
@@ -143,7 +157,11 @@ fn asc_desktop_editor(
 fn payload_to_short(payload: &serde_json::Value) -> String {
     let s = payload.to_string();
     if s.len() > 120 {
-        format!("{}… ({} bytes)", &s[..120], s.len())
+        let mut end = 120;
+        while end > 0 && !s.is_char_boundary(end) {
+            end -= 1;
+        }
+        format!("{}… ({} bytes)", &s[..end], s.len())
     } else {
         s
     }
@@ -166,12 +184,18 @@ fn payload_to_short(payload: &serde_json::Value) -> String {
 /// by test; xps/djvu are CROSSPLATFORM too — same copy-original rule when
 /// they join the table).
 /// Conversions run through the sidecar seam (`sidecar::convert`, T-A14).
+/// T-067 (DD open-streaming D1): the payload carries NO bytes — a same-origin
+/// `docUrl` the ENGINE frame fetches itself and hands to
+/// `DesktopOfflineAppDocumentEndLoad(folder, "binary_content://<fileId>", size)`
+/// (`upstream/sdkjs/common/Local/common.js:184-197` — the engine pulls the
+/// bytes through `window.AscDesktopEditor.GetOpenedFile`). The old
+/// fs::read + base64 + JSON-IPC chain scaled the peak RAM ~7–8× the file
+/// size and thrashed the machine on 1GB+ documents.
 #[tauri::command]
 fn get_document_for_delivery(
     registry: State<'_, Arc<FileRegistry>>,
     file_id: Option<u32>,
 ) -> Result<DeliverableDocument, String> {
-    use base64::Engine as _;
     let id = file_id.ok_or_else(|| {
         "delivery: no fileId (the shim must stamp the open_document id)".to_string()
     })?;
@@ -179,6 +203,10 @@ fn get_document_for_delivery(
         .inner()
         .get(id)
         .ok_or_else(|| format!("no document registered for fileId {id}"))?;
+
+    // T-067 D5 defense: the entry seams already refused over-cap files; this
+    // surface must never stream one in either (the registry outlives opens).
+    config::ensure_openable_size(&disk)?;
 
     let work = formats::DocWorkdir::new(id);
     let _ = std::fs::remove_dir_all(work.root());
@@ -225,9 +253,11 @@ fn get_document_for_delivery(
         }
     };
 
-    let bytes = std::fs::read(&delivered_path)
-        .map_err(|e| format!("read {}: {e}", delivered_path.display()))?;
-    log::info!("delivering {} ({} bytes) to engine", name, bytes.len());
+    let size = std::fs::metadata(&delivered_path)
+        .map(|m| m.len())
+        .map_err(|e| format!("stat {}: {e}", delivered_path.display()))?;
+    log::info!("delivering {name} ({size} bytes) → /delivery/{id}/{name}");
+    let doc_url = format!("/delivery/{id}/{name}");
 
     Ok(DeliverableDocument {
         folder: work.root().to_string_lossy().into_owned(),
@@ -235,16 +265,22 @@ fn get_document_for_delivery(
         // the engine's save-end contract derives the document name from the
         // source path — it must be the ORIGINAL file, not the workdir artifact
         src: disk.to_string_lossy().into_owned(),
-        b64: base64::engine::general_purpose::STANDARD.encode(&bytes),
+        doc_url,
+        size,
     })
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeliverableDocument {
     folder: String,
     name: String,
     src: String,
-    b64: String,
+    /// Same-origin URL (`/delivery/<id>/<name>`) the ENGINE frame fetches the
+    /// document bytes from — T-067 D1; nothing else carries bytes.
+    doc_url: String,
+    /// Byte length the fetch must yield (the EndLoad `_len` argument).
+    size: u64,
 }
 
 /// Loopback origin serving the engine + documents (iframe src base).
@@ -318,31 +354,42 @@ pub fn run() {
             viewer::viewer_view,
             recents::recents_list,
             recents::recents_remove,
+            keymap::keymap_load,
+            keymap::keymap_save,
             untitled::create_document,
             editor::wasen_light_view,
             editor::wasen_light_reopen,
             editor::wasen_light_open,
             editor::wasen_light_edit,
             editor::wasen_light_save,
-            editor::wasen_light_close_tab
+            editor::wasen_light_close_tab,
+            touchbar::touchbar_update,
+            mcp::mcp_get_status,
+            mcp::mcp_toggle_client,
+            mcp::mcp_get_config_snippet
         ])
         .setup(|app| {
-            // Engine-facing document URLs must be loopback HTTP (see filesrv docs).
-            let registry = Arc::clone(app.state::<Arc<FileRegistry>>().inner());
-            if let Err(e) = protocol::filesrv::spawn(registry) {
-                log::error!("{e} — document open will not work");
-            }
-
-            // Window factory seam (T-046): creates initial boot window matching config
             let config = Arc::clone(app.state::<Arc<AppConfig>>().inner());
-            window::create_boot_window(app.handle(), &config, BRIDGE_JS, DELIVERY_JS)?;
 
             // Recents store (A01 T-A38): app-data JSON home; gate/test override
             // via WASEN_OFFICE_RECENTS_FILE so verify never touches real recents.
+            // Managed BEFORE the file server: the web bridge reads it per request.
             app.manage(Arc::new(recents::RecentsStore::resolve(
                 app.handle(),
                 config.recents_file.as_deref(),
             )));
+
+            // Engine-facing document URLs must be loopback HTTP (see filesrv docs).
+            // T-068: with WASEN_OFFICE_WEB_BRIDGE=1 the same server also takes
+            // `POST /invoke/<cmd>` from the Vite dev origin (web dev mode).
+            let registry = Arc::clone(app.state::<Arc<FileRegistry>>().inner());
+            let bridge = config.web_bridge.then(|| app.handle().clone());
+            if let Err(e) = protocol::filesrv::spawn(registry, bridge) {
+                log::error!("{e} — document open will not work");
+            }
+
+            // Window factory seam (T-046): creates initial boot window matching config
+            window::create_boot_window(app.handle(), &config, BRIDGE_JS, DELIVERY_JS)?;
             Ok(())
         })
         .build(tauri::generate_context!())

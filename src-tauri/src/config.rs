@@ -49,12 +49,67 @@ pub struct AppConfig {
     /// Untitled-dir override (`WASEN_OFFICE_UNTITLED_DIR`) — tests/gates so
     /// Create-new never writes into the user's real untitled dir (A01 T-A39).
     pub untitled_dir: Option<String>,
+    /// Compact editor chrome (T-A40, pivoted 18.10 — DD U01 §8): DEFAULT OFF —
+    /// the engine draws its own chrome per doctype (PDF: Forms/Redact/Plugins).
+    /// `WASEN_OFFICE_COMPACT_CHROME=1` opts back in (our one-row header +
+    /// engine tabs strip hidden). Code stays, path is dormant by default.
+    pub compact_chrome: bool,
+    /// Tab reachability spike probe (`WASEN_OFFICE_TAB_PROBE`) — T-A40 DD
+    /// criterion 1: logs `Common`/NotificationCenter presence per frame.
+    pub tab_probe: bool,
+    /// Keymap spike probe (`WASEN_OFFICE_KM_PROBE`) — DD K02 S1: logs
+    /// `window.editor` reachability + engine button id presence (app frame).
+    pub km_probe: bool,
+    /// Keymap kill switch (`WASEN_OFFICE_NO_KEYMAP=1`) — bisect/debug: shim
+    /// skips the native shortcut apply entirely (DD K02 §4 fail-soft family).
+    pub no_keymap: bool,
+    /// PDF edit-text click probe (`WASEN_OFFICE_PDF_PROBE`) — synthetic click
+    /// on the pdfeditor Edit Text button after boot (repro/diagnostics).
+    pub pdf_probe: bool,
+    /// Dev-only window frame (`WASEN_OFFICE_WIN_POS=x,y[,w,h]`) — on-screen
+    /// placement for real-input automation runs (AppleScript drive/pixels).
+    /// Pure debug knob: never set by the product.
+    pub win_frame: Option<(f64, f64, f64, f64)>,
+    /// Web dev mode (T-068, DD W01): `WASEN_OFFICE_WEB_BRIDGE=1` lets the Vite
+    /// frontend in a plain browser reach the command layer over the loopback
+    /// file server (`POST /invoke/<cmd>`). DEFAULT OFF — release never sets it.
+    pub web_bridge: bool,
+}
+
+/// Parse `WASEN_OFFICE_WIN_POS=x,y[,w,h]` — 2 or 4 comma-separated numbers.
+fn win_frame_lookup(lookup: impl Fn(&str) -> Option<String>) -> Option<(f64, f64, f64, f64)> {
+    let v = lookup("WASEN_OFFICE_WIN_POS").filter(|v| !v.trim().is_empty())?;
+    let nums: Vec<f64> = v
+        .split(',')
+        .filter_map(|p| p.trim().parse::<f64>().ok())
+        .collect();
+    match nums.as_slice() {
+        [x, y] => Some((*x, *y, 1280.0, 800.0)),
+        [x, y, w, h] => Some((*x, *y, *w, *h)),
+        _ => None,
+    }
 }
 
 impl AppConfig {
     /// Parse configuration from the live process environment.
     pub fn from_env() -> Self {
-        Self::from_lookup(|k| std::env::var(k).ok())
+        let cfg = Self::from_lookup(|k| std::env::var(k).ok());
+        if cfg
+            .startup_document
+            .lock()
+            .map(|d| d.is_none())
+            .unwrap_or(false)
+        {
+            for arg in std::env::args().skip(1) {
+                if !arg.starts_with('-') && std::path::Path::new(&arg).is_file() {
+                    if let Ok(mut lock) = cfg.startup_document.lock() {
+                        *lock = Some(arg);
+                    }
+                    break;
+                }
+            }
+        }
+        cfg
     }
 
     /// Pure parser from any lookup function (thread-safe for unit tests).
@@ -93,6 +148,13 @@ impl AppConfig {
         let recents_file = non_empty("WASEN_OFFICE_RECENTS_FILE");
         let saveas_stub = non_empty("WASEN_OFFICE_SAVEAS_STUB");
         let untitled_dir = non_empty("WASEN_OFFICE_UNTITLED_DIR");
+        let compact_chrome = matches!(lookup("WASEN_OFFICE_COMPACT_CHROME").as_deref(), Some("1"));
+        let tab_probe = lookup("WASEN_OFFICE_TAB_PROBE").is_some_and(|v| !v.is_empty());
+        let km_probe = lookup("WASEN_OFFICE_KM_PROBE").is_some_and(|v| !v.is_empty());
+        let no_keymap = matches!(lookup("WASEN_OFFICE_NO_KEYMAP").as_deref(), Some("1"));
+        let pdf_probe = lookup("WASEN_OFFICE_PDF_PROBE").is_some_and(|v| !v.is_empty());
+        let win_frame = win_frame_lookup(&lookup);
+        let web_bridge = matches!(lookup("WASEN_OFFICE_WEB_BRIDGE").as_deref(), Some("1"));
 
         Self {
             background,
@@ -108,6 +170,13 @@ impl AppConfig {
             recents_file,
             saveas_stub,
             untitled_dir,
+            compact_chrome,
+            tab_probe,
+            km_probe,
+            no_keymap,
+            pdf_probe,
+            win_frame,
+            web_bridge,
         }
     }
 
@@ -150,12 +219,75 @@ impl AppConfig {
                 serde_json::json!(probe)
             ));
         }
+        // T-A40 compact chrome + tab spike: plain flags consumed by
+        // src/shim/desktopEditor.js (DocsAPI interceptor / probe logging).
+        if self.compact_chrome {
+            scripts.push("window.__WASEN_OFFICE_COMPACT_CHROME__ = true;".to_string());
+        }
+        if self.tab_probe {
+            scripts.push("window.__WASEN_OFFICE_TAB_PROBE__ = true;".to_string());
+        }
+        if self.km_probe {
+            scripts.push("window.__WASEN_OFFICE_KM_PROBE__ = true;".to_string());
+        }
+        if self.no_keymap {
+            scripts.push("window.__WASEN_OFFICE_NO_KEYMAP__ = true;".to_string());
+        }
+        if self.pdf_probe {
+            scripts.push("window.__WASEN_OFFICE_PDF_PROBE__ = true;".to_string());
+        }
         scripts.push(format!(
             "window.__WASEN_OFFICE_PROBE__ = {};",
             self.probe_enabled
         ));
         scripts
     }
+}
+
+/// Default open cap in megabytes (T-067, DD open-streaming D4).
+const MAX_OPEN_MB_DEFAULT: u64 = 250;
+/// One megabyte as the cap unit.
+const MB: u64 = 1024 * 1024;
+
+/// Open size cap in bytes — `0` = unlimited
+/// (`WASEN_OFFICE_MAX_OPEN_MB`; parse failure falls back to the default,
+/// fail-soft — an unwritable env value must never brick opens).
+fn max_open_bytes_lookup(lookup: impl Fn(&str) -> Option<String>) -> u64 {
+    match lookup("WASEN_OFFICE_MAX_OPEN_MB").and_then(|v| v.trim().parse::<u64>().ok()) {
+        Some(mb) => mb.saturating_mul(MB),
+        None => MAX_OPEN_MB_DEFAULT * MB,
+    }
+}
+
+/// Refuse documents above the open cap (T-067 D4/D5) — the one guard text
+/// every entry seam reuses. `Ok` = open may proceed.
+pub fn ensure_openable_size(path: &std::path::Path) -> Result<(), String> {
+    ensure_openable_size_lookup(path, |k| std::env::var(k).ok())
+}
+
+/// Pure form of [`ensure_openable_size`] (unit-testable without env races).
+fn ensure_openable_size_lookup(
+    path: &std::path::Path,
+    lookup: impl Fn(&str) -> Option<String>,
+) -> Result<(), String> {
+    let cap = max_open_bytes_lookup(lookup);
+    if cap == 0 {
+        return Ok(());
+    }
+    let size = std::fs::metadata(path)
+        .map_err(|e| format!("open guard: metadata: {e}"))?
+        .len();
+    if size > cap {
+        return Err(format!(
+            "open guard: file too large to open: {} MB > cap {} MB — opening it \
+             would exhaust RAM; raise WASEN_OFFICE_MAX_OPEN_MB (0 = unlimited) \
+             if the file fits ({})",
+            size / MB,
+            cap / MB,
+            path.display()
+        ));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -180,6 +312,19 @@ mod tests {
         assert_eq!(cfg.recents_file, None);
         assert_eq!(cfg.saveas_stub, None);
         assert_eq!(cfg.untitled_dir, None);
+        assert!(!cfg.web_bridge);
+    }
+
+    /// T-068 web bridge: opt-in by exactly `1`; anything else stays OFF
+    /// (release safety — the route must 404 unless a dev asked for it).
+    #[test]
+    fn test_web_bridge_flag_parsing() {
+        for (v, want) in [("1", true), ("0", false), ("", false), ("true", false)] {
+            let mut env = HashMap::new();
+            env.insert("WASEN_OFFICE_WEB_BRIDGE", v.into());
+            let cfg = AppConfig::from_lookup(|k| env.get(k).cloned());
+            assert_eq!(cfg.web_bridge, want, "value {v:?}");
+        }
     }
 
     #[test]
@@ -229,5 +374,112 @@ mod tests {
         assert!(scripts[2].contains("window.__WASEN_OFFICE_STARTPAGE_PROBE__"));
         assert!(scripts[3].contains("window.__WASEN_OFFICE_PROBE__ = true;"));
         assert_eq!(cfg.recents_file.as_deref(), Some("/tmp/recents-test.json"));
+    }
+
+    /// T-A40 knobs (pivoted 18.10 — DD U01 §8): compact chrome DEFAULT OFF
+    /// (`=1` opts in); tab probe is presence-triggered like the other probes.
+    #[test]
+    fn test_compact_chrome_and_tab_probe() {
+        // Default (no env): chrome OFF (native engine chrome), probe OFF.
+        let cfg = AppConfig::from_lookup(|_| None);
+        assert!(!cfg.compact_chrome);
+        assert!(!cfg.tab_probe);
+        let scripts = cfg.normal_probe_scripts();
+        assert_eq!(scripts.len(), 1);
+        assert!(scripts[0].contains("window.__WASEN_OFFICE_PROBE__ = true;"));
+
+        // Opt-in + probe presence.
+        let mut env = HashMap::new();
+        env.insert("WASEN_OFFICE_COMPACT_CHROME", "1".into());
+        env.insert("WASEN_OFFICE_TAB_PROBE", "1".into());
+        env.insert("WASEN_OFFICE_KM_PROBE", "1".into());
+        let cfg = AppConfig::from_lookup(|k| env.get(k).cloned());
+        assert!(cfg.compact_chrome);
+        assert!(cfg.tab_probe);
+        assert!(cfg.km_probe);
+        let scripts = cfg.normal_probe_scripts();
+        assert_eq!(scripts.len(), 4);
+        assert!(scripts[0].contains("window.__WASEN_OFFICE_COMPACT_CHROME__ = true;"));
+        assert!(scripts[1].contains("window.__WASEN_OFFICE_TAB_PROBE__ = true;"));
+        assert!(scripts[2].contains("window.__WASEN_OFFICE_KM_PROBE__ = true;"));
+        assert!(scripts[3].contains("window.__WASEN_OFFICE_PROBE__ = true;"));
+
+        // Empty-string values behave like absence (non-empty discipline).
+        let mut env = HashMap::new();
+        env.insert("WASEN_OFFICE_COMPACT_CHROME", "".into());
+        env.insert("WASEN_OFFICE_TAB_PROBE", "".into());
+        let cfg = AppConfig::from_lookup(|k| env.get(k).cloned());
+        assert!(!cfg.compact_chrome);
+        assert!(!cfg.tab_probe);
+    }
+
+    /// Cap knob (T-067 D4): default 250MB; `0` = unlimited; garbage → default.
+    #[test]
+    fn test_max_open_bytes_parsing() {
+        let cl = |env: HashMap<&str, String>| max_open_bytes_lookup(|k| env.get(k).cloned());
+        assert_eq!(cl(HashMap::new()), 250 * MB);
+        assert_eq!(
+            cl([("WASEN_OFFICE_MAX_OPEN_MB", "2".into())]
+                .into_iter()
+                .collect()),
+            2 * MB
+        );
+        assert_eq!(
+            cl([("WASEN_OFFICE_MAX_OPEN_MB", "0".into())]
+                .into_iter()
+                .collect()),
+            0
+        );
+        assert_eq!(
+            cl([("WASEN_OFFICE_MAX_OPEN_MB", "junk".into())]
+                .into_iter()
+                .collect()),
+            250 * MB
+        );
+        assert_eq!(
+            cl([("WASEN_OFFICE_MAX_OPEN_MB", "".into())]
+                .into_iter()
+                .collect()),
+            250 * MB
+        );
+    }
+
+    /// The guard refuses over-cap files with a self-explanatory message and
+    /// passes under-cap files and unlimited mode through.
+    #[test]
+    fn test_ensure_openable_size() {
+        let dir = std::env::temp_dir();
+        let f = dir.join(format!("wasen-cap-{}", std::process::id()));
+        std::fs::write(&f, [0u8; 10]).unwrap();
+        let passthrough: std::collections::HashMap<&str, String> = HashMap::new();
+        let no_cap = [("WASEN_OFFICE_MAX_OPEN_MB", "0".into())]
+            .into_iter()
+            .collect::<std::collections::HashMap<&str, String>>();
+
+        // under-cap file passes (default 250MB cap)
+        assert!(ensure_openable_size_lookup(&f, |k| passthrough.get(k).cloned()).is_ok());
+        // 1MB cap > 10 bytes — still passes
+        let tight = [("WASEN_OFFICE_MAX_OPEN_MB", "1".into())]
+            .into_iter()
+            .collect::<std::collections::HashMap<&str, String>>();
+        assert!(ensure_openable_size_lookup(&f, |k| tight.get(k).cloned()).is_ok());
+        // unlimited = always OK
+        assert!(ensure_openable_size_lookup(&f, |k| no_cap.get(k).cloned()).is_ok());
+
+        // over-cap → refused, message names the env knob
+        let one_byte = [("WASEN_OFFICE_MAX_OPEN_MB", format!("{}", 1))]
+            .into_iter()
+            .collect::<std::collections::HashMap<&str, String>>();
+        std::fs::write(&f, [0u8; 2 * MB as usize]).unwrap();
+        let err = ensure_openable_size_lookup(&f, |k| one_byte.get(k).cloned()).unwrap_err();
+        assert!(err.contains("file too large to open"), "{err}");
+        assert!(err.contains("WASEN_OFFICE_MAX_OPEN_MB"), "{err}");
+
+        // missing file → metadata error, no panic
+        let ghost = dir.join("wasen-cap-ghost");
+        assert!(ensure_openable_size_lookup(&ghost, |k| passthrough.get(k).cloned()).is_err());
+
+        std::fs::remove_dir(&f).ok();
+        std::fs::remove_file(&f).ok();
     }
 }
